@@ -48,3 +48,55 @@ emulatorTest('Phase A temporarily permits current anonymous uploads, but validat
  const rootWrite=await request('/floodguard/bot/state',{method:'PUT',json:{enabled:false}});
  assert.ok([401,403].includes(rootWrite.status),'bot-state public writes accepted');
 });
+
+emulatorTest('Phase A accepts representative ESP8266 multi-location parent PATCH without exposing private children',async()=>{
+ // Synthetic shape based on privately held sketch field names only.
+ // Test values are reserved documentation/demo data, not device observations.
+ const root='/floodguard/live';
+ const payload={
+  'water/distanceCm':15.35,
+  'water/levelCm':9.65,
+  'water/status':'WARNING',
+  'rain/currentMm':0,
+  'rain/dailyMm':0,
+  'gate/status':'CLOSED',
+  'gate/angle':0,
+  'gate/countdownSeconds':0,
+  'alarm/active':false,
+  'devices/arduino':'ONLINE',
+  'esp8266/connection':'CONNECTED',
+  'esp8266/status':'ONLINE',
+  'esp8266/rssi':-60,
+  'esp8266/ip':'192.0.2.42',
+  'esp8266/wifi':'EXAMPLE-NETWORK',
+  'system/lastUpdate':1720000000000,
+  'system/overallRisk':'MODERATE'
+ };
+ const write=await request(root,{method:'PATCH',json:payload});
+ assert.equal(write.status,200,'Firmware-style root PATCH blocked by candidate rules');
+ const water=await request(root+'/water/levelCm');
+ assert.equal(water.status,200);
+ assert.equal(JSON.parse(water.body),9.65);
+ for(const path of [root+'/esp8266/ip',root+'/esp8266/wifi',root+'/esp8266']){
+  const read=await request(path);
+  assert.ok([401,403].includes(read.status),path+' private read unexpectedly allowed');
+ }
+});
+
+emulatorTest('Phase A supports saved legacy whole-live PUT shape, but rejects invalid sensor fields',async()=>{
+ const tree={
+  water:{status:'SAFE',distanceCm:20,levelCm:5},
+  rain:{currentMm:0,dailyMm:0,rawValue:0},
+  gate:{status:'CLOSED',angle:0,countdownSeconds:0},
+  alarm:{active:false,type:'NONE'},
+  devices:{arduino:'ONLINE',servo:'ONLINE'},
+  system:{lastUpdate:1720000000000,overallRisk:'LOW'},
+  esp8266:{ip:'192.0.2.47',wifi:'EXAMPLE-NETWORK',status:'ONLINE',connection:'CONNECTED',rssi:-52}
+ };
+ const valid=await request('/floodguard/live',{method:'PUT',json:tree});
+ assert.equal(valid.status,200,'Legacy full-tree PUT blocked by candidate rules');
+ const bad=await request('/floodguard/live',{method:'PATCH',json:{'water/levelCm':100}});
+ assert.ok([401,403].includes(bad.status),'Out-of-range parent PATCH was allowed');
+ const safe=await request('/floodguard/live/water/levelCm');
+ assert.equal(JSON.parse(safe.body),5,'Rejected write altered accepted measurement');
+});

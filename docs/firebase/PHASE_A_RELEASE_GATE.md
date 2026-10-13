@@ -13,6 +13,10 @@ This candidate deliberately keeps `/floodguard/live/.write: true` temporarily to
 - Preserve the owner's present value validation rules for water, gate, and rain, plus the explicit `/floodguard/bot` and `/floodguard/test` denials.
 - **Do not** authorize public writes outside `/floodguard/live`; existing **live** writes stay open until device authentication migration.
 
+## Private firmware audit implications
+
+Three saved ESP8266 firmware variants were located outside public GitHub. One sends an entire `/floodguard/live` `PUT`; two send a root `PATCH` containing slash-separated child keys. All saved variants include `WiFiClientSecure::setInsecure()` and fields for ESP IP and Wi-Fi metadata. **We do not know which firmware is flashed.** The original sketches may contain Wi-Fi configuration literals; keep them private and do not publish field values or credentials. The Phase A emulator tests now exercise synthetic examples of both write shapes; this does **not** prove physical ESP compatibility. When moving to Phase B scoped writes, a parent `PUT`/`PATCH` must be redesigned or routed through a trusted ingestion service rather than preserving a broad parent write grant.
+
 ## Prerequisites to production consideration
 
 1. Deploy and verify the WhatsApp bot's separate read migration **after owner approval** and supervised EC2 restart, not simply after a PR's unit tests. Draft PR: https://github.com/teldigi5-wq/floodguard-whatsapp-bot/pull/12
