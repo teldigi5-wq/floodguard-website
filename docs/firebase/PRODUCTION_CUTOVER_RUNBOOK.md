@@ -13,13 +13,13 @@ or rotate device credentials as part of reading this document.
 - Establish that the ESP8266 is currently uploading; identify the flashed firmware and confirm whether the upload endpoint/shape is compatible with candidate rules. Do not turn on gate hardware only to exercise tests.
 - Verify the existing web UI, Android debug app (demo, live and offline/stale) and bot's baseline WhatsApp messages under the *current* rules.
 - Confirm a competent operator has the live EC2 bot access, EC2 deployment recovery path, WhatsApp test number, Firebase Console editor access and a rollback window.
-- Obtain explicit owner approval for a supervised bot redeploy. A merge into the bot's main branch triggers a GitHub Actions EC2 deployment when secrets are configured.
+- Obtain explicit owner approval for a supervised bot redeploy. **Until bot PR #12 is merged, the existing production `main` workflow still auto-deploys on pushes.** The proposed PR changes that behavior to a manual, exact-commit `workflow_dispatch` with an approval input and a dedicated production environment. Verify this change is present in the actual merged workflow before merging or deploying.
 - Candidate passes Firebase Emulator, website CI, and CodeQL. Bot PR must pass CI on its **latest head**; emulator/static tests alone cannot prove live device or WhatsApp connectivity.
 
 ## Step 1: supervised EC2 bot migration
 
 1. Document the exact current bot main SHA and EC2 PM2 status; preserve the last known-working deployment (and private WhatsApp session files) for rollback. Do not publish QR/session credentials.
-2. After owner approval, merge bot PR #12 and supervise EC2 deployment logs. Verify the deployed code *actually* matches the reviewed SHA.
+2. After owner approval and all CI checks, merge bot PR #12 **only after confirming its merged deployment workflow is manual-only**. Merely merging should not restart EC2. During the maintenance window, open GitHub Actions → **Deploy FloodGuard to EC2 (manual approval)**, supply the exact reviewed 40-character `main` commit SHA, choose `DEPLOY`, and observe deployment logs. Verify the actual deployed source SHA and PM2 status; GitHub environment review controls must be configured separately if required.
 3. Test, from an authorized WhatsApp number: \`menu\`, \`stats\`, \`water\`, \`risk\`, \`gate\`, \`rain\`, \`devices\`, \`network\`; verify real timestamps, no ESP8266 IP/Wi-Fi disclosure, and no fabricated live status when field updates stop.
 4. Observe SSE reconnect and message delivery without triggering any physical gate or emergency broadcast. Roll back if any unexpected alarm message or stale-data misrepresentation appears.
 5. If bot rollout fails, restore previous code through an audited revert/rollback and verify PM2 and WhatsApp reconnection. **Do not deploy Phase A rules while bot is broken.**
