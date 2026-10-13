@@ -1,0 +1,33 @@
+name: Firebase Phase A rules verification
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/firebase/**'
+      - 'firebase.phase-a.json'
+      - 'tests/phase-a-*.test.mjs'
+      - '.github/workflows/firebase-phase-a.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  emulator-rules:
+    name: Verify RTDB emulator authorization
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Check candidate policy against owner-supplied production validation
+        run: node --test tests/phase-a-policy.test.mjs
+      - name: Run Firebase Emulator access control regression suite
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-floodguard --config firebase.phase-a.json "node --test tests/phase-a-rtdb-emulator.test.mjs"

@@ -1,0 +1,89 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "floodguard": {
+      "live": {
+        ".read": false,
+        ".write": true,
+        "water": {
+          ".read": true,
+          "distanceCm": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 400)"
+          },
+          "levelCm": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 25)"
+          },
+          "status": {
+            ".validate": "newData.isString() && (newData.val() === 'SAFE' || newData.val() === 'WARNING' || newData.val() === 'DANGER' || newData.val() === 'SENSOR_ERROR')"
+          }
+        },
+        "rain": {
+          ".read": true,
+          "currentMm": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0)"
+          },
+          "dailyMm": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0)"
+          },
+          "waterDepthCm": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 4)"
+          },
+          "rawValue": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 1023)"
+          },
+          "weightGrams": {
+            ".validate": "!newData.exists() || newData.isNumber()"
+          }
+        },
+        "gate": {
+          ".read": true,
+          "status": {
+            ".validate": "newData.isString() && (newData.val() === 'CLOSED' || newData.val() === 'COUNTDOWN' || newData.val() === 'OPEN')"
+          },
+          "angle": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 90)"
+          },
+          "countdownSeconds": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 10)"
+          }
+        },
+        "alarm": {
+          ".read": true
+        },
+        "devices": {
+          ".read": true
+        },
+        "system": {
+          ".read": true
+        },
+        "esp8266": {
+          ".read": false,
+          "connection": {
+            ".read": true
+          },
+          "rssi": {
+            ".read": true
+          },
+          "status": {
+            ".read": true
+          },
+          "ip": {
+            ".read": false
+          },
+          "wifi": {
+            ".read": false
+          }
+        }
+      },
+      "test": {
+        ".read": false,
+        ".write": false
+      },
+      "bot": {
+        ".read": false,
+        ".write": false
+      }
+    }
+  }
+}
