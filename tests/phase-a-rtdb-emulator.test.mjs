@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 const origin='http://127.0.0.1:9000';
+// Standard npm test skips emulator I/O; the isolated rules CI explicitly enables it.
+const emulatorTest = process.env.FG_EMULATOR === '1' ? test : test.skip;
 const ns='demo-floodguard-default-rtdb';
 const publicBranches=['water','rain','gate','alarm','devices','system',
  'esp8266/connection','esp8266/rssi','esp8266/status'];
@@ -12,7 +14,7 @@ async function request(path,{method='GET',json,admin=false}={}){
  return {status:response.status,body:await response.text()};
 }
 
-test('emulator starts with our Phase A rules, never contacts live Firebase',async()=>{
+emulatorTest('emulator starts with our Phase A rules, never contacts live Firebase',async()=>{
  const r=await request('/floodguard/live',{admin:true,method:'PUT',json:{
   water:{status:'WARNING',distanceCm:15.35,levelCm:9.65},
   rain:{currentMm:0,dailyMm:0},
@@ -24,13 +26,13 @@ test('emulator starts with our Phase A rules, never contacts live Firebase',asyn
  }});
  assert.equal(r.status,200, r.body);
 });
-test('emulator exposes safe public children to browser and mobile',async()=>{
+emulatorTest('emulator exposes safe public children to browser and mobile',async()=>{
  for(const branch of publicBranches){
   const result=await request('/floodguard/live/'+branch);
   assert.equal(result.status,200,branch+' '+result.body);
  }
 });
-test('emulator denies private ESP network data and all ancestors',async()=>{
+emulatorTest('emulator denies private ESP network data and all ancestors',async()=>{
  for(const path of ['/','/floodguard','/floodguard/live','/floodguard/live/esp8266',
   '/floodguard/live/esp8266/ip','/floodguard/live/esp8266/wifi',
   '/floodguard/bot','/floodguard/test']){
@@ -38,7 +40,7 @@ test('emulator denies private ESP network data and all ancestors',async()=>{
   assert.ok([401,403].includes(result.status),path+' unexpectedly '+result.status);
  }
 });
-test('Phase A temporarily permits current anonymous uploads, but validates fields',async()=>{
+emulatorTest('Phase A temporarily permits current anonymous uploads, but validates fields',async()=>{
  const valid=await request('/floodguard/live/water/levelCm',{method:'PUT',json:10});
  assert.equal(valid.status,200,valid.body);
  const invalid=await request('/floodguard/live/water/levelCm',{method:'PUT',json:100});

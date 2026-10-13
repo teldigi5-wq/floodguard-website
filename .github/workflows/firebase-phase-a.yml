@@ -30,4 +30,4 @@ jobs:
       - name: Check candidate policy against owner-supplied production validation
         run: node --test tests/phase-a-policy.test.mjs
       - name: Run Firebase Emulator access control regression suite
-        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-floodguard --config firebase.phase-a.json "node --test tests/phase-a-rtdb-emulator.test.mjs"
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-floodguard --config firebase.phase-a.json "FG_EMULATOR=1 node --test tests/phase-a-rtdb-emulator.test.mjs"
