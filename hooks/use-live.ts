@@ -1,0 +1,1 @@
+"use client";import{useContext}from"react";import{LiveContext}from"@/providers/flood-provider";export function useLive(){const v=useContext(LiveContext);if(!v)throw new Error("Live provider missing");return v}

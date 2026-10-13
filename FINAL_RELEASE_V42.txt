@@ -1,0 +1,21 @@
+FLOODGUARD FINAL WEBSITE V42
+
+Deployment target: AWS Amplify manual ZIP upload.
+
+Final release changes:
+- removed obsolete v39 rescue and v41 hard-navigation layers from normal pages
+- one conservative navigation/runtime helper only
+- rebuilt and polished the standalone /gate/ live digital twin
+- gate state reconciles countdown + servo angle before display
+- center spillway represents the physical SG90; outer bays are visual structure
+- live Firebase initial read + realtime stream on the dedicated gate page
+- responsive HUD placement to avoid overlap over the dam model
+- improved motion, hover depth, gate lift, water, alarm and page transitions
+- no client-side gate controls; website remains monitoring-only
+- no fabricated rainfall or missing sensor values
+- cache/service-worker cleanup retained for manual Amplify deployments
+
+Expected gate contract:
+CLOSED / COUNTDOWN / OPEN
+0 degrees = CLOSED
+90 degrees = OPEN

@@ -1,0 +1,45 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "floodguard": {
+      "live": {
+        "water": {
+          ".read": true
+        },
+        "rain": {
+          ".read": true
+        },
+        "gate": {
+          ".read": true
+        },
+        "alarm": {
+          ".read": true
+        },
+        "devices": {
+          ".read": true
+        },
+        "system": {
+          ".read": true
+        },
+        "esp8266": {
+          "connection": {
+            ".read": true
+          },
+          "rssi": {
+            ".read": true
+          },
+          "status": {
+            ".read": true
+          },
+          "ip": {
+            ".read": false
+          },
+          "wifi": {
+            ".read": false
+          }
+        }
+      }
+    }
+  }
+}
