@@ -16,6 +16,8 @@
   &nbsp;·&nbsp;
   <a href="https://floodguard-website-teldigi5-wq.vercel.app/dashboard/">Monitoring dashboard</a>
   &nbsp;·&nbsp;
+  <a href="https://floodguard-website-teldigi5-wq.vercel.app/diagnostics/">Diagnostics</a>
+  &nbsp;·&nbsp;
   <a href="#system-architecture">Architecture</a>
   &nbsp;·&nbsp;
   <a href="#run-locally">Get started</a>
@@ -51,7 +53,8 @@ Flood conditions change in the physical world—not on a dashboard. A useful mon
 | **Gate digital twin** | Three-dimensional representation of the last reported SG90 angle and countdown; the center bay represents the prototype gate |
 | **Rainfall telemetry** | Collector-depth readings, reported rainfall category, sensor status, raw values, and calibration limitations when available |
 | **Device health** | Visibility into Arduino, ESP8266, ultrasonic sensor, RTC, servo, and reported rain-gauge state |
-| **Responsible connection states** | Distinct **Live**, **Last recorded**, and **Unavailable** states—without hiding valid historical observations |
+| **Responsible connection states** | Independently tested **Live**, **Last recorded**, and **Unavailable** states—without hiding valid historical observations |
+| **Engineering diagnostics** | Read-only telemetry coverage, reported source timestamp, Firebase client connection, last field risk and gate state |
 | **Presentation-ready interaction** | Responsive layouts, restrained motion, reduced-motion handling, quick navigation, and exportable current observations |
 | **Educational storytelling** | Architecture, project context, safety guidance, and impact pages |
 
@@ -64,6 +67,7 @@ The website **monitors** gate activity; it does not send actuator commands. Its 
 | [`/`](https://floodguard-website-teldigi5-wq.vercel.app/) | Home | [`/dashboard/`](https://floodguard-website-teldigi5-wq.vercel.app/dashboard/) | Monitoring overview |
 | [`/water/`](https://floodguard-website-teldigi5-wq.vercel.app/water/) | Water levels | [`/rainfall/`](https://floodguard-website-teldigi5-wq.vercel.app/rainfall/) | Rainfall |
 | [`/gate/`](https://floodguard-website-teldigi5-wq.vercel.app/gate/) | Gate digital twin | [`/devices/`](https://floodguard-website-teldigi5-wq.vercel.app/devices/) | Device status |
+| [`/diagnostics/`](https://floodguard-website-teldigi5-wq.vercel.app/diagnostics/) | Engineering observability | — | — |
 | [`/system/`](https://floodguard-website-teldigi5-wq.vercel.app/system/) | System architecture | [`/safety/`](https://floodguard-website-teldigi5-wq.vercel.app/safety/) | Safety guidance |
 | [`/impact/`](https://floodguard-website-teldigi5-wq.vercel.app/impact/) | Human impact | [`/about/`](https://floodguard-website-teldigi5-wq.vercel.app/about/) | About the project |
 
@@ -194,7 +198,7 @@ npm run typecheck
 npm run build
 ```
 
-GitHub Actions runs these checks on pushes and pull requests to `main`. The source tests include route coverage, Firebase subscription/rule expectations, and historical-reading behavior.
+GitHub Actions runs these checks on pushes and pull requests to `main`. The source tests include route coverage, Firebase subscription/rule expectations, and behavioral regression cases for invalid timestamps, stale hardware reports and connection loss.
 
 ## Deploy to Vercel
 
@@ -207,6 +211,26 @@ GitHub Actions runs these checks on pushes and pull requests to `main`. The sour
 
 This repository was recovered from an earlier **AWS Amplify** website package. The Vercel deployment is separate; the original Amplify website is not overwritten.
 
+
+## Engineering status and next milestones
+
+FloodGuard is now a **public, working engineering prototype**, not a certified production dam-control platform.
+
+| Capability | Status | Evidence / limits |
+| :--- | :--- | :--- |
+| Public source and documented architecture | **Implemented** | GitHub repo, system architecture and field authority ADR |
+| Firebase subscriptions and retained readings | **Implemented** | Live RTDB listeners with Zod validation; source timestamps remain visible |
+| Deterministic freshness model | **Implemented** | Pure functions tested against old, absent, future and disconnected observations |
+| Engineering diagnostics | **Implemented** | [Read-only diagnostics](https://floodguard-website-teldigi5-wq.vercel.app/diagnostics/) for reported group availability and field freshness |
+| Source checks and reproducible builds | **Implemented** | GitHub Actions for test, lint, typecheck and static export |
+| Dependency maintenance and static analysis | **Configured** | Dependabot and CodeQL; check Security / Actions for results |
+| Deployed Firebase writer authentication | **Not independently verified** | Must be validated before updating real RTDB rules |
+| Persisted, append-only time-series history | **Planned** | The current RTDB live snapshot is not a historical analytics database |
+| Firebase Emulator integration and Playwright end-to-end tests | **Planned** | CI presently verifies source and builds, not complete hardware/browser behavior |
+| Certified flood-warning and physical dam automation | **Out of scope** | Educational, safety-bounded prototype |
+
+See [the detailed roadmap](./docs/ENGINEERING_ROADMAP.md) for priorities, acceptance criteria and remaining limitations.
+
 ## Security and operational boundaries
 
 - **Read-only client:** The website observes allowed telemetry. It is not a remote gate controller.
@@ -216,7 +240,7 @@ This repository was recovered from an earlier **AWS Amplify** website package. T
 - **No synthetic safety data:** Missing sensor readings are never silently fabricated, and retained readings are explicitly labeled historical.
 - **No certified emergency capability:** The prototype does not replace official warnings, qualified engineering review, or public emergency services.
 
-For the rule and deployment notes, see [Firebase security](./FIREBASE_SECURITY.md) and the [Vercel deployment guide](./VERCEL_DEPLOYMENT_GUIDE.md).
+For security controls and operations, see [security policy](./SECURITY.md), [Firebase security](./FIREBASE_SECURITY.md), [engineering roadmap](./docs/ENGINEERING_ROADMAP.md), [architecture decision record](./docs/architecture/0001-field-authority-and-freshness.md), [contributing guide](./CONTRIBUTING.md) and the [Vercel deployment guide](./VERCEL_DEPLOYMENT_GUIDE.md).
 
 ### Troubleshooting
 
@@ -235,7 +259,7 @@ An undergraduate engineering project exploring affordable environmental sensing,
 
 **Maintainer:** [teldigi5-wq](https://github.com/teldigi5-wq)
 
-This source repository is private and does not include an open-source license. Reuse or redistribution requires permission.
+This repository is **publicly readable**, but it does **not** include an open-source license. Public visibility does not grant reuse or redistribution rights; please request permission from the maintainer.
 
 ---
 

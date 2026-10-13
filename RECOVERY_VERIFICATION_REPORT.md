@@ -1,3 +1,5 @@
+> **Historical recovery note (October 13, 2026).** This verification report was recorded **before** the public GitHub upload and Vercel deployment. Its "not yet deployed" statements are no longer the current project status. See [README.md](./README.md), [VERCEL_DEPLOYMENT_GUIDE.md](./VERCEL_DEPLOYMENT_GUIDE.md), and GitHub Actions for the current source and build state.
+
 # FloodGuard recovery verification report
 
 **Inspection date:** October 13, 2026. **Status:** source recovered and sanitized for GitHub/Vercel; **not yet built, deployed or live-tested**.
