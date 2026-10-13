@@ -1,5 +1,9 @@
 # Security policy · FloodGuard
 
+> [!WARNING]
+> **Open security finding · 13 October 2026:** Read-only unauthenticated checks against the **deployed** Firebase RTDB returned nonempty data at the private ESP8266 IP and Wi-Fi metadata child paths. We did not collect or publish their values. The live production rules therefore require review and correction. Do not consider this public release security-cleared until access is denied and authenticated hardware publishing is re-tested.
+
+
 FloodGuard is a public-source **educational IoT monitoring prototype**. This site is not a certified flood warning, emergency response, or dam-control system.
 
 ## Reporting a vulnerability

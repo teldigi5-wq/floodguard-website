@@ -18,7 +18,7 @@ This is an engineering plan, not a list of already delivered product claims.
 
 **Remaining external verification:**
 - Review Git history with a dedicated secret scanner and rotate any detected credential; simple pattern inspection is not a formal guarantee.
-- Audit effective Firebase Console rules and physical controller write authentication before ever changing production rules.
+- **Active finding (13 Oct 2026):** Unauthenticated reads of ESP8266 IP/Wi-Fi metadata succeeded against the deployed RTDB. Fix the actual parent/child read grants; verify those reads are denied while safe telemetry and authenticated hardware writes still work.
 - Review CodeQL findings and dependency advisories when automated scans complete.
 - Decide whether and how to license the repository; public source is not automatically open-source.
 

@@ -72,3 +72,12 @@ test("historical hardware states must not appear live", async () => {
   assert.ok(gate.includes("activeCountdown"), "Historical countdowns must never animate as active timers");
   assert.ok(gate.includes('freshness === "live" && gateState'), "Discharge visualization must require fresh telemetry");
 });
+
+test("template RTDB rules cannot grant private ESP access through readable ancestors", async () => {
+  const rules = JSON.parse(await read("firebase.rules.json")).rules;
+  const ancestors = [rules, rules.floodguard, rules.floodguard.live, rules.floodguard.live.esp8266];
+  for (const group of ancestors) {
+    assert.notEqual(group[".read"], true,
+      "Read grants on parent RTDB paths expose even explicitly denied descendants");
+  }
+});

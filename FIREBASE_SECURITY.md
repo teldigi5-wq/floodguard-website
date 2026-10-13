@@ -1,5 +1,19 @@
 # FloodGuard · Firebase access and field writer security
 
+> [!WARNING]
+> **Production permissions finding (13 October 2026):** Anonymous reads to the deployed RTDB `esp8266/ip` and `esp8266/wifi` child paths returned nonempty values. We deliberately do not copy those values into this repository. This indicates a **live rules configuration issue**, independently of the safer repository template. A read of the `esp8266` parent was also publicly accessible. **Remediation is still pending.**
+
+### Recommended remediation, preserving hardware writes
+
+1. Inspect the **effective rules** in Firebase Console → Realtime Database → Rules. Specifically check any `.read: true` on `floodguard`, `live`, or `esp8266`. **In Realtime Database, ancestor read grants cascade: a child `.read: false` cannot override an ancestor's `.read: true`.**
+2. Remove overly broad public read grants at ancestors; allow unauthenticated reads only to the individual safe monitoring child paths actually needed by the website.
+3. Before changing write permissions, establish whether the ESP8266 publishes anonymously or uses a scoped authenticated writer. Do not apply the repository template if that will interrupt hardware telemetry.
+4. Test as an unauthenticated visitor that private ESP IP/Wi-Fi nodes return **Permission denied**, safe monitoring children remain readable, and actual authenticated device uploads still succeed.
+5. Check whether sensitive tokens/passwords were stored elsewhere. Rotate exposed **credentials** if any are found; IP and Wi-Fi names alone are not necessarily credentials.
+
+This repository and GitHub Actions **cannot update your live Firebase RTDB rules** without Firebase administrator access.
+
+
 The current Next.js website is a **read-only monitoring client**. It listens only to these public child paths under `floodguard/live`:
 
 - `water`, `rain`, `gate`, `alarm`, `devices`, `system`

@@ -231,6 +231,9 @@ FloodGuard is now a **public, working engineering prototype**, not a certified p
 
 See [the detailed roadmap](./docs/ENGINEERING_ROADMAP.md) for priorities, acceptance criteria and remaining limitations.
 
+> [!WARNING]
+> **Active Firebase rules finding:** During the public-release audit on 13 October 2026, anonymous read requests were able to retrieve private ESP8266 network metadata from the deployed database. **No private values are reproduced here.** The repository rules file is not necessarily deployed, and security remediation remains **open**. See [Firebase security](./FIREBASE_SECURITY.md). Do not promote this prototype as security-certified.
+
 ## Security and operational boundaries
 
 - **Read-only client:** The website observes allowed telemetry. It is not a remote gate controller.
