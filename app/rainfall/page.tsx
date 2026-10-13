@@ -19,7 +19,17 @@ function categoryNote(status: string) {
 export default function Rainfall() {
   const { data, freshness, age } = useLive();
   const rain = data?.rain;
-  const device = label(data?.devices?.rainGauge);
+  const sensor = data?.devices?.rainGauge;
+  let deviceStatus: string | undefined;
+  if (typeof sensor === "string") deviceStatus = sensor;
+  else if (typeof sensor === "boolean") deviceStatus = sensor ? "ONLINE" : "OFFLINE";
+  else if (sensor) {
+    deviceStatus = sensor.status ?? sensor.state ??
+      (sensor.installed === false ? "NOT_INSTALLED" :
+        sensor.online === true ? "ONLINE" :
+        sensor.online === false ? "OFFLINE" : undefined);
+  }
+  const device = label(deviceStatus);
   const category = label(rain?.status);
   const installed = device === "ONLINE" || label(rain?.sensorStatus) === "ONLINE";
   const limited = rain?.calibrationLimited === true;
