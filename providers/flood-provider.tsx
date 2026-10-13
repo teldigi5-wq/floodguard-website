@@ -358,8 +358,12 @@ export function FloodProvider({ children }: { children: ReactNode }) {
         );
       }
     } catch {
-      setError("Live monitoring data is currently unavailable.");
-      queueMicrotask(release);
+      // Defer the initial error update: effects should not synchronously
+      // trigger a React render while they are still being initialized.
+      queueMicrotask(() => {
+        setError("Live monitoring data is currently unavailable.");
+        release();
+      });
     }
 
     return () => {
