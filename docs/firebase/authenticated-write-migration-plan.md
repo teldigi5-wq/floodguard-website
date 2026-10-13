@@ -16,6 +16,8 @@ Public grants on water, rain, gate, alarm, devices and system expose all descend
 
 Identify the actually flashed firmware, complete PUT/PATCH paths, payload shape, reset behavior and ownership of every field before selecting a transport. Preserve the mobile v7 visual identity and existing public read contracts.
 
+**Existing working hardware baseline (owner-reported, 13 October 2026):** Arduino and ESP8266 are already flashed and function correctly when available, but the system is currently offline for remote testing. Do not require reflashing, device resetting or touching the physical gate to design Phase B. Prototype all new auth/TLS paths with synthetic local tests; only propose a firmware replacement as a separate, explicitly approved migration after safe verification of the installed unit. The archived firmware examples do not identify the flashed revision.
+
 Preferred design for review: a dedicated, provisioned Firebase Authentication identity per device with a trusted operator-controlled binding to its allowed telemetry paths. Only an authorized backend/operator may provision or change that binding. A user-supplied deviceId, anonymous account, or any signed-in account is insufficient authorization. Provisioning, credential storage, renewal and revocation require an explicit design review.
 
 Direct REST writes must use a Firebase ID token issued after authentication. Never ship Admin SDK/service-account keys or database secrets in firmware or app clients. Protect refresh credentials; never log tokens, token-bearing URLs or request bodies containing secrets. Review device compromise and replacement procedures, and prove that disabling the device prevents subsequent writes within the documented revocation window.
@@ -53,9 +55,9 @@ A competent operator must later supervise real-device verification without gate 
 
 ## Approval evidence
 
-- Actual flashed firmware inventory and private telemetry schema review: pending.
+- Actual flashed firmware inventory and private telemetry schema review: pending **only for migration compatibility**; functioning flashed hardware is confirmed by owner, and no reflash is requested.
 - Device provisioning/renewal/revocation and TLS design: pending.
-- Phase B rules and isolated authorization/REST tests: not implemented.
+- Phase B limited synthetic-identity rules and Emulator authorization tests: implemented and passing on draft PR; complete production rules, identity provisioning, actual firmware integration, REST authentication and TLS tests remain pending.
 - Supervised hardware, EC2 and client verification: not performed by this plan.
 - Owner approval for rollout and rules publication: pending.
 

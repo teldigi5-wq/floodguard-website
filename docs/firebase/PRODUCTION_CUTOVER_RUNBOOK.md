@@ -7,10 +7,18 @@ and [the staged Firebase rules](./phase-a-privacy-candidate.rules.json).
 It does not imply the live hardware has been tested. Do **not** merge the bot PR, apply rules,
 or rotate device credentials as part of reading this document.
 
+## Hardware baseline — owner-reported, 13 October 2026
+
+The owner confirms the FloodGuard Arduino and ESP8266 are **already flashed**, were **working correctly**, and the system is **currently offline/not available for remote live testing**. Preserve the working firmware and physical wiring. This is an owner-reported working baseline, **not** an independently executed live test or confirmation of the exact flashed sketch and SHA. Do not infer that the device malfunctioned simply because Firebase telemetry is old or unavailable.
+
+**While the hardware is offline:** continue repository CI, synthetic Firebase Emulator authorization checks, offline/stale UI regression tests, and private release documentation. Do not require, schedule, or perform a reflash, factory reset, gate actuation, EC2 restart, or Firebase rules publication to progress these tasks. No field data is expected to update until the system is online again.
+
+**When the owner next chooses to bring the system online:** perform a read-only boot/connectivity/telemetry observation first; privately note the actual running firmware upload *shape* and timestamp behavior if accessible; validate without changing the known-working firmware. Treat a firmware migration as a separate optional approved release, never a prerequisite for confirming existing operation. A successful physical check under the old rules is not proof that the new Phase A or B rules will work.
+
 ## Release gate: prerequisites to verify before touching production
 
 - Back up the **actual currently deployed rules** from Firebase Console outside the public repository. Record operator, version, date and rollback location.
-- Establish that the ESP8266 is currently uploading; identify the flashed firmware and confirm whether the upload endpoint/shape is compatible with candidate rules. Do not turn on gate hardware only to exercise tests.
+- Do not require current ESP8266 uploads while the working hardware is offline. When it is next available with owner participation, **observe rather than reflash**, privately identify the running firmware or upload shape and confirm candidate-rule compatibility; never power or actuate the gate solely to run remote checks.
 - Verify the existing web UI, Android debug app (demo, live and offline/stale) and bot's baseline WhatsApp messages under the *current* rules.
 - Confirm a competent operator has the live EC2 bot access, EC2 deployment recovery path, WhatsApp test number, Firebase Console editor access and a rollback window.
 - Obtain explicit owner approval for a supervised bot redeploy. **Until bot PR #12 is merged, the existing production `main` workflow still auto-deploys on pushes.** The proposed PR changes that behavior to a manual, exact-commit `workflow_dispatch` with an approval input and a dedicated production environment. Verify this change is present in the actual merged workflow before merging or deploying.
