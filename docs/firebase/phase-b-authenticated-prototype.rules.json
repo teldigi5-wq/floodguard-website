@@ -1,0 +1,109 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "floodguard": {
+      "live": {
+        ".read": false,
+        ".write": false,
+        "water": {
+          ".read": true,
+          "distanceCm": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 400)",
+            ".write": "auth != null && newData.exists() && root.child('floodguard/deviceAuthorization').child(auth.uid).child('enabled').val() === true && root.child('floodguard/deviceAuthorization').child(auth.uid).child('scope').val() === 'prototype-primary-telemetry'"
+          },
+          "levelCm": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 25)",
+            ".write": "auth != null && newData.exists() && root.child('floodguard/deviceAuthorization').child(auth.uid).child('enabled').val() === true && root.child('floodguard/deviceAuthorization').child(auth.uid).child('scope').val() === 'prototype-primary-telemetry'"
+          },
+          "status": {
+            ".validate": "newData.isString() && (newData.val() === 'SAFE' || newData.val() === 'WARNING' || newData.val() === 'DANGER' || newData.val() === 'SENSOR_ERROR')",
+            ".write": "auth != null && newData.exists() && root.child('floodguard/deviceAuthorization').child(auth.uid).child('enabled').val() === true && root.child('floodguard/deviceAuthorization').child(auth.uid).child('scope').val() === 'prototype-primary-telemetry'"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "rain": {
+          ".read": true,
+          "currentMm": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0)"
+          },
+          "dailyMm": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0)"
+          },
+          "waterDepthCm": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 4)"
+          },
+          "rawValue": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 1023)"
+          },
+          "weightGrams": {
+            ".validate": "!newData.exists() || newData.isNumber()"
+          }
+        },
+        "gate": {
+          ".read": true,
+          "status": {
+            ".validate": "newData.isString() && (newData.val() === 'CLOSED' || newData.val() === 'COUNTDOWN' || newData.val() === 'OPEN')",
+            ".write": "auth != null && newData.exists() && root.child('floodguard/deviceAuthorization').child(auth.uid).child('enabled').val() === true && root.child('floodguard/deviceAuthorization').child(auth.uid).child('scope').val() === 'prototype-primary-telemetry'"
+          },
+          "angle": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 90)",
+            ".write": "auth != null && newData.exists() && root.child('floodguard/deviceAuthorization').child(auth.uid).child('enabled').val() === true && root.child('floodguard/deviceAuthorization').child(auth.uid).child('scope').val() === 'prototype-primary-telemetry'"
+          },
+          "countdownSeconds": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 10)"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "alarm": {
+          ".read": true
+        },
+        "devices": {
+          ".read": true
+        },
+        "system": {
+          ".read": true
+        },
+        "esp8266": {
+          ".read": false,
+          "connection": {
+            ".read": true
+          },
+          "rssi": {
+            ".read": true
+          },
+          "status": {
+            ".read": true,
+            ".write": "auth != null && newData.exists() && root.child('floodguard/deviceAuthorization').child(auth.uid).child('enabled').val() === true && root.child('floodguard/deviceAuthorization').child(auth.uid).child('scope').val() === 'prototype-primary-telemetry'",
+            ".validate": "newData.isString() && (newData.val() === 'ONLINE' || newData.val() === 'OFFLINE' || newData.val() === 'UNKNOWN')"
+          },
+          "ip": {
+            ".read": false
+          },
+          "wifi": {
+            ".read": false
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      },
+      "test": {
+        ".read": false,
+        ".write": false
+      },
+      "bot": {
+        ".read": false,
+        ".write": false
+      },
+      "deviceAuthorization": {
+        ".read": false,
+        ".write": false
+      }
+    }
+  }
+}
