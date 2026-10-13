@@ -56,8 +56,8 @@ test("retained Firebase measurements remain clearly marked as historical", async
   const provider = await read("providers/flood-provider.tsx");
   const panel = await read("components/page-kit.tsx");
   assert.ok(provider.includes('lastUpdateMs: stamp'));
-  assert.ok(provider.includes('else if (data)') && provider.includes(': "stale";'),
-    "Persisted readings must stay stale even after the hardware stops reporting");
+  assert.ok(provider.includes("classifyTelemetryFreshness"),
+    "Field freshness must be derived from the independently tested state model");
   assert.ok(!provider.includes('age > 60) freshness = "unavailable"'));
   assert.ok(panel.includes("Last recorded readings — not live"));
   assert.ok(panel.includes("lastSeenLabel(lastUpdateMs)"));

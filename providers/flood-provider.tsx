@@ -10,6 +10,7 @@ import {
 import { onValue, ref, type Unsubscribe } from "firebase/database";
 import { z } from "zod";
 import { database, LIVE_PATH } from "@/lib/firebase";
+import { ageSeconds, classifyTelemetryFreshness, parseFieldTimestamp } from "@/lib/telemetry-health.mjs";
 
 const shortText = z.string().max(80);
 const optionalNumber = (min: number, max: number) =>
@@ -89,6 +90,7 @@ export type LiveState = {
   freshness: "loading" | "live" | "stale" | "unavailable";
   age: number | null;
   lastUpdateMs: number | null;
+  databaseConnected: boolean | null;
   error: string | null;
 };
 
@@ -236,17 +238,6 @@ function normalizeGroup(key: keyof Omit<LiveData, "esp8266">, value: unknown): u
   return source;
 }
 
-function millis(value: unknown) {
-  if (typeof value === "number") return value < 1e12 ? value * 1000 : value;
-  if (typeof value === "string") {
-    const n = Number(value);
-    if (Number.isFinite(n)) return n < 1e12 ? n * 1000 : n;
-    const d = Date.parse(value);
-    return Number.isNaN(d) ? null : d;
-  }
-  return null;
-}
-
 export function FloodProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<LiveData | null>(null);
   const [connected, setConnected] = useState<boolean | null>(null);
@@ -373,22 +364,20 @@ export function FloodProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const stamp = millis(data?.system?.lastUpdate);
-  const age = stamp === null ? null : Math.max(0, Math.floor((now - stamp) / 1000));
-
-  // A stopped ESP8266 does not erase its last measurements from Firebase.
-  // Connection to Firebase is not proof that the hardware is updating.
-  let freshness: LiveState["freshness"] = "unavailable";
-  if (loading) freshness = "loading";
-  else if (data) {
-    freshness = connected === true && !error && age !== null && age <= 10
-      ? "live"
-      : "stale";
-  }
+  const stamp = parseFieldTimestamp(data?.system?.lastUpdate, now);
+  const age = ageSeconds(stamp, now);
+  // A connected browser is not evidence of a connected field controller.
+  const freshness = classifyTelemetryFreshness({
+    loading,
+    hasData: data !== null,
+    connected,
+    error: error !== null,
+    ageSeconds: age,
+  });
 
   const value = useMemo(
-    () => ({ data, freshness, age, lastUpdateMs: stamp, error }),
-    [data, freshness, age, stamp, error],
+    () => ({ data, freshness, age, lastUpdateMs: stamp, databaseConnected: connected, error }),
+    [data, freshness, age, stamp, connected, error],
   );
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>;
 }
