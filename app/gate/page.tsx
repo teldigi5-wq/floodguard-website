@@ -16,7 +16,7 @@ import {
   Wifi,
 } from "lucide-react";
 import { useLive } from "@/hooks/use-live";
-import { fmt, label } from "@/components/ui";
+import { ageLabel, fmt, label } from "@/components/ui";
 import { Metric, StatePanel } from "@/components/page-kit";
 
 const DamScene = dynamic(() => import("@/components/dam-scene"), {
@@ -81,8 +81,9 @@ export default function GatePage() {
           <p className="eyebrow"><Radio /> Live gate digital twin</p>
           <h1>One physical gate.<br /><span>One trusted live state.</span></h1>
           <p>
-            The center spillway mirrors the SG90 gate reported through Firebase. The
-            website is monitoring-only: Arduino remains the physical authority.
+            The center spillway depicts the last SG90 gate position reported through Firebase.
+            When readings are stale, this is historical, not the current physical gate.
+            Arduino remains the control authority.
           </p>
           <div className="final-gate-state-row">
             <span className={`final-gate-pill ${gateState.toLowerCase()}`}>
@@ -104,7 +105,7 @@ export default function GatePage() {
           </div>
           <div>
             <small>Updated</small>
-            <strong>{age === null ? "—" : `${age}s ago`}</strong>
+            <strong>{ageLabel(age)}</strong>
           </div>
           <div>
             <small>Risk</small>

@@ -88,6 +88,7 @@ export type LiveState = {
   data: LiveData | null;
   freshness: "loading" | "live" | "stale" | "unavailable";
   age: number | null;
+  lastUpdateMs: number | null;
   error: string | null;
 };
 
@@ -375,11 +376,19 @@ export function FloodProvider({ children }: { children: ReactNode }) {
   const stamp = millis(data?.system?.lastUpdate);
   const age = stamp === null ? null : Math.max(0, Math.floor((now - stamp) / 1000));
 
-  let freshness: LiveState["freshness"] = "live";
+  // A stopped ESP8266 does not erase its last measurements from Firebase.
+  // Connection to Firebase is not proof that the hardware is updating.
+  let freshness: LiveState["freshness"] = "unavailable";
   if (loading) freshness = "loading";
-  else if (error || !data || connected === false || age === null || age > 60) freshness = "unavailable";
-  else if (age > 10) freshness = "stale";
+  else if (data) {
+    freshness = connected === true && !error && age !== null && age <= 10
+      ? "live"
+      : "stale";
+  }
 
-  const value = useMemo(() => ({ data, freshness, age, error }), [data, freshness, age, error]);
+  const value = useMemo(
+    () => ({ data, freshness, age, lastUpdateMs: stamp, error }),
+    [data, freshness, age, stamp, error],
+  );
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>;
 }

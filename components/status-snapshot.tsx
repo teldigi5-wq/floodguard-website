@@ -2,11 +2,12 @@
 import {useState} from "react";
 import {Check,Clipboard,Download,FileJson,TriangleAlert} from "lucide-react";
 import {useLive} from "@/hooks/use-live";
+import {ageLabel,lastSeenLabel} from "@/components/ui";
 
 export function StatusSnapshot(){
- const{data,age,freshness}=useLive(),[notice,setNotice]=useState("");
+ const{data,age,freshness,lastUpdateMs}=useLive(),[notice,setNotice]=useState("");
  const snapshot=()=>({
-  generatedAt:new Date().toISOString(),freshness,ageSeconds:age,
+  generatedAt:new Date().toISOString(),freshness,ageSeconds:age,lastRecordedAt:lastUpdateMs===null?null:new Date(lastUpdateMs).toISOString(),
   water:{levelCm:data?.water?.levelCm??null,distanceCm:data?.water?.distanceCm??null,status:data?.water?.status??null},
   rain:{currentMm:data?.rain?.currentMm??null,dailyMm:data?.rain?.dailyMm??null,status:data?.rain?.status??null},
   gate:{status:data?.gate?.status??null,angle:data?.gate?.angle??null,reason:data?.gate?.reason??null},
@@ -17,5 +18,5 @@ export function StatusSnapshot(){
  const flash=(message:string)=>{setNotice(message);window.setTimeout(()=>setNotice(""),2200)};
  const copy=async()=>{try{await navigator.clipboard.writeText(summary());flash("Summary copied")}catch{flash("Copy unavailable")}};
  const download=()=>{const blob=new Blob([JSON.stringify(snapshot(),null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),link=document.createElement("a");link.href=url;link.download=`floodguard-observation-${new Date().toISOString().replaceAll(":","-")}.json`;link.click();URL.revokeObjectURL(url);flash("JSON downloaded")};
- return <section className="snapshot-panel"><div className="snapshot-icon"><FileJson/></div><div className="snapshot-copy"><p className="eyebrow">Project demo tool</p><h2>Export the current observation.</h2><p>Create a clean summary for a demonstration or project record. This captures only the current browser observation—not historical data—and excludes network addresses, credentials and raw payload fields.</p><div className="snapshot-state"><span className={`status-pulse ${freshness}`}/><b>{freshness}</b><span>{age===null?"Update age unavailable":`${age} seconds old`}</span></div></div><div className="snapshot-actions"><button className="button ghost" onClick={copy}><Clipboard/> Copy summary</button><button className="button" onClick={download}><Download/> Download JSON</button><span role="status" aria-live="polite">{notice&&(notice.includes("unavailable")?<TriangleAlert/>:<Check/>)} {notice}</span></div></section>;
+ return <section className="snapshot-panel"><div className="snapshot-icon"><FileJson/></div><div className="snapshot-copy"><p className="eyebrow">Project demo tool</p><h2>Export the current observation.</h2><p>Create a clean summary for a demonstration or project record. This captures only the current browser observation—not historical data—and excludes network addresses, credentials and raw payload fields.</p><div className="snapshot-state"><span className={`status-pulse ${freshness}`}/><b>{freshness}</b><span>{lastSeenLabel(lastUpdateMs)} · {ageLabel(age)}</span></div></div><div className="snapshot-actions"><button className="button ghost" onClick={copy}><Clipboard/> Copy summary</button><button className="button" onClick={download}><Download/> Download JSON</button><span role="status" aria-live="polite">{notice&&(notice.includes("unavailable")?<TriangleAlert/>:<Check/>)} {notice}</span></div></section>;
 }

@@ -51,3 +51,13 @@ test("public subscriptions comply with restrictive Firebase rules", async () => 
     assert.equal(rules.esp8266[key][".read"], false, `esp8266/${key} must remain private`);
   }
 });
+
+test("retained Firebase measurements remain clearly marked as historical", async () => {
+  const provider = await read("providers/flood-provider.tsx");
+  const panel = await read("components/page-kit.tsx");
+  assert.ok(provider.includes('lastUpdateMs: stamp'));
+  assert.ok(provider.includes('freshness = "stale"'));
+  assert.ok(!provider.includes('age > 60) freshness = "unavailable"'));
+  assert.ok(panel.includes("Last recorded readings — not live"));
+  assert.ok(panel.includes("lastSeenLabel(lastUpdateMs)"));
+});
