@@ -321,3 +321,21 @@ body{overflow-x:hidden}
 @media(prefers-reduced-motion:reduce){
  .final-gate-hero:before,.final-countdown-orbit,.final-response-flow>i:after,.global-alarm:before{animation:none!important}.final-gate-lift i,.final-gate-lift b,.final-mini-track i{transition:none!important}
 }
+
+
+/* Engineering diagnostics: no simulated connectivity, accessible contrast and readable small-screen flow */
+.diagnostics-page .diag-lead{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem;margin:1.25rem 0 2rem}
+.diagnostics-page .diag-panel{border:1px solid rgba(118,181,204,.22);border-radius:20px;padding:1.4rem;background:linear-gradient(155deg,rgba(21,52,71,.86),rgba(6,25,40,.9));min-width:0}
+.diagnostics-page .diag-panel small{display:block;color:#a8c5d8;text-transform:uppercase;letter-spacing:.08em;font-size:.72rem}
+.diagnostics-page .diag-panel strong{display:block;color:#edf8ff;font-size:clamp(1.15rem,2vw,1.65rem);margin:.55rem 0;overflow-wrap:anywhere}
+.diagnostics-page .diag-panel p{color:#bed6e3;font-size:.86rem;line-height:1.6}
+.diagnostics-page .diag-section-heading{margin:2rem 0 1rem}
+.diagnostics-page .diag-section-heading h2{font-size:clamp(1.4rem,2.3vw,2rem)}
+.diagnostics-page .diag-section-heading p{color:#aec7d7;max-width:68ch;line-height:1.7}
+.diagnostics-page .diag-streams{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.85rem;margin:1rem 0 2rem}
+.diagnostics-page .diag-stream{border:1px solid rgba(118,181,204,.18);border-radius:16px;background:rgba(8,29,45,.85);padding:1.2rem;display:flex;flex-direction:column;gap:.5rem}
+.diagnostics-page .diag-stream b{color:#edf8ff}.diagnostics-page .diag-stream span{color:#bed6e3;font-size:.85rem}
+.diagnostics-page .diag-stream code{color:#94cfe1;font-size:.74rem;overflow-wrap:anywhere}
+.diagnostics-page .diag-note{border-left:3px solid #58adc4;padding:1rem 1.25rem;background:rgba(20,73,88,.24);border-radius:0 12px 12px 0;line-height:1.7;color:#cde3ed}
+@media(max-width:840px){.diagnostics-page .diag-lead,.diagnostics-page .diag-streams{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.diagnostics-page .diag-lead,.diagnostics-page .diag-streams{grid-template-columns:minmax(0,1fr)}}

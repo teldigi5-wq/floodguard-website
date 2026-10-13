@@ -9,7 +9,7 @@ import {useLive} from "@/hooks/use-live";
 import {ageLabel,fmt,label,LiveBadge} from "@/components/ui";
 import {MotionOrchestrator} from "@/components/advanced-motion";
 import {PwaManager} from "@/components/pwa-manager";
-const links=[["Home","/"],["Live Dashboard","/dashboard"],["Impact","/impact"],["Safety","/safety"],["System","/system"],["Water","/water"],["Rainfall (planned)","/rainfall"],["Gate","/gate"],["Devices","/devices"],["About","/about"]];
+const links=[["Home","/"],["Live Dashboard","/dashboard"],["Impact","/impact"],["Safety","/safety"],["System","/system"],["Water","/water"],["Rainfall","/rainfall"],["Gate","/gate"],["Devices","/devices"],["Diagnostics","/diagnostics"],["About","/about"]];
 export function SiteChrome({children}:{children:ReactNode}){
  const pathname=usePathname(),reduced=useReducedMotion();
  const[open,setOpen]=useState(false),[command,setCommand]=useState(false),[query,setQuery]=useState(""),[dock,setDock]=useState(false),[progress,setProgress]=useState(0);

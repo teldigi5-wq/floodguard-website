@@ -50,6 +50,8 @@ export default function GatePage() {
     typeof gate?.countdownSeconds === "number"
       ? Math.max(0, Math.round(gate.countdownSeconds))
       : 0;
+  // A retained countdown must not be presented as an active timer.
+  const activeCountdown = freshness === "live" && countdown > 0;
   const lift = angle === null ? null : Math.round((angle / 90) * 100);
 
   // Display state is reconciled from the physical command position and countdown.
@@ -60,7 +62,8 @@ export default function GatePage() {
   else if (angle !== null && angle >= 80) gateState = "OPEN";
   else if (angle !== null && angle > 2 && angle < 80) gateState = "MOVING";
 
-  const releaseActive = gateState === "OPEN" && (lift ?? 0) >= 80;
+  // Never animate active discharge based only on historical gate positions.
+  const releaseActive = freshness === "live" && gateState === "OPEN" && (lift ?? 0) >= 80;
   const waterState = (water?.status ?? "UNKNOWN").toUpperCase();
   const danger = waterState === "DANGER";
   const stateCopy =
@@ -116,7 +119,7 @@ export default function GatePage() {
 
       <StatePanel />
 
-      {countdown > 0 && (
+      {activeCountdown && (
         <section className="final-countdown" role="status" aria-live="polite">
           <div className="final-countdown-orbit"><Clock3 /></div>
           <div>
@@ -132,7 +135,7 @@ export default function GatePage() {
         <div className="final-stage-heading">
           <div>
             <p className="eyebrow"><Sparkles /> 3D spillway & reservoir</p>
-            <h2>{stateCopy}</h2>
+            <h2>{freshness==="live"?stateCopy:"Last recorded: "+stateCopy}</h2>
           </div>
           <div className="final-stage-key">
             <span><i className="key-center" /> Center bay = physical SG90 gate</span>
@@ -174,12 +177,12 @@ export default function GatePage() {
                 <p>Actual reservoir level is calculated from the HC-SR04 air gap using the 25.0 cm sensor-to-bottom calibration.</p>
               </article>
               <article>
-                <Waves /><small>Hydraulic visual</small><strong>{releaseActive ? "RELEASING" : "HELD"}</strong>
-                <p>{releaseActive ? "Visual discharge follows the open gate." : "No discharge animation while sealed."}</p>
+                <Waves /><small>Hydraulic visual</small><strong>{freshness!=="live"?"PAUSED":releaseActive?"RELEASING":"HELD"}</strong>
+                <p>{freshness!=="live"?"Historical readings do not trigger discharge animations.":releaseActive?"Visual discharge follows the reported open gate.":"No discharge animation while sealed."}</p>
               </article>
               <article>
-                <Clock3 /><small>Countdown</small><strong>{countdown > 0 ? `${countdown}s` : "0s"}</strong>
-                <p>Only active before a confirmed opening.</p>
+                <Clock3 /><small>Countdown</small><strong>{freshness==="live"?(countdown>0?`${countdown}s`:"0s"):countdown>0?`Recorded ${countdown}s`:"Not live"}</strong>
+                <p>{freshness==="live"?"Only active before a confirmed opening.":"This is not a running physical countdown."}</p>
               </article>
               <article>
                 <Wifi /><small>Network</small><strong>{label(data?.esp8266?.status ?? data?.esp8266?.connection)}</strong>
@@ -214,7 +217,7 @@ export default function GatePage() {
       <section className="metric-grid final-gate-metrics">
         <Metric icon={<Gauge />} title="Gate state" value={label(gateState)} note={angle === null ? "Angle unavailable" : `${Math.round(angle)}° physical command`} />
         <Metric icon={<Droplets />} title="Water state" value={label(waterState)} note={fmt(water?.levelCm, "cm", 1)} />
-        <Metric icon={<BellRing />} title="Gate warning" value={countdown > 0 ? "ACTIVE" : "CLEAR"} note={countdown > 0 ? `${countdown}s remaining` : "No pre-open countdown"} />
+        <Metric icon={<BellRing />} title="Gate warning" value={freshness!=="live"?"HISTORICAL":activeCountdown?"ACTIVE":"CLEAR"} note={freshness!=="live"?"Current alarm sequence unverified":activeCountdown?`${countdown}s remaining`:"No pre-open countdown"} />
         <Metric icon={<ShieldCheck />} title="Control authority" value="ARDUINO" note="Website remains monitoring-only" />
       </section>
     </main>

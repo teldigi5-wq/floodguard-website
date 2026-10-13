@@ -24,7 +24,7 @@ test("Firebase sample rules never allow anonymous live-data overwrites", async (
 });
 
 test("all website routes exist", async () => {
-  for (const url of ["", "about", "dashboard", "devices", "gate", "impact", "rainfall", "safety", "system", "water"]) {
+  for (const url of ["", "about", "dashboard", "devices", "diagnostics", "gate", "impact", "rainfall", "safety", "system", "water"]) {
     await stat(resolve(root, "app", url, "page.tsx"));
   }
 });
@@ -61,4 +61,14 @@ test("retained Firebase measurements remain clearly marked as historical", async
   assert.ok(!provider.includes('age > 60) freshness = "unavailable"'));
   assert.ok(panel.includes("Last recorded readings — not live"));
   assert.ok(panel.includes("lastSeenLabel(lastUpdateMs)"));
+});
+
+test("historical hardware states must not appear live", async () => {
+  const devices = await read("app/devices/page.tsx");
+  const rain = await read("app/rainfall/page.tsx");
+  const gate = await read("app/gate/page.tsx");
+  assert.ok(devices.includes("LAST REPORTED:"), "Historic device state label is required");
+  assert.ok(rain.includes("current state unverified"), "Rain sensor online claims require fresh telemetry");
+  assert.ok(gate.includes("activeCountdown"), "Historical countdowns must never animate as active timers");
+  assert.ok(gate.includes('freshness === "live" && gateState'), "Discharge visualization must require fresh telemetry");
 });

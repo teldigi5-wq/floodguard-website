@@ -2,7 +2,7 @@
 
 import { CloudRain, Droplets, Gauge, Radio, Ruler, ShieldCheck } from "lucide-react";
 import { useLive } from "@/hooks/use-live";
-import { fmt, label } from "@/components/ui";
+import { ageLabel, fmt, label } from "@/components/ui";
 import { Metric, PageHero, StatePanel } from "@/components/page-kit";
 
 function categoryNote(status: string) {
@@ -37,7 +37,7 @@ export default function Rainfall() {
   return (
     <main className="page rainfall-page">
       <PageHero
-        eyebrow="Live collector rain gauge"
+        eyebrow="Field collector rain gauge"
         title="Rainfall monitoring"
         copy="Real rainfall is calculated from the physical collector water depth. Missing fields stay unavailable; FloodGuard does not invent load-cell weight or historical rain values."
       />
@@ -46,12 +46,12 @@ export default function Rainfall() {
       <section className="command-overview">
         <div className="overview-copy">
           <span className={"status-pulse " + freshness} />
-          <div><small>Rain-gauge sensor</small><b>{installed ? "Physical sensor online" : "Sensor unavailable"}</b></div>
+          <div><small>Rain-gauge sensor</small><b>{freshness==="live"&&installed?"Sensor reporting":installed?"Last reported ONLINE · current state unverified":"Sensor state unavailable"}</b></div>
         </div>
         <dl>
           <div><dt>Category</dt><dd>{category}</dd></div>
-          <div><dt>Freshness</dt><dd>{age == null ? "—" : age + " sec"}</dd></div>
-          <div><dt>Calibration</dt><dd>{limited ? "LIMITED" : "ACTIVE"}</dd></div>
+          <div><dt>Field update</dt><dd>{ageLabel(age)}</dd></div>
+          <div><dt>Calibration</dt><dd>{!rain?"UNAVAILABLE":limited?"LIMITED":"REPORTED"}</dd></div>
         </dl>
       </section>
 
