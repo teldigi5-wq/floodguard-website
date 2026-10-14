@@ -46,7 +46,9 @@ test('drifting a client path or expanding anonymous parent read fails the compat
   const unsafe=structuredClone(phaseA);
   unsafe.rules.floodguard.live['.read']=true;
   // Explicitly test the grant as a blocker: Firebase ancestor read grants cascade.
-  assert.equal(unsafe.rules.floodguard.live['.read'],true);
+  const audit=inspectStage11({review,phaseA:unsafe,phaseB});
+  assert.equal(audit.phaseAChildReadsVerified,false);
+  assert.ok(audit.blockers.includes('PHASE_A_READ_BOUNDARY_MISMATCH'));
 });
 test('attempted approval flag cannot turn an offline CI report into authorization',()=>{
   const changed=structuredClone(review);

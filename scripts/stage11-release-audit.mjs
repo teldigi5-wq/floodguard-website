@@ -18,6 +18,7 @@ export function inspectStage11({review,phaseA,phaseB}={}){
   const publicReads=!!candidate&&expected.every(p=>getAt(candidate,p)?.['.read']===true
     ||(p.indexOf('/')<0&&candidate[p]?.['.read']===true));
   const privateReads=!!candidate&&candidate['.read']===false
+    &&phaseA.rules?.floodguard?.['.read']!==true
     &&candidate.esp8266?.['.read']===false
     &&deny.every(p=>getAt(candidate,p)?.['.read']===false)
     &&phaseA.rules?.['.read']===false;
