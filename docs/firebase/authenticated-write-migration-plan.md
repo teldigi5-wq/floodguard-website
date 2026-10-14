@@ -84,3 +84,43 @@ with administrative credentials would bypass client RTDB Rules and would need
 its own authorization, replay, rate/size, audit and network-security controls.
 The current prototype never connects to production. Existing live-leaf Phase B
 examples remain deliberately incomplete and should not be published.
+
+
+## Stage 6 — offline gateway versus device-auth comparison (review only)
+
+**No service or upload endpoint was created.** `experiments/offline-ingestion-gateway.mjs`
+is a deterministic, in-memory teaching harness imported exclusively by automated
+tests; it has **no listener, Firebase writes, transport code, hardware control,
+secret management or persistence**. It deliberately cannot ingest anonymous
+legacy uploads into live Firebase.
+
+| Option | Benefit | Unresolved release blocker |
+| --- | --- | --- |
+| Direct authenticated ESP8266 → versioned private RTDB staging | Fewer managed components; database Rules enforce per-device claims and schema | Currently flashed firmware sends anonymous whole-tree PUT or parent PATCH, with unverified TLS in saved variants; safe token renewal, certificate validation, sequence persistence and device migration unproven |
+| ESP8266 → trusted ingestion gateway → RTDB | Central schema checking, telemetry redaction, clock discipline and credential lifecycle potentially without RTDB tokens stored on device | **Not a bypass for device identity or TLS**: the existing unauthenticated firmware cannot securely identify to the gateway without a separately approved transport, firmware, or physical trusted intermediary. Gateway Admin SDK writes bypass RTDB client Rules; the service itself needs rigorous auth, rate limiting, replay controls, provenance, audit and secure hosting |
+| Continue legacy anonymous PUT/PATCH | Preserves observed old firmware behavior until a supervised migration | Untrusted writers remain able to forge readings; unacceptable as the final secure design |
+
+**Chosen next research direction, not a production decision:** retain direct scoped
+RTDB writes as the conceptual end state; investigate whether a trusted local
+intermediary can provide device authentication, validated TLS, and non-billable
+hosting before committing to a gateway. Never silently strip `esp8266/ip` or
+`esp8266/wifi` and forward anonymous uploads as if authenticated.
+
+The Stage 6 dry-run harness demonstrates only unforgeable **in-process** mock
+credentials/proofs, fixed UID allowlisting, mock expiry, revocation, bounded
+retry delays, bounded in-memory queue, strict frame schema and per-process
+monotonic sequence checks. This is **not real cryptography, TLS verification,
+a durable anti-replay guarantee, an offline queue implementation for firmware,
+secure persisted identity, a token refresh protocol, or a production gateway**.
+A restart can reset the harness sequence counter. An untrusted producer clock
+cannot be used alone to establish freshness; real field readings remain offline.
+
+**Required Stage 7 research gates:** privately observe the actual flashed
+firmware's network/API behavior without operating hardware; establish trusted
+device authentication and secure cert chain verification (no `setInsecure()`);
+define durable atomic per-device sequence/reboot reset or signed epoch policy;
+implement a separate test-only authenticated transport boundary in an isolated
+test project; bound request size/rate and retention; prove lost-network recovery
+without false freshness or loss of confirmed events. Phase A/B production rules,
+WhatsApp pairing, hardware updates, bot deployment and GitHub PR merges remain
+independent owner-approval gates.

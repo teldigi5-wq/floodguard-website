@@ -8,6 +8,8 @@ on:
       - 'docs/firebase/authenticated-write-migration-plan.md'
       - 'firebase.phase-b.json'
       - 'tests/phase-b-*.mjs'
+      - 'tests/offline-ingestion-gateway.test.mjs'
+      - 'experiments/offline-ingestion-gateway.mjs'
       - '.github/workflows/firebase-phase-b-prototype.yml'
   workflow_dispatch:
 

@@ -41,3 +41,21 @@ those uploads are incompatible with this lane. There is no device credential
 rotation, revocation of already-issued tokens, certificate pinning, renewal,
 bootstrap, ingestion bridge, or real hardware integration here. No service is
 created or deployed and no secrets are stored in this repository.
+
+
+## Stage 6 — offline gateway research harness
+
+See `experiments/offline-ingestion-gateway.mjs` and
+`tests/offline-ingestion-gateway.test.mjs`. Neither module runs in the
+website, Node bot, Firebase, Arduino or ESP8266. Mock tokens and mock transport
+proofs are deliberately minted inside an in-process test harness and cannot
+replace Firebase JWT verification, a TLS handshake or true cryptographic
+identity. No network path, REST endpoint, database write, access to an old
+WhatsApp session, or live hardware command is implemented.
+
+The synthetic legacy compatibility inspector recognizes example whole-live
+`PUT` and root slash-key `PATCH` shapes and reports why neither may be
+transparently forwarded to authenticated staging; it never returns captured
+network identifiers. Simulated expiry, revocation, monotonic frame sequence,
+bounded queue overflow, retry exhaustion and reconnect stale-frame behavior
+are covered by Node tests without hardware access.
