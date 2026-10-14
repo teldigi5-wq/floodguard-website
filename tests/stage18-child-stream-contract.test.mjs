@@ -27,7 +27,7 @@ test('the real website provider uses only allowlisted Firebase subscriptions',()
     assert.ok(src.includes(name+': '+expected),name);
   }
   assert.doesNotMatch(src,/ref\(db, LIVE_PATH\)/);
-  assert.doesNotMatch(src,/ref\(db, ['"]\\/floodguard\\/live['"]\)/);
+  assert.equal(src.includes('ref(db, "/floodguard/live")'),false);
 });
 test('all synthetic event branches are explicitly public and private fields absent',()=>{
   const allowed=new Set(corpus.publicPaths);
@@ -67,7 +67,7 @@ test('deleting the source timestamp never substitutes the local reconnect time',
 });
 test('no production URL, secret or networking is required for this offline replay',()=>{
   const replayOnly=JSON.stringify(corpus.setup)+JSON.stringify(corpus.scenarios);
-  assert.doesNotMatch(replayOnly,/firebasedatabase\\.app|firebaseio\\.com|192\\.168\\.|password|authToken|apiKey/i);
+  for(const forbidden of ['firebasedatabase.app','firebaseio.com','192.168.','password','authToken','apiKey']) assert.equal(replayOnly.includes(forbidden),false);
   const testSource=fs.readFileSync('tests/stage18-child-stream-contract.test.mjs','utf8');
   assert.doesNotMatch(testSource,/node:http|node:https|node:net|node:tls/);
 });
