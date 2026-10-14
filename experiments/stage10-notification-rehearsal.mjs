@@ -131,7 +131,7 @@ export function createStage10SyntheticNotificationLab({directory,integrityKey,ou
     ||!database||typeof database.get!=='function'
     ||typeof clock!=='function')throw new TypeError('Synthetic outbox, database and clock required');
   const store=safeStore({directory,integrityKey,kind:'notifications'});
-  function fetch(id){
+  function readNotificationEntry(id){
     if(!DEVICE.test(id))throw new TypeError('Synthetic test identity only');
     return store.transact(state=>({write:false,value:state.entries[id]?{...state.entries[id]}:null}));
   }
@@ -156,7 +156,7 @@ export function createStage10SyntheticNotificationLab({directory,integrityKey,ou
     },
     dispatch({deviceId,provider,failPoint}={}){
       if(!mockProviders.has(provider))return {status:'unapproved-mock-provider'};
-      const existing=fetch(deviceId);
+      const existing=readNotificationEntry(deviceId);
       if(!existing)return {status:'not-queued'};
       if(existing.status===CONFIRMED)return {status:'already-simulated'};
       if(!checkUpstream(outbox,database,deviceId,existing))
@@ -178,7 +178,7 @@ export function createStage10SyntheticNotificationLab({directory,integrityKey,ou
       });}catch{return {status:'notification-ledger-unavailable'};}
     },
     status(id){
-      const entry=fetch(id);
+      const entry=readNotificationEntry(id);
       if(!entry)return {kind:'OFFLINE_SIMULATION',database:'NOT_VERIFIED',notification:'NOT_QUEUED'};
       if(!checkUpstream(outbox,database,id,entry))
         return {kind:'OFFLINE_SIMULATION',database:'NOT_VERIFIED',notification:'NOT_VERIFIED'};
