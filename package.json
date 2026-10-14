@@ -11,7 +11,8 @@
     "build:amplify": "next build",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "audit:stage11": "node scripts/stage11-release-audit.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",
