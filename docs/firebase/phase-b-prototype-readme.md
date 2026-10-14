@@ -91,3 +91,16 @@ the previous receipt without accepting a second frame. The same sequence
 with different payload content is denied. None of this runs against the
 Firebase Emulator database or production systems; existing Phase B Emulator
 authorization tests remain unchanged.
+
+
+## Stage 9 — isolated downstream outbox and loopback TLS exercises
+
+The Stage 9 test harness uses a separate, **synthetic** outbox and fake
+database to distinguish an accepted Stage 8 signed receipt from a confirmed
+downstream database record. It tests crashes before and after the fake sink
+write, idempotent replays, wrong receipts, corrupt storage and unavailable
+downstream operations. All test artifacts remain in a temporary directory.
+The accompanying real TLS handshake tests use **temporary locally generated
+certificates** and bind only to 127.0.0.1. No live database, firmware,
+webserver, Wi-Fi network or message-delivery system is contacted. Actual
+ESP8266 certificate validation remains unverified.

@@ -14,6 +14,9 @@ on:
       - 'tests/stage7-durable-ingress.test.mjs'
       - 'experiments/stage8-ack-reconciliation.mjs'
       - 'tests/stage8-ack-reconciliation.test.mjs'
+      - 'experiments/stage9-downstream-outbox.mjs'
+      - 'tests/stage9-downstream-outbox.test.mjs'
+      - 'tests/stage9-local-tls.test.mjs'
       - '.github/workflows/firebase-phase-b-prototype.yml'
   workflow_dispatch:
 

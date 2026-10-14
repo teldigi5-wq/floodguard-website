@@ -243,3 +243,51 @@ physical warning or gate action took place.
 **Next research milestone:** crash-recovery at the *downstream transaction*
 boundary and isolated TLS certificate validation using test certificates,
 without introducing a live service or changing production telemetry.
+
+
+## Stage 9 — downstream database receipt and local TLS checks (offline-only)
+
+Stage 9 introduces `experiments/stage9-downstream-outbox.mjs`,
+`tests/stage9-downstream-outbox.test.mjs`, and
+`tests/stage9-local-tls.test.mjs`. They are test-only: no REST endpoint,
+Firebase writer, WhatsApp sender, physical gate action, firmware change,
+production credential, web app import, or deployment is created.
+
+**Acceptance versus database confirmation.** A Stage 8 signed receipt,
+verified against the Stage 8 local ledger and its public signing key, may
+enter an HMAC-sealed, exclusively locked synthetic outbox as `ACCEPTED_ONLY`.
+The independent filesystem mock database stores an idempotency record
+`{deviceId, epoch, sequence, digest}` under a separate HMAC-sealed file.
+Only an affirmative persisted/idempotent mock database response permits
+the outbox to transition to `DATABASE_CONFIRMED`. Neither status means
+**real Firebase committed**, **alert delivered**, or **hardware action taken**.
+
+**Crash boundaries.** Before the test database write, a restart retains
+the pending outbox; after the mock database commits but before the local
+acknowledgement, another attempt is idempotent and can confirm the existing
+synthetic record. A mock database outage leaves pending state unchanged.
+Unresolved earlier outbox deliveries block replacing them with newer frames.
+A source receipt may no longer be retrievable once Stage 8 overwrites its
+single latest receipt; the test design never interprets absence as proof of
+nonacceptance. A crash between the Stage 8 acceptance and Stage 9 enqueue
+is still a gap: no unified atomic transaction or recovery protocol spans
+these separate ledgers.
+
+**Transport evidence.** An optional Node/OpenSSL test creates short-lived
+synthetic CA and localhost server certificates in a temporary directory,
+listens **only** on 127.0.0.1, and verifies that a correct CA and hostname
+succeed while untrusted/misnamed certificates fail. No certificate or private
+key is committed. The TLS fixture demonstrates Node certificate validation,
+not ESP8266 firmware capability, hostname verification on the device, trust
+store bootstrapping, OCSP/revocation, or network attacker resistance.
+
+**Critical limits.** HMAC files and lock files are disposable prototypes,
+not a durable cross-service transaction manager. A real Firebase uploader
+would need compare-and-set/idempotent writes confirmed by the actual
+database, replay-safe recovery across backup/reboot, authenticated requests,
+least privilege, audit, monitoring and back-pressure. A WhatsApp provider's
+delivery acknowledgement is a separate uncertain state; do not equate it
+with database confirmation, and do not claim exactly-once real alerts.
+Production Firebase anonymous writes remain unresolved. All future
+physical-device, hosting, WhatsApp and production-rule changes require
+explicit separate approval.
