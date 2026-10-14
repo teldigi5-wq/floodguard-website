@@ -30,6 +30,7 @@ test('Stage 5 staging schema denies unknown or missing fields and checks ranges'
   for(const id of ['sequence','distanceCm','levelCm','risk'])assert.ok(lane[id]?.['.validate'],id);
   assert.equal(lane.$other['.validate'],false);
   assert.match(lane.sequence['.validate'],/2147483647/);
+  assert.match(lane.sequence['.validate'],/% 1 === 0/);
   assert.match(lane.distanceCm['.validate'],/400/);
   assert.match(lane.levelCm['.validate'],/25/);
   assert.match(lane.risk['.validate'],/SENSOR_ERROR/);

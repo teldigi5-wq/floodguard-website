@@ -94,8 +94,11 @@ test('Stage 5 permits only a scoped device claim and matching registry binding f
   const db=stageDevice('device-stage-a');
   await assertSucceeds(db.ref(staging+'/device-stage-a').set(stageFrame(1)));
   await assertSucceeds(db.ref(staging+'/device-stage-a').set(stageFrame(2,{risk:'SAFE'})));
-  const snapshot=await env.withSecurityRulesDisabled(context=>context.database().ref(staging+'/device-stage-a').get());
-  if(snapshot.val().sequence!==2||snapshot.val().risk!=='SAFE')throw Error('Staging frame was not updated');
+  let stored;
+  await env.withSecurityRulesDisabled(async context=>{
+    stored=(await context.database().ref(staging+'/device-stage-a').get()).val();
+  });
+  if(stored.sequence!==2||stored.risk!=='SAFE')throw Error('Staging frame was not updated');
 });
 
 test('Stage 5 rejects anonymous, ordinary, missing-claim, spoofed-role and disabled identities',async()=>{
@@ -136,8 +139,11 @@ test('Stage 5 rejects replayed or decreasing sequence and deletion, without losi
   await assertFails(ref.child('risk').remove());
   await assertFails(ref.child('distanceCm').set(20));
   await assertSucceeds(ref.set(stageFrame(6,{risk:'DANGER'})));
-  const snapshot=await env.withSecurityRulesDisabled(context=>context.database().ref(staging+'/device-stage-a').get());
-  if(snapshot.val().sequence!==6||snapshot.val().risk!=='DANGER')throw Error('Replay changed private data');
+  let stored;
+  await env.withSecurityRulesDisabled(async context=>{
+    stored=(await context.database().ref(staging+'/device-stage-a').get()).val();
+  });
+  if(stored.sequence!==6||stored.risk!=='DANGER')throw Error('Replay changed private data');
 });
 
 test('Stage 5 rejects missing, unknown, malformed and out-of-range fields, including synthetic commands',async()=>{
@@ -165,6 +171,9 @@ test('Stage 5 revocation denies further writes while preserving previous synthet
   await assertSucceeds(ref.set(stageFrame(1)));
   await env.withSecurityRulesDisabled(context=>context.database().ref('/floodguard/deviceAuthorization/device-stage-a/enabled').set(false));
   await assertFails(ref.set(stageFrame(2)));
-  const snapshot=await env.withSecurityRulesDisabled(context=>context.database().ref(staging+'/device-stage-a').get());
-  if(snapshot.val().sequence!==1)throw Error('Revoked write changed synthetic data');
+  let stored;
+  await env.withSecurityRulesDisabled(async context=>{
+    stored=(await context.database().ref(staging+'/device-stage-a').get()).val();
+  });
+  if(stored.sequence!==1)throw Error('Revoked write changed synthetic data');
 });
