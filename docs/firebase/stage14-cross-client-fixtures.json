@@ -322,8 +322,7 @@
       },
       "expect": {
         "differing": [
-          "rain",
-          "risk"
+          "rain"
         ],
         "webRain": "HEAVY_RAIN",
         "botRain": "ONLINE",
