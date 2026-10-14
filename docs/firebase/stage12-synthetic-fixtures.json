@@ -1,0 +1,242 @@
+{
+  "schema": "floodguard-stage12-synthetic-v1",
+  "source": "synthetic field-shape examples; no actual ESP8266 payload captured",
+  "nowMs": 1791972000000,
+  "inspectedClientFreshnessWindowsSeconds": {
+    "website": 10,
+    "bot": 15,
+    "mobile": 30
+  },
+  "cases": [
+    {
+      "id": "patch-fresh-warning",
+      "method": "PATCH",
+      "path": "/floodguard/live",
+      "connected": true,
+      "payload": {
+        "water/distanceCm": 15.35,
+        "water/levelCm": 9.65,
+        "water/status": "WARNING",
+        "rain/currentMm": 0,
+        "rain/dailyMm": 0,
+        "gate/status": "CLOSED",
+        "gate/angle": 0,
+        "gate/countdownSeconds": 0,
+        "alarm/active": false,
+        "devices/arduino": "ONLINE",
+        "esp8266/status": "ONLINE",
+        "esp8266/connection": "CONNECTED",
+        "esp8266/rssi": -60,
+        "esp8266/ip": "192.0.2.42",
+        "esp8266/wifi": "SYNTHETIC-NETWORK-NOT-A-REAL-SSID",
+        "system/lastUpdate": 1791971995000,
+        "system/overallRisk": "MODERATE"
+      },
+      "expect": {
+        "freshness": "live",
+        "ageSeconds": 5,
+        "private": true,
+        "unknown": false
+      }
+    },
+    {
+      "id": "patch-20-second-divergence",
+      "method": "PATCH",
+      "path": "/floodguard/live",
+      "connected": true,
+      "payload": {
+        "water/distanceCm": 15.35,
+        "water/levelCm": 9.65,
+        "water/status": "WARNING",
+        "rain/currentMm": 0,
+        "rain/dailyMm": 0,
+        "gate/status": "CLOSED",
+        "gate/angle": 0,
+        "gate/countdownSeconds": 0,
+        "alarm/active": false,
+        "devices/arduino": "ONLINE",
+        "esp8266/status": "ONLINE",
+        "esp8266/connection": "CONNECTED",
+        "esp8266/rssi": -60,
+        "esp8266/ip": "192.0.2.42",
+        "esp8266/wifi": "SYNTHETIC-NETWORK-NOT-A-REAL-SSID",
+        "system/lastUpdate": 1791971980000,
+        "system/overallRisk": "MODERATE"
+      },
+      "expect": {
+        "freshness": "stale",
+        "ageSeconds": 20,
+        "private": true,
+        "unknown": false
+      }
+    },
+    {
+      "id": "patch-network-disconnected",
+      "method": "PATCH",
+      "path": "/floodguard/live",
+      "connected": false,
+      "payload": {
+        "water/distanceCm": 15.35,
+        "water/levelCm": 9.65,
+        "water/status": "WARNING",
+        "rain/currentMm": 0,
+        "rain/dailyMm": 0,
+        "gate/status": "CLOSED",
+        "gate/angle": 0,
+        "gate/countdownSeconds": 0,
+        "alarm/active": false,
+        "devices/arduino": "ONLINE",
+        "esp8266/status": "ONLINE",
+        "esp8266/connection": "CONNECTED",
+        "esp8266/rssi": -60,
+        "esp8266/ip": "192.0.2.42",
+        "esp8266/wifi": "SYNTHETIC-NETWORK-NOT-A-REAL-SSID",
+        "system/lastUpdate": 1791971999000,
+        "system/overallRisk": "MODERATE"
+      },
+      "expect": {
+        "freshness": "stale",
+        "ageSeconds": 1,
+        "private": true,
+        "unknown": false
+      }
+    },
+    {
+      "id": "patch-future-clock",
+      "method": "PATCH",
+      "path": "/floodguard/live",
+      "connected": true,
+      "payload": {
+        "water/distanceCm": 15.35,
+        "water/levelCm": 9.65,
+        "water/status": "WARNING",
+        "rain/currentMm": 0,
+        "rain/dailyMm": 0,
+        "gate/status": "CLOSED",
+        "gate/angle": 0,
+        "gate/countdownSeconds": 0,
+        "alarm/active": false,
+        "devices/arduino": "ONLINE",
+        "esp8266/status": "ONLINE",
+        "esp8266/connection": "CONNECTED",
+        "esp8266/rssi": -60,
+        "esp8266/ip": "192.0.2.42",
+        "esp8266/wifi": "SYNTHETIC-NETWORK-NOT-A-REAL-SSID",
+        "system/lastUpdate": 1791972060000,
+        "system/overallRisk": "MODERATE"
+      },
+      "expect": {
+        "freshness": "stale",
+        "ageSeconds": null,
+        "private": true,
+        "unknown": false
+      }
+    },
+    {
+      "id": "patch-missing-clock",
+      "method": "PATCH",
+      "path": "/floodguard/live",
+      "connected": true,
+      "payload": {
+        "water/distanceCm": 15.35,
+        "water/levelCm": 9.65,
+        "water/status": "WARNING",
+        "rain/currentMm": 0,
+        "rain/dailyMm": 0,
+        "gate/status": "CLOSED",
+        "gate/angle": 0,
+        "gate/countdownSeconds": 0,
+        "alarm/active": false,
+        "devices/arduino": "ONLINE",
+        "esp8266/status": "ONLINE",
+        "esp8266/connection": "CONNECTED",
+        "esp8266/rssi": -60,
+        "esp8266/ip": "192.0.2.42",
+        "esp8266/wifi": "SYNTHETIC-NETWORK-NOT-A-REAL-SSID",
+        "system/overallRisk": "MODERATE"
+      },
+      "expect": {
+        "freshness": "stale",
+        "ageSeconds": null,
+        "private": true,
+        "unknown": false
+      }
+    },
+    {
+      "id": "patch-unreviewed-child",
+      "method": "PATCH",
+      "path": "/floodguard/live",
+      "connected": true,
+      "payload": {
+        "water/distanceCm": 15.35,
+        "water/levelCm": 9.65,
+        "water/status": "WARNING",
+        "rain/currentMm": 0,
+        "rain/dailyMm": 0,
+        "gate/status": "CLOSED",
+        "gate/angle": 0,
+        "gate/countdownSeconds": 0,
+        "alarm/active": false,
+        "devices/arduino": "ONLINE",
+        "esp8266/status": "ONLINE",
+        "esp8266/connection": "CONNECTED",
+        "esp8266/rssi": -60,
+        "esp8266/ip": "192.0.2.42",
+        "esp8266/wifi": "SYNTHETIC-NETWORK-NOT-A-REAL-SSID",
+        "system/lastUpdate": 1791971995000,
+        "system/overallRisk": "MODERATE",
+        "water/internalIdentifier": "SYNTHETIC-PRIVATE-CHILD"
+      },
+      "expect": {
+        "freshness": "live",
+        "ageSeconds": 5,
+        "private": true,
+        "unknown": true
+      }
+    },
+    {
+      "id": "put-old-safe",
+      "method": "PUT",
+      "path": "/floodguard/live",
+      "connected": true,
+      "payload": {
+        "water": {
+          "distanceCm": 20,
+          "levelCm": 5,
+          "status": "SAFE"
+        },
+        "rain": {
+          "currentMm": 0,
+          "dailyMm": 0
+        },
+        "gate": {
+          "status": "CLOSED",
+          "angle": 0
+        },
+        "alarm": {
+          "active": false
+        },
+        "devices": {
+          "arduino": "ONLINE"
+        },
+        "system": {
+          "lastUpdate": 1791968400000,
+          "overallRisk": "LOW"
+        },
+        "esp8266": {
+          "status": "ONLINE",
+          "connection": "CONNECTED",
+          "rssi": -54,
+          "ip": "192.0.2.20",
+          "wifi": "SYNTHETIC-NETWORK-NOT-A-REAL-SSID"
+        }
+      },
+      "expect": {
+        "freshness": "stale",
+        "ageSeconds": 3600,
+        "private": true,
+        "unknown": false
+      }
+    }
+  ]
+}
