@@ -103,6 +103,34 @@
       "deviceAuthorization": {
         ".read": false,
         ".write": false
+      },
+      "staging": {
+        ".read": false,
+        ".write": false,
+        "ingestV1": {
+          ".read": false,
+          ".write": false,
+          "$deviceId": {
+            ".read": false,
+            ".write": "auth != null && auth.uid === $deviceId && auth.token.fg_ingest_v1 === true && root.child('floodguard/deviceAuthorization').child(auth.uid).child('enabled').val() === true && root.child('floodguard/deviceAuthorization').child(auth.uid).child('scope').val() === 'prototype-ingest-v1' && newData.exists() && (!data.exists() || newData.child('sequence').val() > data.child('sequence').val())",
+            ".validate": "newData.hasChildren(['sequence','distanceCm','levelCm','risk'])",
+            "sequence": {
+              ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 2147483647"
+            },
+            "distanceCm": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 400"
+            },
+            "levelCm": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 25"
+            },
+            "risk": {
+              ".validate": "newData.isString() && (newData.val() === 'SAFE' || newData.val() === 'WARNING' || newData.val() === 'DANGER' || newData.val() === 'SENSOR_ERROR')"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        }
       }
     }
   }

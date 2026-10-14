@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'docs/firebase/phase-b-*'
+      - 'docs/firebase/authenticated-write-migration-plan.md'
       - 'firebase.phase-b.json'
       - 'tests/phase-b-*.mjs'
       - '.github/workflows/firebase-phase-b-prototype.yml'

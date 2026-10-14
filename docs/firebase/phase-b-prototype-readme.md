@@ -11,3 +11,33 @@ Use only the isolated firebase.phase-b.json emulator configuration and the fireb
 Remaining design gates: direct leaf writes versus trusted ingestion proxy, ID-token renewal, certificate and hostname validation without setInsecure(), replay/freshness protection, malicious writers, bounded retry/offline behavior, unknown-field rejection, complete schema validation, and physical and EC2 tests.
 
 Related private issue: https://github.com/teldigi5-wq/floodguard-mobile/issues/2
+
+
+## Stage 5 — isolated, versioned authenticated ingestion rehearsal
+
+The **same nonproduction Phase B emulator-only rules** now include a private
+`/floodguard/staging/ingestV1/{deviceUid}` lane, alongside the existing six
+partial live-leaf demonstrations. This is **not** a new application endpoint and
+is **not** used by the working firmware. The staging lane does not grant public
+read access, edit live telemetry, or permit actuator commands.
+
+A staging frame contains exactly four synthetic fields:
+`sequence` (integer 1..2147483647), `distanceCm` (0..400),
+`levelCm` (0..25), and `risk` (SAFE/WARNING/DANGER/SENSOR_ERROR).
+The emulator accepts a write only when the signed-in UID exactly matches the
+device path, a **trusted custom claim** `fg_ingest_v1: true` is present, and
+the nonpublic `deviceAuthorization/{uid}` entry is `enabled: true` with
+scope `prototype-ingest-v1`. It rejects stale or repeated sequence numbers
+against the last stored frame, deletions, unknown fields, untrusted origins
+within rules' visibility, cross-device writes and ancestor overwrites.
+
+**Critical limitations:** A custom claim can only be trusted when provisioned
+by an approved server-side identity authority; emulator-injected claims do not
+prove real token issuance. The sequence is an in-database monotonic counter,
+*not* a complete cryptographic replay defense, producer timestamp, guaranteed
+message order, or resilience to device re-provisioning. The current
+already-flashed ESP8266 uploads different anonymous parent PUT/PATCH shapes;
+those uploads are incompatible with this lane. There is no device credential
+rotation, revocation of already-issued tokens, certificate pinning, renewal,
+bootstrap, ingestion bridge, or real hardware integration here. No service is
+created or deployed and no secrets are stored in this repository.

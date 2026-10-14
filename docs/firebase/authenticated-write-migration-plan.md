@@ -62,3 +62,25 @@ A competent operator must later supervise real-device verification without gate 
 - Owner approval for rollout and rules publication: pending.
 
 Sources: [RTDB rule cascading](https://firebase.google.com/docs/database/security/core-syntax), [authorization and validation](https://firebase.google.com/docs/database/security/rules-conditions), [REST authentication](https://firebase.google.com/docs/database/rest/auth).
+
+
+## Stage 5 evidence — emulator-only per-device staging lane
+
+A separate **private staging path** in the Phase B experiment has been added
+at `/floodguard/staging/ingestV1/{deviceUid}`, gated by matching authenticated
+UID, an operator-issued `fg_ingest_v1` custom claim, and an enabled registry
+entry scoped to `prototype-ingest-v1`. Synthetic frames are type/range
+checked and require a strictly increasing per-device sequence number. The
+Emulator denies anonymous and normal app users, inactive or wrong-scope devices,
+cross-device writes, unknown/malformed fields, parent overwrites, deletions and
+replays; it preserves the existing read contract for public monitoring children.
+
+**Do not equate the staging rules with an end-to-end upload mechanism.** Real
+firmware currently has neither the reviewed staging envelope nor a provisioned
+device identity and its saved versions used unverified TLS. Observing the
+actually flashed firmware and choosing between a future firmware migration
+and a trusted ingestion gateway are both separate approval decisions. A gateway
+with administrative credentials would bypass client RTDB Rules and would need
+its own authorization, replay, rate/size, audit and network-security controls.
+The current prototype never connects to production. Existing live-leaf Phase B
+examples remain deliberately incomplete and should not be published.

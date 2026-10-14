@@ -18,7 +18,11 @@ beforeEach(async()=>{
     await context.database().ref('/floodguard/deviceAuthorization').set({
       'device-demo-a':{enabled:true,scope:'prototype-primary-telemetry'},
       'device-demo-revoked':{enabled:false,scope:'prototype-primary-telemetry'},
-      'device-demo-other':{enabled:true,scope:'another-role'}
+      'device-demo-other':{enabled:true,scope:'another-role'},
+      'device-stage-a':{enabled:true,scope:'prototype-ingest-v1'},
+      'device-stage-b':{enabled:true,scope:'prototype-ingest-v1'},
+      'device-stage-revoked':{enabled:false,scope:'prototype-ingest-v1'},
+      'device-stage-wrong-scope':{enabled:true,scope:'prototype-primary-telemetry'}
     });
   });
 });
@@ -74,4 +78,93 @@ test('preserve public child reads, deny private and ancestor reads',async()=>{
   await assertFails(db.ref(live+'/esp8266').get());
   await assertFails(db.ref(live+'/esp8266/ip').get());
   await assertFails(db.ref(live+'/esp8266/wifi').get());
+});
+
+/*
+ * Stage 5 isolated ingestion lane:
+ * A synthetic, versioned private endpoint. This is NOT the currently flashed
+ * ESP8266 upload format and is not referenced by the real website/mobile/bot.
+ * Emulator auth claims are mocked; they do not prove token issuance or TLS.
+ */
+const staging='/floodguard/staging/ingestV1';
+const stageDevice=(uid,claims={fg_ingest_v1:true})=>env.authenticatedContext(uid,claims).database();
+const stageFrame=(sequence,overrides={})=>({sequence,distanceCm:16.5,levelCm:8.5,risk:'WARNING',...overrides});
+
+test('Stage 5 permits only a scoped device claim and matching registry binding for a private frame',async()=>{
+  const db=stageDevice('device-stage-a');
+  await assertSucceeds(db.ref(staging+'/device-stage-a').set(stageFrame(1)));
+  await assertSucceeds(db.ref(staging+'/device-stage-a').set(stageFrame(2,{risk:'SAFE'})));
+  const snapshot=await env.withSecurityRulesDisabled(context=>context.database().ref(staging+'/device-stage-a').get());
+  if(snapshot.val().sequence!==2||snapshot.val().risk!=='SAFE')throw Error('Staging frame was not updated');
+});
+
+test('Stage 5 rejects anonymous, ordinary, missing-claim, spoofed-role and disabled identities',async()=>{
+  for(const db of [
+    visitor(), context('ordinary-user'),
+    stageDevice('device-stage-a',{}),
+    stageDevice('device-stage-a',{fg_ingest_v1:false}),
+    stageDevice('ordinary-user'),
+    stageDevice('device-stage-revoked'),
+    stageDevice('device-stage-wrong-scope'),
+    stageDevice('nonexistent-device')
+  ]){
+    await assertFails(db.ref(staging+'/device-stage-a').set(stageFrame(1)));
+  }
+});
+
+test('Stage 5 prevents a device accessing another device, registry, production live writes and private reads',async()=>{
+  const db=stageDevice('device-stage-a');
+  await assertFails(db.ref(staging+'/device-stage-b').set(stageFrame(1)));
+  await assertFails(db.ref(staging).set({'device-stage-a':stageFrame(1)}));
+  await assertFails(db.ref('/floodguard/staging').set({ingestV1:{'device-stage-a':stageFrame(1)}}));
+  await assertFails(db.ref('/floodguard/deviceAuthorization/device-stage-a/enabled').set(false));
+  await assertFails(db.ref('/floodguard/live/water/levelCm').set(8.5));
+  await assertFails(db.ref('/floodguard/live/esp8266/ip').set('198.51.100.1'));
+  await assertFails(db.ref('/floodguard/bot/state').set({active:true}));
+  await assertFails(db.ref(staging+'/device-stage-a').get());
+  await assertFails(visitor().ref(staging+'/device-stage-a').get());
+  await assertFails(visitor().ref(staging).get());
+  await assertFails(visitor().ref('/floodguard/staging').get());
+});
+
+test('Stage 5 rejects replayed or decreasing sequence and deletion, without losing last accepted frame',async()=>{
+  const db=stageDevice('device-stage-a'),ref=db.ref(staging+'/device-stage-a');
+  await assertSucceeds(ref.set(stageFrame(5)));
+  await assertFails(ref.set(stageFrame(5,{risk:'DANGER'})));
+  await assertFails(ref.set(stageFrame(4)));
+  await assertFails(ref.remove());
+  await assertFails(ref.child('risk').remove());
+  await assertFails(ref.child('distanceCm').set(20));
+  await assertSucceeds(ref.set(stageFrame(6,{risk:'DANGER'})));
+  const snapshot=await env.withSecurityRulesDisabled(context=>context.database().ref(staging+'/device-stage-a').get());
+  if(snapshot.val().sequence!==6||snapshot.val().risk!=='DANGER')throw Error('Replay changed private data');
+});
+
+test('Stage 5 rejects missing, unknown, malformed and out-of-range fields, including synthetic commands',async()=>{
+  const db=stageDevice('device-stage-a'),ref=db.ref(staging+'/device-stage-a');
+  const bad=[
+    {sequence:1,distanceCm:10,levelCm:15},
+    {sequence:1,distanceCm:10,levelCm:15,risk:'SAFE',gateCommand:'OPEN'},
+    stageFrame(1,{extra:'not allowed'}),
+    stageFrame(0),stageFrame(-1),stageFrame(2147483648),
+    stageFrame('1'),stageFrame(1.5),
+    stageFrame(1,{distanceCm:-1}),stageFrame(1,{distanceCm:401}),
+    stageFrame(1,{levelCm:26}),stageFrame(1,{levelCm:null}),
+    stageFrame(1,{risk:'NORMAL'}),stageFrame(1,{risk:null}),
+    stageFrame(1,{risk:{status:'SAFE'}})
+  ];
+  for(const payload of bad)await assertFails(ref.set(payload));
+  await assertSucceeds(ref.set(stageFrame(1)));
+  await assertFails(ref.update({sequence:2,risk:'INVALID'}));
+  await assertFails(ref.update({'sequence':2,'gateCommand':'OPEN'}));
+  await assertFails(db.ref(staging+'/device-stage-b').update({sequence:2}));
+});
+
+test('Stage 5 revocation denies further writes while preserving previous synthetic frame',async()=>{
+  const db=stageDevice('device-stage-a'),ref=db.ref(staging+'/device-stage-a');
+  await assertSucceeds(ref.set(stageFrame(1)));
+  await env.withSecurityRulesDisabled(context=>context.database().ref('/floodguard/deviceAuthorization/device-stage-a/enabled').set(false));
+  await assertFails(ref.set(stageFrame(2)));
+  const snapshot=await env.withSecurityRulesDisabled(context=>context.database().ref(staging+'/device-stage-a').get());
+  if(snapshot.val().sequence!==1)throw Error('Revoked write changed synthetic data');
 });
