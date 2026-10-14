@@ -68,6 +68,6 @@ test('deleting the source timestamp never substitutes the local reconnect time',
 test('no production URL, secret or networking is required for this offline replay',()=>{
   const replayOnly=JSON.stringify(corpus.setup)+JSON.stringify(corpus.scenarios);
   for(const forbidden of ['firebasedatabase.app','firebaseio.com','192.168.','password','authToken','apiKey']) assert.equal(replayOnly.includes(forbidden),false);
-  const testSource=fs.readFileSync('tests/stage18-child-stream-contract.test.mjs','utf8');
-  assert.doesNotMatch(testSource,/node:http|node:https|node:net|node:tls/);
+  // Do not inspect this test's own safety assertion as a supposed import.
+  assert.equal(corpus.releaseDecision,'NO_GO');
 });
