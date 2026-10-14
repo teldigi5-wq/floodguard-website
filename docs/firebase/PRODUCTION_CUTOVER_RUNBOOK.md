@@ -15,9 +15,9 @@ The owner confirms the FloodGuard Arduino and ESP8266 are **already flashed**, w
 
 **When the owner next chooses to bring the system online:** perform a read-only boot/connectivity/telemetry observation first; privately note the actual running firmware upload *shape* and timestamp behavior if accessible; validate without changing the known-working firmware. Treat a firmware migration as a separate optional approved release, never a prerequisite for confirming existing operation. A successful physical check under the old rules is not proof that the new Phase A or B rules will work.
 
-## Hosting disruption — AWS inaccessible as of 14 October 2026
+## Hosting disruption — former AWS host unavailable as of 14 October 2026
 
-The owner reports that the AWS account was banned. The WhatsApp bot had **worked when deployed** but the AWS EC2 host and any disk backup are now unconfirmed and should be treated as inaccessible. This is a **hosting outage**, not evidence that the bot, the already-flashed Arduino or ESP8266 failed. The system is currently offline for remote testing. The previous EC2 manual deployment instructions below are **historical, not presently actionable**.
+The owner reports that the previous AWS host is no longer accessible. The WhatsApp bot had **worked when deployed** but the AWS EC2 host and any disk backup are now unconfirmed and should be treated as inaccessible. This is a **hosting outage**, not evidence that the bot, the already-flashed Arduino or ESP8266 failed. The system is currently offline for remote testing. The previous EC2 manual deployment instructions below are **historical, not presently actionable**.
 
 The bot's reviewed draft migration now includes a cloud-provider-independent Node/PM2 configuration and local loopback setup route at [docs/RECOVERY_WITHOUT_AWS.md](https://github.com/teldigi5-wq/floodguard-whatsapp-bot/blob/security/allowlisted-firebase-telemetry-v1/docs/RECOVERY_WITHOUT_AWS.md). The next approved bot deployment, if any, must target a user-approved replacement host with persistent WhatsApp authentication storage, privately provisioned admin credentials and HTTPS-protected setup access. If the original session is unrecoverable, the authorized WhatsApp phone must pair via a fresh QR. Do not imply that the existing EC2 can be accessed, restarted or recovered.
 
