@@ -291,3 +291,50 @@ with database confirmation, and do not claim exactly-once real alerts.
 Production Firebase anonymous writes remain unresolved. All future
 physical-device, hosting, WhatsApp and production-rule changes require
 explicit separate approval.
+
+
+## Stage 10 — end-to-end synthetic notification and fault-injection rehearsal
+
+`experiments/stage10-notification-rehearsal.mjs` and
+`tests/stage10-notification-rehearsal.test.mjs` are isolated Node-only
+experiments. They do not run in the website, Flutter application, WhatsApp
+bot, Firebase, gateway server or Arduino/ESP8266. All file operations are
+restricted to a caller-created temporary test directory; no network or
+message-delivery implementation exists.
+
+The research flow separates these states explicitly:
+
+1. **Signed reading accepted** by Stage 8's offline receipt ledger —
+   not proof of a database write or notification.
+2. **Mock database confirmed** by Stage 9's HMAC-sealed outbox and separate
+   synthetic database — never a real Firebase acknowledgement.
+3. **Mock notification queued** only when *both* Stage 9 records match in
+   identity, epoch, sequence, content digest and confirmed status.
+4. **Simulated provider acknowledgement** from a built-in filesystem-only
+   provider, written to a separate HMAC-sealed journal — never a real WhatsApp,
+   SMS or emergency-alert delivery.
+
+Tests inject failures before the synthetic database call, after its commit,
+before the fake provider, and after its stored acknowledgement. The simulated
+restart checks idempotent recovery without duplicating mock records. A missing
+or corrupt upstream database blocks notification. Stale data, mismatched
+digests, forged providers, reused sequences, removed integrity keys, orphan
+locks and altered audit records fail closed. A full synthetic chain exercises
+lost acknowledgements at Stage 8, 9 and 10 in the same test.
+
+The audit stores **only simulation metadata** (device test ID, sequence,
+event type and synthetic timestamp). There are no real readings, subscribers,
+phone numbers, network identifiers, credentials or delivery destinations.
+The journal is HMAC-integrity protected, bounded to 64 recent events; it is
+not a tamperproof independently anchored audit service.
+
+**No claim of live safety:** `SIMULATED_PROVIDER_ACK_ONLY` must not be
+reported as delivery, WhatsApp success, emergency-warning reception or
+hardware actuation. The mock store keeps one latest event per synthetic
+device; history is bounded and may be truncated. Cross-store atomicity
+does not exist: the exercises test selected recoverable crash boundaries,
+not exactly-once guarantees under power loss or concurrency. Restoring
+lost keys, resolving a stale lock, firmware compatibility, production
+Firebase rules and real-alert reliability remain separate operator
+approval gates. The currently flashed working ESP8266 is unchanged and
+has not been tested with these experimental protocols.

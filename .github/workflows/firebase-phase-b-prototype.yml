@@ -17,6 +17,8 @@ on:
       - 'experiments/stage9-downstream-outbox.mjs'
       - 'tests/stage9-downstream-outbox.test.mjs'
       - 'tests/stage9-local-tls.test.mjs'
+      - 'experiments/stage10-notification-rehearsal.mjs'
+      - 'tests/stage10-notification-rehearsal.test.mjs'
       - '.github/workflows/firebase-phase-b-prototype.yml'
   workflow_dispatch:
 

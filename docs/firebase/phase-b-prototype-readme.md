@@ -104,3 +104,15 @@ The accompanying real TLS handshake tests use **temporary locally generated
 certificates** and bind only to 127.0.0.1. No live database, firmware,
 webserver, Wi-Fi network or message-delivery system is contacted. Actual
 ESP8266 certificate validation remains unverified.
+
+
+## Stage 10 — synthetic alert-state separation
+
+The Stage 10 test-only module adds a filesystem mock provider and notification
+journal, deliberately separate from the Stage 8 signed receipt ledger and
+Stage 9 fake database. It allows synthetic queueing only after the fake
+database is independently confirmed; a mock acknowledgement cannot be
+mistaken for an actual WhatsApp alert or physically delivered flood warning.
+Crash/restart tests exercise all three local stages, corrupt files, replay
+attempts and withheld provider confirmation. No deployment or production
+Firebase rule changes are included.
