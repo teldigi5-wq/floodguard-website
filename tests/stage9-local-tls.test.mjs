@@ -83,7 +83,10 @@ test('unrelated CA is rejected rather than silently falling back to insecure TLS
   });
 });
 test('fixture is strictly loopback and has no DNS/Firebase/hardware endpoints',()=>{
-  const source=fs.readFileSync('tests/stage9-local-tls.test.mjs','utf8');
+  // Exclude the safety assertion's own source so its regular expression
+  // does not match the string of that assertion itself.
+  const source=fs.readFileSync('tests/stage9-local-tls.test.mjs','utf8')
+    .split("test('fixture is strictly loopback")[0];
   assert.match(source,/server\.listen\(0,'127\.0\.0\.1'\)/);
   assert.match(source,/rejectUnauthorized:true/);
   assert.doesNotMatch(source,/rejectUnauthorized:false|setInsecure\s*\(/);
