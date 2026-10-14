@@ -186,3 +186,60 @@ or production Firebase records.
 test-only acknowledgements and crash-injection tests, then assess local
 certificate trust via a standalone nonproduction TLS fixture. Continue only
 after checking that a proposed design does not imply physical readiness.
+
+
+## Stage 8 — lost acknowledgement, signed receipt and reconciliation (offline research)
+
+The `experiments/stage8-ack-reconciliation.mjs` module and
+`tests/stage8-ack-reconciliation.test.mjs` model a **separate synthetic
+ledger experiment**. They do not extend or run the Stage 7 acceptance process
+and are not imported by the website, firmware, bot or Flutter application.
+
+A signed Stage 7-format frame is checked against a test-only Ed25519 device
+public key, the operator-provisioned synthetic identity, a strict timestamp
+window, and a mock in-process channel marker (**not TLS**). A server test key
+signs a compact receipt binding the device, epoch, sequence and SHA-256 hash of
+the canonical frame bytes. The receipt and the sequence record are written
+**in one synthetic HMAC-sealed filesystem transaction** with an exclusive lock,
+temporary file, fsync and atomic rename. No telemetry or remote alerts are
+published. The store retains **only the last accepted receipt per device**.
+
+On a simulated crash *before* the commit there is no receipt; a legitimate
+retry may be newly accepted. On simulated acknowledgement loss *after* the
+commit, the same frame is **not accepted twice**. Following restart, the
+device sends a newly signed query with a fresh timestamp and the frame digest;
+a provisioned verifier may return the stored **server-signed receipt** without
+updating state. A receipt cannot be queried by an unauthorized, revoked or
+wrong-key device, or by submitting guessed sequence numbers alone. Old
+receipts may be unavailable after a newer frame: **not-found does not prove
+a frame was never accepted** and must not justify an unsafe replay reset.
+
+The tests cover forged signatures, payload conflicts at the same sequence,
+corrupted storage, missing integrity keys, abandoned locks, stale queries,
+identity revocation, false channel markers and device restart. An
+acknowledgement is **receipt evidence only**: it does not establish that
+Firebase saved telemetry, that a WhatsApp message was delivered or that a
+physical warning or gate action took place.
+
+### Unresolved Stage 8 limitations
+
+- The in-process channel marker is **not certificate validation, TLS,
+  hostname verification, or device attestation**. Real firmware still sends
+  anonymous legacy writes and is not compatible with these signed envelopes.
+- No power-loss durability certification, cross-host atomicity, multi-region
+  replication, certificate/identity provisioning, secure receipt-signing-key
+  storage, key rotation, or offline-field trials were performed.
+- Privileged access to the HMAC integrity key and filesystem could permit
+  ledger rollback. An independent durable counter/audit anchor is needed.
+- A production gateway would need real authenticated TLS, rate/size limiting,
+  path isolation, secure audit, operator monitoring, idempotent downstream
+  Firebase writes and explicit separation of receipt states (accepted,
+  database committed, alert delivered, device acknowledged).
+- Phase A/Phase B production rules, real firmware and hardware, WhatsApp
+  pairing, EC2/Windows live hosting and PR merges remain **separate owner
+  approvals**. Never infer that this exercise mitigates current production
+  anonymous-write exposure.
+
+**Next research milestone:** crash-recovery at the *downstream transaction*
+boundary and isolated TLS certificate validation using test certificates,
+without introducing a live service or changing production telemetry.

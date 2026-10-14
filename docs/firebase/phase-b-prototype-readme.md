@@ -77,3 +77,17 @@ The Stage 6 memory-only harness remains separate for lower-level
 migration/queue experiments. Neither harness authorizes use of the
 existing already-flashed ESP8266 or attempts to turn old anonymous
 parent writes into trusted telemetry. Both are **review-only**.
+
+
+## Stage 8 — signed acknowledgements after simulated response loss
+
+A new standalone `experiments/stage8-ack-reconciliation.mjs` test harness
+models a server-signed receipt, a single-transaction receipt/replay ledger,
+and authenticated, signed reconciliation queries. It deliberately stores
+only a frame digest and synthetic device metadata, not live readings or
+private IP/Wi-Fi values. In the tests, after a receipt has been durably
+committed but the outbound acknowledgement is lost, a restart can return
+the previous receipt without accepting a second frame. The same sequence
+with different payload content is denied. None of this runs against the
+Firebase Emulator database or production systems; existing Phase B Emulator
+authorization tests remain unchanged.
