@@ -1,0 +1,53 @@
+{
+  "schema": "floodguard-stage13-review-gates-v1",
+  "asOf": "2026-10-14",
+  "releaseDecision": "NO_GO_REVIEW_ONLY",
+  "evidence": "SYNTHETIC_DECLARATIONS_AND_INSPECTED_SOURCE_ONLY",
+  "sourceHeads": {
+    "website": "ef0b866f35ef1a464668c34940d0aa6261ac062d",
+    "bot": "b2048d05d47ccc634c20ea562d1efee3fb158476",
+    "mobile": "1b40c15e4e2ed7fae58ab35584794b7502f4f96c"
+  },
+  "verifiedProductionAuth": false,
+  "hardwareFlashedOrOperated": false,
+  "productionRulesChanged": false,
+  "freshness": {
+    "windowsSeconds": {
+      "website": 10,
+      "bot": 15,
+      "mobile": 30
+    },
+    "policyChangeAuthorized": false
+  },
+  "migrationRoutes": [
+    {
+      "id": "direct-firebase-device-identity",
+      "deploymentReady": false,
+      "requiredHardwareCompatibilityEvidence": "UNVERIFIED"
+    },
+    {
+      "id": "trusted-local-ingestion-gateway",
+      "deploymentReady": false,
+      "requiredIndependentGatewayControls": "UNVERIFIED"
+    }
+  ],
+  "rolloutRequiredEvidenceIds": [
+    "effectiveRulesInspectedPrivately",
+    "privateDescendantsInventoried",
+    "currentRulesBackupVerified",
+    "rollBackPlanDryRunReviewed",
+    "childReadClientsAcceptedOnIsolatedTarget",
+    "mobileDeviceAcceptanceEvidence",
+    "deviceIdentityAndTlsFieldEvidence",
+    "operatorWindowAndMonitoringApproved",
+    "explicitOwnerRulesPublicationApproval"
+  ],
+  "approvals": {
+    "firebaseRules": false,
+    "deviceFirmware": false,
+    "whatsappPairing": false,
+    "hosting": false,
+    "mergePRs": false,
+    "repoVisibility": false
+  }
+}
