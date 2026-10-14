@@ -1,0 +1,443 @@
+{
+  "schema": "floodguard-stage14-inspected-client-models-v1",
+  "sourceDescription": "synthetic scenarios with manually transcribed client behavior; NOT actual Flutter or bot execution",
+  "timeReferenceMs": 1791975600000,
+  "inspectedCommits": {
+    "website": "bebbcdb0e3620371a1612fdf661401cd1efc2fe9",
+    "bot": "b2048d05d47ccc634c20ea562d1efee3fb158476",
+    "mobile": "1b40c15e4e2ed7fae58ab35584794b7502f4f96c"
+  },
+  "severity": "NO_GO_MANUAL_REVIEW",
+  "scenarios": [
+    {
+      "id": "concordant-safe",
+      "snapshot": {
+        "water": {
+          "distanceCm": 20,
+          "levelCm": 5,
+          "status": "SAFE"
+        },
+        "rain": {
+          "dailyMm": 0,
+          "status": "NORMAL"
+        },
+        "system": {
+          "overallRisk": "LOW",
+          "lastUpdate": 1791975595000
+        },
+        "gate": {
+          "status": "CLOSED",
+          "angle": 0,
+          "countdownSeconds": 0
+        },
+        "esp8266": {
+          "status": "ONLINE",
+          "connection": "CONNECTED",
+          "rssi": -60
+        }
+      },
+      "expect": {
+        "differing": [],
+        "webWater": "SAFE",
+        "botWater": "SAFE",
+        "mobileWater": "SAFE",
+        "webGate": "CLOSED",
+        "botGate": "CLOSED",
+        "mobileGate": "CLOSED"
+      }
+    },
+    {
+      "id": "concordant-warning-edge",
+      "snapshot": {
+        "water": {
+          "distanceCm": 16.5,
+          "levelCm": 8.5,
+          "status": "WARNING"
+        },
+        "rain": {
+          "dailyMm": 0,
+          "status": "NORMAL"
+        },
+        "system": {
+          "overallRisk": "HIGH",
+          "lastUpdate": 1791975595000
+        },
+        "gate": {
+          "status": "CLOSED",
+          "angle": 0,
+          "countdownSeconds": 0
+        },
+        "esp8266": {
+          "status": "ONLINE",
+          "connection": "CONNECTED",
+          "rssi": -60
+        }
+      },
+      "expect": {
+        "differing": [],
+        "webWater": "WARNING",
+        "botWater": "WARNING",
+        "mobileWater": "WARNING"
+      }
+    },
+    {
+      "id": "concordant-danger-edge",
+      "snapshot": {
+        "water": {
+          "distanceCm": 14,
+          "levelCm": 11,
+          "status": "DANGER"
+        },
+        "rain": {
+          "dailyMm": 0,
+          "status": "NORMAL"
+        },
+        "system": {
+          "overallRisk": "CRITICAL",
+          "lastUpdate": 1791975595000
+        },
+        "gate": {
+          "status": "CLOSED",
+          "angle": 0,
+          "countdownSeconds": 0
+        },
+        "esp8266": {
+          "status": "ONLINE",
+          "connection": "CONNECTED",
+          "rssi": -60
+        }
+      },
+      "expect": {
+        "differing": [],
+        "webWater": "DANGER",
+        "botWater": "DANGER",
+        "mobileWater": "DANGER"
+      }
+    },
+    {
+      "id": "zero-distance-diverges",
+      "snapshot": {
+        "water": {
+          "distanceCm": 0,
+          "levelCm": 5,
+          "status": "SAFE"
+        },
+        "rain": {
+          "dailyMm": 0,
+          "status": "NORMAL"
+        },
+        "system": {
+          "overallRisk": "LOW",
+          "lastUpdate": 1791975595000
+        },
+        "gate": {
+          "status": "CLOSED",
+          "angle": 0,
+          "countdownSeconds": 0
+        },
+        "esp8266": {
+          "status": "ONLINE",
+          "connection": "CONNECTED",
+          "rssi": -60
+        }
+      },
+      "expect": {
+        "differing": [
+          "water",
+          "risk"
+        ],
+        "webWater": "DANGER",
+        "botWater": "SAFE",
+        "mobileWater": "DANGER"
+      }
+    },
+    {
+      "id": "gate-raw-open-but-zero-angle",
+      "snapshot": {
+        "water": {
+          "distanceCm": 20,
+          "levelCm": 5,
+          "status": "SAFE"
+        },
+        "rain": {
+          "dailyMm": 0,
+          "status": "NORMAL"
+        },
+        "system": {
+          "overallRisk": "LOW",
+          "lastUpdate": 1791975595000
+        },
+        "gate": {
+          "status": "OPEN",
+          "angle": 0,
+          "countdownSeconds": 0
+        },
+        "esp8266": {
+          "status": "ONLINE",
+          "connection": "CONNECTED",
+          "rssi": -60
+        }
+      },
+      "expect": {
+        "differing": [
+          "gate"
+        ],
+        "webGate": "CLOSED",
+        "botGate": "CLOSED",
+        "mobileGate": "OPEN"
+      }
+    },
+    {
+      "id": "gate-middle-angle-raw-closed",
+      "snapshot": {
+        "water": {
+          "distanceCm": 20,
+          "levelCm": 5,
+          "status": "SAFE"
+        },
+        "rain": {
+          "dailyMm": 0,
+          "status": "NORMAL"
+        },
+        "system": {
+          "overallRisk": "LOW",
+          "lastUpdate": 1791975595000
+        },
+        "gate": {
+          "status": "CLOSED",
+          "angle": 45,
+          "countdownSeconds": 0
+        },
+        "esp8266": {
+          "status": "ONLINE",
+          "connection": "CONNECTED",
+          "rssi": -60
+        }
+      },
+      "expect": {
+        "differing": [
+          "gate"
+        ],
+        "webGate": "OPENING",
+        "botGate": "CLOSED",
+        "mobileGate": "CLOSED"
+      }
+    },
+    {
+      "id": "reported-risk-conflicts-derived-rain-critical",
+      "snapshot": {
+        "water": {
+          "distanceCm": 20,
+          "levelCm": 5,
+          "status": "SAFE"
+        },
+        "rain": {
+          "dailyMm": 300,
+          "status": "CRITICAL"
+        },
+        "system": {
+          "overallRisk": "LOW",
+          "lastUpdate": 1791975595000
+        },
+        "gate": {
+          "status": "CLOSED",
+          "angle": 0,
+          "countdownSeconds": 0
+        },
+        "esp8266": {
+          "status": "ONLINE",
+          "connection": "CONNECTED",
+          "rssi": -60
+        }
+      },
+      "expect": {
+        "differing": [
+          "risk"
+        ],
+        "webRisk": "LOW",
+        "botRisk": "LOW",
+        "mobileRisk": "CRITICAL"
+      }
+    },
+    {
+      "id": "sensor-unavailable-fallback-low-risk",
+      "snapshot": {
+        "water": {
+          "status": "UNKNOWN"
+        },
+        "rain": {
+          "status": "UNKNOWN"
+        },
+        "system": {
+          "lastUpdate": 1791975595000,
+          "overallRisk": "UNKNOWN"
+        },
+        "gate": {
+          "status": "UNKNOWN"
+        },
+        "esp8266": {
+          "status": "ONLINE",
+          "connection": "CONNECTED",
+          "rssi": -60
+        }
+      },
+      "expect": {
+        "differing": [
+          "risk"
+        ],
+        "webWater": "UNKNOWN",
+        "botWater": "UNKNOWN",
+        "mobileWater": "UNKNOWN",
+        "webRisk": "UNAVAILABLE",
+        "botRisk": "UNKNOWN",
+        "mobileRisk": "LOW"
+      }
+    },
+    {
+      "id": "legacy-online-rain-category",
+      "snapshot": {
+        "water": {
+          "distanceCm": 20,
+          "levelCm": 5,
+          "status": "SAFE"
+        },
+        "rain": {
+          "status": "ONLINE",
+          "dailyMm": 120
+        },
+        "system": {
+          "overallRisk": "MODERATE",
+          "lastUpdate": 1791975595000
+        },
+        "gate": {
+          "status": "CLOSED",
+          "angle": 0,
+          "countdownSeconds": 0
+        },
+        "esp8266": {
+          "status": "ONLINE",
+          "connection": "CONNECTED",
+          "rssi": -60
+        }
+      },
+      "expect": {
+        "differing": [
+          "rain",
+          "risk"
+        ],
+        "webRain": "HEAVY_RAIN",
+        "botRain": "ONLINE",
+        "mobileRain": "HEAVY_RAIN"
+      }
+    },
+    {
+      "id": "stale-20s-on-connected-database",
+      "snapshot": {
+        "water": {
+          "distanceCm": 20,
+          "levelCm": 5,
+          "status": "SAFE"
+        },
+        "rain": {
+          "dailyMm": 0,
+          "status": "NORMAL"
+        },
+        "system": {
+          "lastUpdate": 1791975580000,
+          "overallRisk": "LOW"
+        },
+        "gate": {
+          "status": "CLOSED",
+          "angle": 0,
+          "countdownSeconds": 0
+        },
+        "esp8266": {
+          "status": "ONLINE",
+          "connection": "CONNECTED",
+          "rssi": -60
+        }
+      },
+      "expect": {
+        "differing": [],
+        "freshness": {
+          "website": "stale",
+          "bot": "stale",
+          "mobile": "within-window"
+        }
+      }
+    },
+    {
+      "id": "future-field-clock",
+      "snapshot": {
+        "water": {
+          "distanceCm": 20,
+          "levelCm": 5,
+          "status": "SAFE"
+        },
+        "rain": {
+          "dailyMm": 0,
+          "status": "NORMAL"
+        },
+        "system": {
+          "lastUpdate": 1791975660000,
+          "overallRisk": "LOW"
+        },
+        "gate": {
+          "status": "CLOSED",
+          "angle": 0,
+          "countdownSeconds": 0
+        },
+        "esp8266": {
+          "status": "ONLINE",
+          "connection": "CONNECTED",
+          "rssi": -60
+        }
+      },
+      "expect": {
+        "differing": [],
+        "freshness": {
+          "website": "stale",
+          "bot": "stale",
+          "mobile": "stale"
+        }
+      }
+    },
+    {
+      "id": "fresh-field-clock-but-disconnected",
+      "connected": false,
+      "snapshot": {
+        "water": {
+          "distanceCm": 20,
+          "levelCm": 5,
+          "status": "SAFE"
+        },
+        "rain": {
+          "dailyMm": 0,
+          "status": "NORMAL"
+        },
+        "system": {
+          "overallRisk": "LOW",
+          "lastUpdate": 1791975595000
+        },
+        "gate": {
+          "status": "CLOSED",
+          "angle": 0,
+          "countdownSeconds": 0
+        },
+        "esp8266": {
+          "status": "ONLINE",
+          "connection": "CONNECTED",
+          "rssi": -60
+        }
+      },
+      "expect": {
+        "differing": [],
+        "freshness": {
+          "website": "stale",
+          "bot": "stale",
+          "mobile": "stale"
+        }
+      }
+    }
+  ]
+}

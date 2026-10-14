@@ -14,7 +14,8 @@
     "test": "node --test tests/*.test.mjs",
     "audit:stage11": "node scripts/stage11-release-audit.mjs",
     "audit:stage12": "node --test tests/stage12-offline-acceptance.test.mjs",
-    "audit:stage13": "node --test tests/stage13-security-gap-review.test.mjs"
+    "audit:stage13": "node --test tests/stage13-security-gap-review.test.mjs",
+    "audit:stage14": "node --test tests/stage14-cross-client-models.test.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",
