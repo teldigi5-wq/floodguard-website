@@ -124,3 +124,65 @@ test project; bound request size/rate and retention; prove lost-network recovery
 without false freshness or loss of confirmed events. Phase A/B production rules,
 WhatsApp pairing, hardware updates, bot deployment and GitHub PR merges remain
 independent owner-approval gates.
+
+
+## Stage 7 — signed-frame and restart-safe replay research (test-only)
+
+The `experiments/stage7-durable-ingress.mjs` module is **not a deployed service**.
+It uses ephemeral Ed25519 keypairs generated inside unit tests, an explicitly
+provided temporary directory, a caller-held test-only HMAC key, and an
+in-process marker that is **not actual TLS/certificate verification**. The
+module opens no network socket and is not imported by the website application,
+Flutter client, WhatsApp bot, Firebase SDK or the real ESP8266.
+
+The new `floodguard-offline-envelope-v1` research contract signs the
+canonical encoding of `{version,deviceId,epoch,observedAtMs,frame}` with
+an Ed25519 private key; the frame reuses Stage 5's four fields. Checks include
+strict field allowlisting and sizes, approved test-device public key/scope,
+signature authenticity, a 30-second past / 2-second future clock window,
+an explicit synthetic channel marker, and per-identity sequence monotonicity.
+
+The offline ledger is sealed with HMAC-SHA256; writes use an exclusive lock,
+file fsync, atomic rename and attempted directory sync. Tests cover restart
+rejection of replayed frames, corruption/tampering, missing or incorrect
+integrity keys, lock contention, revocation, alternate keys, and blocked
+silent epoch rollover. **All test records are synthetic and disposable.**
+They cannot be used to restore real telemetry, WhatsApp sessions, firmware
+or production Firebase records.
+
+**Release limitations and design decisions:**
+- Actual TLS peer validation, hostname trust, certificate renewal/pinning,
+  device clock bootstrap, hardware secure key storage and true network
+  authentication have **not** been implemented or validated. An in-process
+  marker is not a trusted TLS connection.
+- Persisting an HMAC requires safe **independent** protection, rotation,
+  backup and recovery of the integrity key; loss of the key blocks recovery.
+  Test keys must never be copied into firmware or a production service.
+- After an unclean stop an exclusive lock may remain. This harness
+  deliberately fails closed and does not auto-remove that lock.
+- The file journal prevents simple accidental rollback/tampering **only
+  while its integrity key and state are protected**; privileged attackers
+  with both can rewrite accepted history. Directory durability varies by
+  filesystem and platform; no cross-process contention, power-loss,
+  disaster-recovery or Windows NTFS guarantees are claimed.
+- The ledger advances before an acknowledgement is returned. A crash in
+  between creates an *unknown-ack* case: a replay is rejected and the sender
+  must reconcile through a separately designed trusted read-only receipt.
+  Do not retry by resetting the counter or replaying anonymous writes.
+- A hardware reboot could reset a device-local sequence or clock; no
+  automatic epoch reset is allowed. Explicit re-provisioning, authenticated
+  clock bootstrap and monotonic sequence persistence need separate
+  approval, design and physical tests.
+- This Ed25519 gateway-facing experiment is an **alternative** to direct
+  Firebase ID-token uploads, not a Firebase token issuance implementation.
+  A gateway with Admin SDK privileges would bypass RTDB client security
+  rules and require its own audited ingress, service isolation, authorization,
+  anti-replay persistence, throttling and safe downstream transaction model.
+- Real firmware upload shapes remain unauthenticated parent PUT/PATCH and
+  cannot be safely promoted to this contract without an approved hardware
+  or trusted-intermediary migration. No production Firebase rule was changed.
+
+**Stage 8 candidate:** design *receipt/ack reconciliation* with signed,
+test-only acknowledgements and crash-injection tests, then assess local
+certificate trust via a standalone nonproduction TLS fixture. Continue only
+after checking that a proposed design does not imply physical readiness.

@@ -10,6 +10,8 @@ on:
       - 'tests/phase-b-*.mjs'
       - 'tests/offline-ingestion-gateway.test.mjs'
       - 'experiments/offline-ingestion-gateway.mjs'
+      - 'experiments/stage7-durable-ingress.mjs'
+      - 'tests/stage7-durable-ingress.test.mjs'
       - '.github/workflows/firebase-phase-b-prototype.yml'
   workflow_dispatch:
 

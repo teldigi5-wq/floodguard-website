@@ -59,3 +59,21 @@ transparently forwarded to authenticated staging; it never returns captured
 network identifiers. Simulated expiry, revocation, monotonic frame sequence,
 bounded queue overflow, retry exhaustion and reconnect stale-frame behavior
 are covered by Node tests without hardware access.
+
+
+## Stage 7 — restart-aware research evidence, not a Firebase change
+
+Stage 7 adds `experiments/stage7-durable-ingress.mjs` and
+`tests/stage7-durable-ingress.test.mjs` for offline Node tests. No RTDB
+rules, real database paths or deployment configurations were changed.
+Test-only Ed25519 signed envelopes bind the device UID, epoch, timestamp
+and Stage 5 frame. An exclusive-locked, HMAC-sealed, temporary filesystem
+ledger rejects replays across recreated harness instances; expired/future
+frames, wrong signatures, unprovisioned devices, tampered ledgers and
+missing transport proof fail closed. Its transport proof is explicitly fake,
+and no certificate chain or TLS session is established.
+
+The Stage 6 memory-only harness remains separate for lower-level
+migration/queue experiments. Neither harness authorizes use of the
+existing already-flashed ESP8266 or attempts to turn old anonymous
+parent writes into trusted telemetry. Both are **review-only**.
