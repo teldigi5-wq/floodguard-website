@@ -35,3 +35,29 @@ test("loading and missing data do not become false SAFE readings", () => {
   assert.equal(classifyTelemetryFreshness({ ...healthy, loading: true }), "loading");
   assert.equal(classifyTelemetryFreshness({ ...healthy, hasData: false }), "unavailable");
 });
+
+
+test("offline working hardware keeps recorded measurements historical, not live", () => {
+  // Offline is a connectivity state, not evidence of failed Arduino firmware.
+  const offline = { ...healthy, hasData: true, connected: false, ageSeconds: 3600 };
+  assert.equal(classifyTelemetryFreshness(offline), "stale");
+  assert.equal(classifyTelemetryFreshness({ ...offline, connected: null }), "stale");
+  assert.equal(classifyTelemetryFreshness({ ...offline, hasData: false }), "unavailable");
+});
+
+test("reconnecting to Firebase without a fresh field timestamp never makes offline hardware live", () => {
+  const oldFieldTime = now - 4 * 3600 * 1000;
+  const originalAge = ageSeconds(parseFieldTimestamp(oldFieldTime, now), now);
+  assert.equal(originalAge, 4 * 3600);
+  const afterReconnecting = { ...healthy, connected: true, ageSeconds: originalAge };
+  assert.equal(classifyTelemetryFreshness(afterReconnecting), "stale");
+  assert.equal(classifyTelemetryFreshness({ ...healthy, ageSeconds: null }), "stale");
+});
+
+test("historical field timestamps are never silently refreshed to browser time", () => {
+  const oldReading = new Date(now - 86400 * 1000).toISOString();
+  const parsed = parseFieldTimestamp(oldReading, now);
+  assert.equal(parsed, now - 86400 * 1000);
+  assert.equal(ageSeconds(parsed, now), 86400);
+  assert.equal(classifyTelemetryFreshness({ ...healthy, ageSeconds: 86400 }), "stale");
+});

@@ -1,0 +1,48 @@
+{
+  "schema": "floodguard-stage16-display-review-gates-v1",
+  "asOf": "2026-10-14",
+  "releaseDecision": "NO_GO_REVIEW_ONLY",
+  "nativeEvidence": {
+    "bot": {
+      "repo": "teldigi5-wq/floodguard-whatsapp-bot",
+      "pr": 12,
+      "head": "c0a3fcf9a2d375b19ab6ab7a1f124c7c37a9507c",
+      "nodeTestCount": 70,
+      "checks": [
+        "38557740433",
+        "38557740434",
+        "38557740513",
+        "38557740540"
+      ]
+    },
+    "mobile": {
+      "repo": "teldigi5-wq/floodguard-mobile",
+      "pr": 1,
+      "head": "3cfb0c6caeb0e9dcac8562ab402bf22b2d42cf45",
+      "private": true,
+      "flutterRun": "38557914571",
+      "apkBuilt": true
+    },
+    "website": {
+      "repo": "teldigi5-wq/floodguard-website",
+      "pr": 8,
+      "head": "295d6f3d625a88675a923e865f78add7bc3bf2c2",
+      "stage14Run": "38556474171"
+    }
+  },
+  "candidateNotApplied": true,
+  "runtimeChangesAuthorized": false,
+  "liveProductionAccessVerified": false,
+  "physicalFieldEvidenceVerified": false,
+  "mobileRepositoryVisibility": "PRIVATE",
+  "outstandingApprovals": [
+    "verify-zero-air-gap-means-water-touching-sensor-or-echo-error",
+    "confirm-servo-angle-status-countdown-atomicity-without-moving-gate",
+    "approve-unknown-rain-and-water-risk-fallback",
+    "choose-evidence-backed-10-15-30-second-freshness-policy",
+    "secure-device-identity-and-validated-TLS",
+    "resolve-firebase-anonymous-parent-writes",
+    "owner-approve-each-production-action",
+    "supervised-physical-mobile-acceptance"
+  ]
+}
