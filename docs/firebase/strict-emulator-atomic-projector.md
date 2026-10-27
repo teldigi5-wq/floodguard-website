@@ -7,6 +7,8 @@
 The `experiments/strict-emulator-atomic-projector.mjs` function uses the **actual local Firebase Realtime Database Emulator** to execute one atomic transaction at the fixed `/floodguard` test root. It tests the critical boundary between an independently confirmed device frame and the nine public read-only streams. A successful transaction:
 
 - Independently reads an enabled, exact-scope operator device binding from emulator state, plus a previously initialized private projector checkpoint.
+- Requires a **single operator-provisioned waterAuthority** record specifying the sole approved water-device UID and epoch. Another enrolled device with independently valid staged frames and replay history **cannot** replace shared public water readings without an explicit privileged authority handoff.
+- Pins the accepted Ed25519 receipt-verification public key to the SHA-256 fingerprint of its SPKI DER bytes in private operator-owned waterAuthority state. A caller-supplied alternate verifier key—even one matching a forged signed receipt—cannot silently become the trusted server signer.
 - Requires the *currently staged* frame to match the cryptographically bound canonical frame and the private server-confirmed ingest record to match its signed Ed25519 receipt/digest.
 - Uses the tested Phase B signed projection planner with explicit freshness and replay checks.
 - Inside **one emulator RTDB transaction**, updates ONLY these five public child values: `live/water/distanceCm`, `live/water/levelCm`, `live/water/status`, `live/system/lastUpdate`, `live/system/overallRisk` (always `UNKNOWN`).
@@ -20,7 +22,7 @@ The test intentionally uses `withSecurityRulesDisabled`—a **privileged emulato
 
 The test seeds `confirmedIngest` through an operator-test context. It has **no authenticated durable production receipt/persistence service**. The current flashed ESP8266 revision and its on-device signature/TLS/clock provisioning have not been verified. A malicious client cannot access the mocked confirmed-ingest path under these local rules, but this does not prove a deployed cloud IAM policy or firmware identity.
 
-The transaction reads the complete root in the emulator and is **not designed for production data volume, concurrency, cost, or independent identity rotation**. Multiple devices publishing global water status would need exclusive source authority and deterministic arbitration before production use. Any ambiguous post-commit network outcome would require checkpoint reconciliation. Initial checkpoint provisioning and deletion prevention must be externally controlled and audited; this lab forbids implicit initialization.
+The transaction reads the complete root in the emulator and is **not designed for production data volume, concurrency, cost, or independent identity rotation**. Exclusive source authority and signer binding are now tested in the emulator, including legitimate operator-controlled handoff. Production still needs audited credential lifecycle, issuer rotation, multi-source arbitration policy and safe operation during authority changes; the test-only record alone is not a deployment solution. Any ambiguous post-commit network outcome would require checkpoint reconciliation. Initial checkpoint provisioning and deletion prevention must be externally controlled and audited; this lab forbids implicit initialization.
 
 ## Run offline
 
