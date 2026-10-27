@@ -29,21 +29,28 @@ export async function publishStrictEmulatorFrame({
 
   const uid=envelope.deviceId;
   let reason='transaction-aborted';
-  let lastPlan;
+  let lastPlan,detach;
   try{
-    // RTDB transactions may first call the updater with null from an empty
-    // local cache, even when the server has data. Preload this fixed emulator
-    // root so "missing state" means an actual missing database snapshot,
-    // not an uninitialized client-side cache. Still fail closed if absent.
+    // RTDB transactions may initially see a null local cache even if the
+    // server root exists. Keep a value listener alive *through commit* so the
+    // client holds the authenticated emulator root in its sync tree. A
+    // one-shot read detaches and can release that cache before transaction().
     const target=database.ref('/floodguard');
-    const initial=await target.once('value');
+    const initial=await new Promise((resolve,reject)=>{
+      let received=false;
+      const onValue=snapshot=>{
+        if(!received){received=true;resolve(snapshot);}
+      };
+      detach=()=>target.off('value',onValue);
+      target.on('value',onValue,reject);
+    });
     if(!initial.exists())return deny('root-state-unavailable');
     // Single fixed literal path: staging, operator confirmation, checkpoint and
     // the five public leaves update as ONE RTDB emulator transaction.
     // Never take a database path from client data or output unrestricted update().
     const result=await target.transaction(current=>{
       if(!isRecord(current)){
-        reason='root-state-unavailable';return; // never initialize empty root
+        reason='transaction-cache-unavailable';return; // never initialize empty root
       }
       const binding=current.deviceAuthorization?.[uid];
       const control=current.projectionControl?.devices?.[uid];
@@ -125,5 +132,7 @@ export async function publishStrictEmulatorFrame({
     // A transport interruption might occur after database commit; never
     // report a definitive failure/rollback without rereading the checkpoint.
     return deny('publisher-outcome-unknown');
+  }finally{
+    if(detach)detach();
   }
 }
