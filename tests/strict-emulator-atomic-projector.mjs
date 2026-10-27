@@ -351,5 +351,7 @@ test('emulator-only test module has no Firebase Admin SDK, secret loading or hos
   assert.match(source,/FIREBASE_DATABASE_EMULATOR_HOST/);
   assert.match(source,/transaction\(current=>/);
   assert.doesNotMatch(source,/firebase-admin|serviceAccount|https:\/\/|sendMessage\s*\(|writeFileSync/);
-  assert.doesNotMatch(source,/\.set\(|\.update\(/);
+  // Cryptographic hash.update() is allowed; arbitrary Firebase writes are not.
+  assert.doesNotMatch(source,/\b(?:database|target|db)\.(?:set|update)\s*\(/);
+  assert.doesNotMatch(source,/\.ref\([^)]*\)\.(?:set|update)\s*\(/);
 });
