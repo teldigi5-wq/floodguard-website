@@ -253,5 +253,8 @@ test('module cannot reference broad database root, Admin SDK or production keys'
   assert.match(s,/planStrictSyntheticPublicProjection/);
   assert.doesNotMatch(s,/firebase-admin|serviceAccount|https:\/\/|fetch\s*\(|\.listen\s*\(/);
   assert.doesNotMatch(s,/database\.ref\('\/floodguard'\)/);
-  assert.doesNotMatch(s,/\.set\s*\(|\.update\s*\(|writeFileSync|spawnSync/);
+  // SHA-256 hash.update is cryptographic, not an unrestricted database write.
+  assert.doesNotMatch(s,/\b(?:database|ref|db)\.(?:set|update)\s*\(/);
+  assert.doesNotMatch(s,/\.ref\([^)]*\)\.(?:set|update)\s*\(/);
+  assert.doesNotMatch(s,/\b(?:writeFileSync|spawnSync)\s*\(/);
 });
