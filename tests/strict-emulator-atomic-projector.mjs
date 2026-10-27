@@ -38,6 +38,35 @@ function input(seq=1,changes={}) {
   return {...changes,envelope:e,receipt,signature,
     trustedReceiptKey:server.publicKey,nowMs:now};
 }
+// Sign a distinct synthetic observation so ordering checks exercise the
+// real cryptographic validation and independently persisted confirmation.
+function signedObservation(sequence,observedAtMs,deviceId=uid,values={}) {
+  const e={
+    ...envelope(sequence),deviceId,observedAtMs,
+    frame:{...frame(sequence),...values}
+  };
+  const digest=createHash('sha256').update(canonicalOfflineEnvelope(e))
+    .digest('hex');
+  const receipt={
+    version:'floodguard-offline-receipt-v1',deviceId,epoch:1,
+    sequence,digest,acceptedAtMs:now-200
+  };
+  const signature=sign(null,Buffer.from(JSON.stringify(receipt)),server.privateKey)
+    .toString('base64url');
+  return {envelope:e,receipt,signature,
+    trustedReceiptKey:server.publicKey,nowMs:now};
+}
+async function seedObservation(signed) {
+  const {envelope:e,receipt:rcpt}=signed;
+  await amend({
+    ['staging/ingestV1/'+e.deviceId]:e.frame,
+    ['confirmedIngest/'+e.deviceId]:{
+      deviceId:e.deviceId,epoch:e.epoch,sequence:e.frame.sequence,
+      digest:rcpt.digest,acceptedAtMs:rcpt.acceptedAtMs,
+      status:'DATABASE_CONFIRMED'
+    }
+  });
+}
 async function admin(callback){
   // Firebase's rules-unit-testing helper resolves to void, not the callback
   // return. Explicitly capture it so test assertions observe actual results.
@@ -343,6 +372,73 @@ test('missing or malformed receipt trust material cannot authorize a publisher',
     assert.deepEqual(denied,{published:false,reason:'trusted-signer-invalid'});
   }
   assert.deepEqual(await root(),before);
+});
+
+
+test('higher device sequence with older observation never rolls back public time',async()=>{
+  assert.equal((await project(input(1))).published,true);
+  const old=signedObservation(2,now-2000);
+  await seedObservation(old);
+  const before=await root();
+  const rejected=await project(old);
+  assert.deepEqual(rejected,{published:false,reason:'public-timestamp-regression'});
+  assert.deepEqual(await root(),before,
+    'rejected older frame must leave both public values and checkpoint unchanged');
+
+  const fresh=signedObservation(2,now-500);
+  await seedObservation(fresh);
+  assert.equal((await project(fresh)).published,true);
+  const after=await root();
+  assert.equal(after.live.system.lastUpdate,now-500);
+  assert.equal(after.projectionControl.devices[uid].sequence,2);
+});
+
+test('operator-approved sensor handoff cannot turn public lastUpdate backward',async()=>{
+  assert.equal((await project(input(1))).published,true);
+  const other='device-stage-b';
+  const older=signedObservation(1,now-2000,other,{
+    distanceCm:3,levelCm:22,risk:'DANGER'
+  });
+  await amend({
+    ['deviceAuthorization/'+other]:{enabled:true,scope:'prototype-ingest-v1'},
+    ['projectionControl/devices/'+other]:{initialized:false,epoch:1},
+    'projectionControl/waterAuthority':{
+      deviceId:other,epoch:1,enabled:true,scope:'water-primary',
+      receiptSignerFingerprint:approvedSignerFingerprint
+    }
+  });
+  await seedObservation(older);
+  const before=await root();
+  const denied=await project(older);
+  assert.deepEqual(denied,{published:false,reason:'public-timestamp-regression'});
+  assert.deepEqual(await root(),before);
+
+  // An explicit handoff with a newly observed, signed and confirmed frame
+  // remains possible without resetting old source publication history.
+  const fresh=signedObservation(1,now-300,other,{
+    distanceCm:3,levelCm:22,risk:'DANGER'
+  });
+  await seedObservation(fresh);
+  assert.equal((await project(fresh)).published,true);
+  const after=await root();
+  assert.equal(after.live.water.status,'DANGER');
+  assert.equal(after.live.system.lastUpdate,now-300);
+  assert.equal(after.projectionControl.devices[other].sequence,1);
+  assert.equal(after.projectionControl.devices[uid].sequence,1);
+});
+
+test('missing, malformed or implausibly future public clock aborts publishing',async()=>{
+  const prior=await root();
+  for(const invalid of [null,'2026-10-27T14:20:00Z',-1,now+2001,0.5]){
+    await amend({'live/system/lastUpdate':invalid});
+    const before=await root();
+    const result=await project(input(1));
+    assert.deepEqual(result,{published:false,reason:'public-timestamp-unavailable'});
+    assert.deepEqual(await root(),before,
+      'clock-integrity failure must not advance publication checkpoint');
+  }
+  await amend({'live/system/lastUpdate':prior.live.system.lastUpdate});
+  assert.equal((await project(input(1))).published,true);
 });
 
 test('emulator-only test module has no Firebase Admin SDK, secret loading or host endpoint',()=>{
