@@ -25,4 +25,4 @@ jobs:
       - uses: github/codeql-action/init@faaca9a8f6edddba5725ffe5adefdab6669a2eca # v4 pin
         with:
           languages: javascript-typescript
-      - uses: github/codeql-action/analyze@faaca9a8f6edddba5725ffe5adefdab6669a2eca # v4 pin
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4 pin
