@@ -24,6 +24,9 @@ on:
       - 'tests/strict-signed-projection-gate.test.mjs'
       - 'experiments/strict-emulator-atomic-projector.mjs'
       - 'tests/strict-emulator-atomic-projector.mjs'
+      - 'docs/firebase/phase-b-narrow-publication-lab.rules.json'
+      - 'firebase.phase-b-narrow-lab.json'
+      - 'tests/narrow-publisher-rules-emulator.mjs'
       - '.github/workflows/firebase-phase-b-prototype.yml'
   workflow_dispatch:
 
@@ -59,3 +62,6 @@ jobs:
 
       - name: Verify emulator-only signed-to-public atomic projector
         run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-strict-projector --config firebase.phase-b-strict.json "FG_STRICT_EMULATOR_PROJECTOR_TEST=1 node --test tests/strict-emulator-atomic-projector.mjs"
+
+      - name: Verify narrowly authorized authenticated RTDB publisher role
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-narrow-publisher --config firebase.phase-b-narrow-lab.json "FG_NARROW_PUBLISHER_EMULATOR_TEST=1 node --test tests/narrow-publisher-rules-emulator.mjs"
