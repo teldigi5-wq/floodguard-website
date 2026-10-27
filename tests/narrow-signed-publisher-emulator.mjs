@@ -19,9 +19,6 @@ const path='/floodguard',pub=path+'/publicationLab/water';
 const deviceId='device-stage-a',publisherId='publisher-water-stage';
 const keyPair=generateKeyPairSync('ed25519');
 const persistedAttestor=generateKeyPairSync('ed25519');
-const fingerprint=key=>createHash('sha256')
-  .update(key.export({format:'der',type:'spki'})).digest('hex');
-const trustedSigner=fingerprint(keyPair.publicKey);
 const initial={
   current:{distanceCm:20,levelCm:5,status:'SAFE',
     observedAtMs:prior,overallRisk:'UNKNOWN'},
