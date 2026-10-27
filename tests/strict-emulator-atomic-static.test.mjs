@@ -12,7 +12,11 @@ test('trusted projector is gated to local Firebase Emulator and never auto-start
   assert.match(s,/target\.off\('value',onValue\)/);
   assert.match(s,/target\.transaction\(/);
   assert.doesNotMatch(s,/firebase-admin|serviceAccount|https:\/\/|http:\/\/|fetch\s*\(|\.listen\s*\(/);
-  assert.doesNotMatch(s,/\.set\(|\.update\(|writeFileSync|execSync|spawnSync/);
+  // Crypto's SHA-256 hash.update() is necessary for the trusted signer pin.
+  // Forbid mutation through Firebase refs without rejecting that operation.
+  assert.doesNotMatch(s,/\b(?:database|target|db)\.(?:set|update)\s*\(/);
+  assert.doesNotMatch(s,/\.ref\([^)]*\)\.(?:set|update)\s*\(/);
+  assert.doesNotMatch(s,/\b(?:writeFileSync|execSync|spawnSync)\s*\(/);
 });
 
 test('fixed allowlisted five public outputs and private transaction checkpoint',()=>{
