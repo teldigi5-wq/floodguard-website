@@ -9,6 +9,10 @@ const PATH='/synthetic/v1/ingest';
 const MAX_BODY=1024;
 const MAX_SEQUENCE=2147483647;
 const DEVICE=/^device-stage-[a-z0-9-]{1,32}$/;
+// A deliberately precommitted HMAC-sealed record makes prior ledger loss
+// distinguishable from a legitimate first device reading after restart.
+export const REPLAY_LEDGER_BOOTSTRAP_DEVICE='device-stage-bootstrap';
+export const REPLAY_LEDGER_BOOTSTRAP_FINGERPRINT='f'.repeat(64);
 const SIG=/^[A-Za-z0-9_-]{86}$/;
 const local=address=>address==='127.0.0.1'||address==='::1'
   ||address==='::ffff:127.0.0.1';
@@ -67,6 +71,11 @@ export function createLoopbackSignedIngressHandler({
       if(await ledgerAvailable()!==true){
         respond(res,503,'replay-ledger-unavailable');return;
       }
+      const bootstrap=ledger.last(REPLAY_LEDGER_BOOTSTRAP_DEVICE);
+      if(!bootstrap||bootstrap.epoch!==1||bootstrap.sequence!==1||
+         bootstrap.keyFingerprint!==REPLAY_LEDGER_BOOTSTRAP_FINGERPRINT){
+        respond(res,503,'replay-ledger-unavailable');return;
+      }
     }catch{
       respond(res,503,'replay-ledger-unavailable');return;
     }
@@ -93,7 +102,7 @@ export function createLoopbackSignedIngressHandler({
     try{canonical=canonicalOfflineEnvelope(body.envelope);}
     catch{respond(res,422,'invalid-frame');return;}
     const deviceId=body.envelope.deviceId;
-    if(!DEVICE.test(deviceId)){
+    if(!DEVICE.test(deviceId)||deviceId===REPLAY_LEDGER_BOOTSTRAP_DEVICE){
       respond(res,403,'device-not-authorized');return;
     }
     const binding=identities.get(deviceId);
