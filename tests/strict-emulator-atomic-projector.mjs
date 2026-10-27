@@ -17,6 +17,8 @@ if(process.env.FG_STRICT_EMULATOR_PROJECTOR_TEST!=='1'||
 const path='/floodguard',uid='device-stage-a',now=1700000000500;
 const rules=readFileSync('docs/firebase/phase-b-strict-readonly-live.rules.json','utf8');
 const server=generateKeyPairSync('ed25519');
+const approvedSignerFingerprint=createHash('sha256')
+  .update(server.publicKey.export({format:'der',type:'spki'})).digest('hex');
 let env;
 
 const frame=sequence=>({sequence,distanceCm:16.5,levelCm:8.5,risk:'WARNING'});
@@ -71,7 +73,13 @@ beforeEach(async()=>{
         acceptedAtMs:accepted.receipt.acceptedAtMs,
         status:'DATABASE_CONFIRMED'}
     },
-    projectionControl:{devices:{[uid]:{initialized:false,epoch:1}}},
+    projectionControl:{
+      waterAuthority:{
+        deviceId:uid,epoch:1,enabled:true,scope:'water-primary',
+        receiptSignerFingerprint:approvedSignerFingerprint
+      },
+      devices:{[uid]:{initialized:false,epoch:1}}
+    },
     live:{
       water:{distanceCm:20,levelCm:5,status:'SAFE'},
       rain:{dailyMm:12,status:'NORMAL'},
@@ -113,7 +121,8 @@ test('signed + confirmed + staged frame and preprovisioned checkpoint publishes 
   for(const hidden of [
     path,path+'/live',path+'/live/esp8266',
     path+'/live/esp8266/ip',path+'/confirmedIngest',
-    path+'/projectionControl',path+'/staging'
+    path+'/projectionControl',path+'/projectionControl/waterAuthority',
+    path+'/staging'
   ])await assertFails(visitor.ref(hidden).get());
   await assertFails(visitor.ref(path+'/live/water/status').set('SAFE'));
 });
@@ -148,7 +157,7 @@ test('privileged projection refuses a forged receipt and unmatched stored digest
   const wrongKey=generateKeyPairSync('ed25519');
   let result=await project({...input(),trustedReceiptKey:wrongKey.publicKey});
   assert.equal(result.published,false);
-  assert.equal(result.reason,'receipt-unverified');
+  assert.equal(result.reason,'receipt-signer-not-authorized');
   const forged=input();forged.receipt={...forged.receipt,digest:'0'.repeat(64)};
   assert.equal((await project(forged)).published,false);
   await amend({['confirmedIngest/'+uid+'/digest']:'0'.repeat(64)});
@@ -205,6 +214,86 @@ test('two concurrent deliveries of one sequence can commit at most once',async()
   assert.equal(entries.filter(x=>x.published===true).length,1);
   assert.equal(entries.filter(x=>x.published===false).length,1);
   assert.equal((await root()).projectionControl.devices[uid].sequence,1);
+});
+
+
+test('second enrolled and confirmed device cannot overwrite the sole water source',async()=>{
+  const other='device-stage-b';
+  const otherEnvelope={
+    ...envelope(1),deviceId:other,
+    frame:{sequence:1,distanceCm:3.5,levelCm:21.5,risk:'DANGER'}
+  };
+  const digest=createHash('sha256').update(canonicalOfflineEnvelope(otherEnvelope))
+    .digest('hex');
+  const receipt={
+    version:'floodguard-offline-receipt-v1',deviceId:other,epoch:1,
+    sequence:1,digest,acceptedAtMs:now-200
+  };
+  const signature=sign(null,Buffer.from(JSON.stringify(receipt)),server.privateKey)
+    .toString('base64url');
+  await amend({
+    ['deviceAuthorization/'+other]:{enabled:true,scope:'prototype-ingest-v1'},
+    ['staging/ingestV1/'+other]:otherEnvelope.frame,
+    ['confirmedIngest/'+other]:{...receipt,status:'DATABASE_CONFIRMED'},
+    ['projectionControl/devices/'+other]:{initialized:false,epoch:1}
+  });
+  const before=await root();
+  const rejected=await project({
+    envelope:otherEnvelope,receipt,signature,
+    trustedReceiptKey:server.publicKey,nowMs:now
+  });
+  assert.deepEqual(rejected,{published:false,reason:'water-source-not-authorized'});
+  assert.deepEqual(await root(),before,
+    'cross-device conflict must not update public data or either checkpoint');
+  const original=await project(input(1));
+  assert.equal(original.published,true,'approved primary must remain usable');
+  assert.equal((await root()).live.water.status,'WARNING');
+});
+
+test('water authority must be explicitly present, enabled, scope/epoch matched',async()=>{
+  const original=await root();
+  const authority=original.projectionControl.waterAuthority;
+  const cases=[
+    null,{...authority,enabled:false},
+    {...authority,scope:'rain-primary'},
+    {...authority,epoch:2},
+    {...authority,deviceId:'device-stage-b'},
+    {...authority,allowAll:true}
+  ];
+  for(const candidate of cases){
+    await amend({'projectionControl/waterAuthority':candidate});
+    const result=await project(input(1));
+    assert.deepEqual(result,{published:false,reason:'water-source-not-authorized'});
+    const current=await root();
+    assert.deepEqual(current.live,original.live);
+    assert.deepEqual(current.projectionControl.devices,original.projectionControl.devices);
+  }
+  await amend({'projectionControl/waterAuthority':authority});
+  assert.equal((await project(input(1))).published,true);
+});
+
+test('attacker-issued but otherwise consistent signed receipt cannot replace pinned server issuer',async()=>{
+  const fake=generateKeyPairSync('ed25519');
+  const data=input(1),signature=sign(
+    null,Buffer.from(JSON.stringify(data.receipt)),fake.privateKey
+  ).toString('base64url');
+  const before=await root();
+  const result=await project({
+    ...data,signature,trustedReceiptKey:fake.publicKey
+  });
+  assert.deepEqual(result,{published:false,reason:'receipt-signer-not-authorized'});
+  assert.deepEqual(await root(),before);
+  const valid=await project(data);
+  assert.equal(valid.published,true);
+});
+
+test('missing or malformed receipt trust material cannot authorize a publisher',async()=>{
+  const before=await root();
+  for(const key of [undefined,null,'fake-issuer-key',server.privateKey]){
+    const denied=await project({...input(),trustedReceiptKey:key});
+    assert.deepEqual(denied,{published:false,reason:'trusted-signer-invalid'});
+  }
+  assert.deepEqual(await root(),before);
 });
 
 test('emulator-only test module has no Firebase Admin SDK, secret loading or host endpoint',()=>{
