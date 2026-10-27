@@ -33,10 +33,15 @@ test('backend elevated risk never gets silently lowered but low cannot hide miss
   assert.equal(risk('SAFE','NORMAL','???'),'LOW');
 });
 test('stale, disconnected or initial data never yields a current risk clearance',()=>{
-  for(const freshness of ['loading','stale','unavailable',null,undefined]){
+  for(const freshness of ['loading','stale','unavailable',null]){
     assert.equal(risk('SAFE','NORMAL','LOW',freshness),'UNKNOWN');
     assert.equal(risk('DANGER','CRITICAL','CRITICAL',freshness),'UNKNOWN');
   }
+  // Test missing freshness directly instead of applying the fixture helper's
+  // default 'live' argument to an explicit undefined value.
+  assert.equal(reconcileDisplayedFloodRisk({
+    waterStatus:'SAFE',rainStatus:'NORMAL',reportedRisk:'LOW'
+  }),'UNKNOWN');
   assert.equal(risk('SAFE','NORMAL','LOW','live'),'LOW');
 });
 test('heavy numerical rainfall overrides NORMAL or lower categorical status',()=>{
