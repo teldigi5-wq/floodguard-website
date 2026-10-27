@@ -5,6 +5,7 @@
 // production needs separately audited privileges, resource isolation and
 // data-size/rate limits rather than privileged broad-root transactions.
 import {planStrictSyntheticPublicProjection} from './strict-signed-projection-gate.mjs';
+import {createHash,KeyObject} from 'node:crypto';
 
 const EMULATOR='127.0.0.1:9000';
 const UID=/^device-stage-[a-z0-9-]{1,32}$/;
@@ -28,6 +29,18 @@ export async function publishStrictEmulatorFrame({
     return deny('invalid-publisher-request');
 
   const uid=envelope.deviceId;
+  // The receipt issuer is pinned independently in operator-owned emulator
+  // state. A caller cannot simply supply their own signing key as trusted.
+  if(!(trustedReceiptKey instanceof KeyObject) ||
+     trustedReceiptKey.type!=='public' ||
+     trustedReceiptKey.asymmetricKeyType!=='ed25519')
+    return deny('trusted-signer-invalid');
+  let signerFingerprint;
+  try{
+    signerFingerprint=createHash('sha256').update(
+      trustedReceiptKey.export({format:'der',type:'spki'})
+    ).digest('hex');
+  }catch{return deny('trusted-signer-invalid');}
   let reason='transaction-aborted';
   let lastPlan,detach;
   try{
@@ -53,6 +66,21 @@ export async function publishStrictEmulatorFrame({
         reason='transaction-cache-unavailable';return; // never initialize empty root
       }
       const binding=current.deviceAuthorization?.[uid];
+      const authority=current.projectionControl?.waterAuthority;
+      // Per-device replay protection alone cannot prevent two *different*
+      // valid identities from racing to replace a shared public water feed.
+      // Operator-provisioned source authority and issuer pin are required
+      // inside the SAME atomic transaction as the published checkpoint.
+      if(!exact(authority,['deviceId','epoch','enabled','scope','receiptSignerFingerprint'])||
+         authority.enabled!==true ||
+         authority.scope!=='water-primary' ||
+         authority.deviceId!==uid ||
+         authority.epoch!==envelope.epoch){
+        reason='water-source-not-authorized';return;
+      }
+      if(authority.receiptSignerFingerprint!==signerFingerprint){
+        reason='receipt-signer-not-authorized';return;
+      }
       const control=current.projectionControl?.devices?.[uid];
       const staged=current.staging?.ingestV1?.[uid];
       const confirmed=current.confirmedIngest?.[uid];
