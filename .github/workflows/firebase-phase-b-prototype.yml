@@ -43,5 +43,8 @@ jobs:
         run: |
           npm ci
           npm install --no-save --package-lock=false --ignore-scripts @firebase/rules-unit-testing@5.0.2
+      - name: Verify offline static and application regression suite
+        run: npm test
+
       - name: Verify simulated approved and denied RTDB writers
         run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-floodguard --config firebase.phase-b.json "FG_PHASE_B_TEST=1 node --test tests/phase-b-auth-emulator.mjs"
