@@ -1,0 +1,93 @@
+{
+  "schema": "floodguard-stage11-review-v1",
+  "reviewDate": "2026-10-14",
+  "releaseStatus": "NO_GO_REVIEW_ONLY",
+  "evidence": {
+    "website": {
+      "repo": "teldigi5-wq/floodguard-website",
+      "pr": 8,
+      "head": "af31dc48d7f38194cc079460635e703f15cc7bac",
+      "draft": true,
+      "ci": [
+        "38550985298",
+        "38550985235",
+        "38550985245",
+        "38550985230"
+      ]
+    },
+    "bot": {
+      "repo": "teldigi5-wq/floodguard-whatsapp-bot",
+      "pr": 12,
+      "head": "b2048d05d47ccc634c20ea562d1efee3fb158476",
+      "draft": true,
+      "ci": [
+        "38517968749",
+        "38517968735",
+        "38517968724",
+        "38517968714"
+      ]
+    },
+    "mobile": {
+      "repo": "teldigi5-wq/floodguard-mobile",
+      "pr": 1,
+      "head": "1b40c15e4e2ed7fae58ab35584794b7502f4f96c",
+      "draft": true,
+      "private": true,
+      "ci": [
+        "38410398000"
+      ]
+    }
+  },
+  "publicPaths": {
+    "website": [
+      "water",
+      "rain",
+      "gate",
+      "alarm",
+      "devices",
+      "system",
+      "esp8266/connection",
+      "esp8266/rssi",
+      "esp8266/status"
+    ],
+    "bot": [
+      "water",
+      "rain",
+      "gate",
+      "alarm",
+      "devices",
+      "system",
+      "esp8266/connection",
+      "esp8266/rssi",
+      "esp8266/status"
+    ],
+    "mobile": [
+      "water",
+      "rain",
+      "gate",
+      "alarm",
+      "devices",
+      "system",
+      "esp8266/connection",
+      "esp8266/rssi",
+      "esp8266/status"
+    ]
+  },
+  "permissions": {
+    "observedPhaseA": "CANDIDATE_EMULATOR_ONLY",
+    "observedPhaseB": "PROTOTYPE_EMULATOR_ONLY",
+    "effectiveProductionRulesVerified": false,
+    "productionChangeAuthorized": false,
+    "simulatedAgentIsLive": false
+  },
+  "blockers": [
+    "PRODUCTION_RULES_NOT_PRIVATELY_VERIFIED",
+    "PHASE_A_RETAINS_ANONYMOUS_PARENT_WRITES",
+    "PHASE_B_DEVICE_AUTH_AND_TLS_NOT_VALIDATED_ON_FLASHED_HARDWARE",
+    "MOBILE_PHYSICAL_LIVE_OFFLINE_ACCEPTANCE_NOT_SIGNED",
+    "REPLACEMENT_HOST_AND_WHATSAPP_PAIRING_NOT_APPROVED",
+    "CROSS_CLIENT_FIELD_SCHEMA_AND_TIMESTAMP_INVENTORY_PENDING",
+    "BACKUP_ROLLBACK_AND_OPERATOR_WINDOW_NOT_APPROVED",
+    "MOBILE_HISTORIC_PRIVATE_ARCHIVE_REVIEW_OPEN"
+  ]
+}

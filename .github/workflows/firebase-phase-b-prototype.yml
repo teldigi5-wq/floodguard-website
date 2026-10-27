@@ -1,0 +1,56 @@
+name: Firebase Phase B identity prototype only
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/firebase/phase-b-*'
+      - 'docs/firebase/authenticated-write-migration-plan.md'
+      - 'firebase.phase-b.json'
+      - 'firebase.phase-b-strict.json'
+      - 'tests/phase-b-*.mjs'
+      - 'tests/offline-ingestion-gateway.test.mjs'
+      - 'experiments/offline-ingestion-gateway.mjs'
+      - 'experiments/stage7-durable-ingress.mjs'
+      - 'tests/stage7-durable-ingress.test.mjs'
+      - 'experiments/stage8-ack-reconciliation.mjs'
+      - 'tests/stage8-ack-reconciliation.test.mjs'
+      - 'experiments/stage9-downstream-outbox.mjs'
+      - 'tests/stage9-downstream-outbox.test.mjs'
+      - 'tests/stage9-local-tls.test.mjs'
+      - 'experiments/stage10-notification-rehearsal.mjs'
+      - 'tests/stage10-notification-rehearsal.test.mjs'
+      - 'experiments/strict-signed-projection-gate.mjs'
+      - 'tests/strict-signed-projection-gate.test.mjs'
+      - '.github/workflows/firebase-phase-b-prototype.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    name: Local emulator synthetic identity rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install test-only dependencies
+        run: |
+          npm ci
+          npm install --no-save --package-lock=false --ignore-scripts @firebase/rules-unit-testing@5.0.2
+      - name: Verify offline static and application regression suite
+        run: npm test
+
+      - name: Verify simulated approved and denied RTDB writers
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-floodguard --config firebase.phase-b.json "FG_PHASE_B_TEST=1 node --test tests/phase-b-auth-emulator.mjs"
+
+      - name: Verify strict read-only public telemetry and private authenticated staging
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-floodguard-strict --config firebase.phase-b-strict.json "FG_PHASE_B_STRICT_TEST=1 node --test tests/phase-b-strict-emulator.mjs"
