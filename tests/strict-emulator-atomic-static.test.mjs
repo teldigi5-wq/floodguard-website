@@ -7,7 +7,9 @@ test('trusted projector is gated to local Firebase Emulator and never auto-start
   assert.match(s,/FG_STRICT_EMULATOR_PROJECTOR_TEST/);
   assert.match(s,/FIREBASE_DATABASE_EMULATOR_HOST/);
   assert.match(s,/const EMULATOR='127\.0\.0\.1:9000'/);
-  assert.match(s,/database\.ref\('\/floodguard'\)\.transaction\(/);
+  assert.match(s,/database\.ref\('\/floodguard'\)/);
+  assert.match(s,/await target\.once\('value'\)/);
+  assert.match(s,/target\.transaction\(/);
   assert.doesNotMatch(s,/firebase-admin|serviceAccount|https:\/\/|http:\/\/|fetch\s*\(|\.listen\s*\(/);
   assert.doesNotMatch(s,/\.set\(|\.update\(|writeFileSync|execSync|spawnSync/);
 });
