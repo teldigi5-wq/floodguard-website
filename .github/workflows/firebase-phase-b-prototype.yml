@@ -2,7 +2,7 @@ name: Firebase Phase B identity prototype only
 
 on:
   pull_request:
-    branches: [main, security/firebase-privacy-phase-a-review, test/phase-b-complete-write-denial-20261027, test/phase-b-strict-public-read-only-20261027]
+    branches: [main]
     paths:
       - 'docs/firebase/phase-b-*'
       - 'docs/firebase/authenticated-write-migration-plan.md'
