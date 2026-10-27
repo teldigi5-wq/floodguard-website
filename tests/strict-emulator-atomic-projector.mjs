@@ -234,7 +234,10 @@ test('second enrolled and confirmed device cannot overwrite the sole water sourc
   await amend({
     ['deviceAuthorization/'+other]:{enabled:true,scope:'prototype-ingest-v1'},
     ['staging/ingestV1/'+other]:otherEnvelope.frame,
-    ['confirmedIngest/'+other]:{...receipt,status:'DATABASE_CONFIRMED'},
+    ['confirmedIngest/'+other]:{
+      deviceId:other,epoch:1,sequence:1,digest,
+      acceptedAtMs:receipt.acceptedAtMs,status:'DATABASE_CONFIRMED'
+    },
     ['projectionControl/devices/'+other]:{initialized:false,epoch:1}
   });
   const before=await root();
@@ -248,6 +251,52 @@ test('second enrolled and confirmed device cannot overwrite the sole water sourc
   const original=await project(input(1));
   assert.equal(original.published,true,'approved primary must remain usable');
   assert.equal((await root()).live.water.status,'WARNING');
+});
+
+
+test('an explicit operator-controlled water-source handoff changes the sole permitted writer',async()=>{
+  const other='device-stage-b';
+  const alternate=envelope(1);
+  alternate.deviceId=other;
+  alternate.frame={...frame(1),distanceCm:3,levelCm:22,risk:'DANGER'};
+  const digest=createHash('sha256').update(canonicalOfflineEnvelope(alternate))
+    .digest('hex');
+  const receipt={
+    version:'floodguard-offline-receipt-v1',deviceId:other,epoch:1,
+    sequence:1,digest,acceptedAtMs:now-200
+  };
+  const signature=sign(null,Buffer.from(JSON.stringify(receipt)),server.privateKey)
+    .toString('base64url');
+  await amend({
+    ['deviceAuthorization/'+other]:{enabled:true,scope:'prototype-ingest-v1'},
+    ['staging/ingestV1/'+other]:alternate.frame,
+    ['confirmedIngest/'+other]:{
+      deviceId:other,epoch:1,sequence:1,digest,acceptedAtMs:now-200,
+      status:'DATABASE_CONFIRMED'
+    },
+    ['projectionControl/devices/'+other]:{initialized:false,epoch:1},
+    // Privileged operator configuration: a legitimate transfer is explicit
+    // and is checked atomically with the next frame's public projection.
+    'projectionControl/waterAuthority':{
+      deviceId:other,epoch:1,enabled:true,scope:'water-primary',
+      receiptSignerFingerprint:approvedSignerFingerprint
+    }
+  });
+  const before=await root();
+  assert.equal((await project(input(1))).reason,'water-source-not-authorized');
+  assert.deepEqual(await root(),before);
+  const accepted=await project({
+    envelope:alternate,receipt,signature,
+    trustedReceiptKey:server.publicKey,nowMs:now
+  });
+  assert.equal(accepted.published,true);
+  const after=await root();
+  assert.equal(after.live.water.status,'DANGER');
+  assert.equal(after.projectionControl.devices[other].sequence,1);
+  assert.equal(after.projectionControl.devices[uid].initialized,false);
+  assert.equal(after.projectionControl.waterAuthority.deviceId,other);
+  assert.deepEqual(after.live.gate,before.live.gate);
+  assert.deepEqual(after.live.rain,before.live.rain);
 });
 
 test('water authority must be explicitly present, enabled, scope/epoch matched',async()=>{
