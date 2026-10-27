@@ -31,10 +31,17 @@ export async function publishStrictEmulatorFrame({
   let reason='transaction-aborted';
   let lastPlan;
   try{
+    // RTDB transactions may first call the updater with null from an empty
+    // local cache, even when the server has data. Preload this fixed emulator
+    // root so "missing state" means an actual missing database snapshot,
+    // not an uninitialized client-side cache. Still fail closed if absent.
+    const target=database.ref('/floodguard');
+    const initial=await target.once('value');
+    if(!initial.exists())return deny('root-state-unavailable');
     // Single fixed literal path: staging, operator confirmation, checkpoint and
     // the five public leaves update as ONE RTDB emulator transaction.
     // Never take a database path from client data or output unrestricted update().
-    const result=await database.ref('/floodguard').transaction(current=>{
+    const result=await target.transaction(current=>{
       if(!isRecord(current)){
         reason='root-state-unavailable';return; // never initialize empty root
       }
