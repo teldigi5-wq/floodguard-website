@@ -11,6 +11,7 @@ import { onValue, ref, type Unsubscribe } from "firebase/database";
 import { z } from "zod";
 import { database, LIVE_PATH } from "@/lib/firebase";
 import { ageSeconds, classifyTelemetryFreshness, parseFieldTimestamp } from "@/lib/telemetry-health.mjs";
+import { isExplicitWaterFault, reconcileReportedGateStatus } from "@/lib/telemetry-safety.mjs";
 
 const shortText = z.string().max(80);
 const optionalNumber = (min: number, max: number) =>
@@ -140,7 +141,8 @@ function normalizeWaterGroup(source: Record<string, unknown>) {
     : providedLevel;
 
   const incomingStatus = normalizeWaterStatus(source.status);
-  if (incomingStatus === "SENSOR_ERROR" && distance === null) {
+  // A firmware SENSOR_ERROR is never cleared by a stale or placeholder number.
+  if (isExplicitWaterFault(source.status)) {
     return { ...source, distanceCm: null, levelCm: null, status: "SENSOR_ERROR" };
   }
 
@@ -190,24 +192,10 @@ function normalizeGateGroup(source: Record<string, unknown>) {
       ? Math.max(0, source.countdownSeconds)
       : null;
 
-  // Physical gate position/countdown wins over stale legacy status strings.
-  // This prevents old OPENING_WARNING/COUNTDOWN values from showing while the
-  // Arduino reports a closed 0-degree gate with no active countdown.
-  let status = rawStatus;
-  if ((countdown ?? 0) > 0) {
-    status = "COUNTDOWN";
-  } else if (angle !== null && angle <= 2) {
-    status = "CLOSED";
-  } else if (angle !== null && angle >= 80) {
-    status = "OPEN";
-  } else if (angle !== null && angle > 2 && angle < 80) {
-    // Current Arduino sends direct target angles, but tolerate intermediate values.
-    status = status === "CLOSING" ? "CLOSING" : "OPENING";
-  } else if (status === "COUNTDOWN" || status === "OPENING_WARNING") {
-    status = "CLOSED";
-  }
-
-  const reason = status === "CLOSED" ? "NONE" : source.reason;
+  // Separate device reports are not proof of physical position. A conflict
+  // is UNKNOWN, not a confident CLOSED or OPEN announcement.
+  const status = reconcileReportedGateStatus({status:rawStatus,angle,countdownSeconds:countdown});
+  const reason = status === "CLOSED" ? "NONE" : status === "UNKNOWN" ? null : source.reason;
   return { ...source, status, angle, countdownSeconds: countdown, reason };
 }
 
