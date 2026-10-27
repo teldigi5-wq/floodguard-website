@@ -7,7 +7,8 @@ import {readFileSync} from 'node:fs';
 import {initializeTestEnvironment,assertFails,assertSucceeds}
   from '@firebase/rules-unit-testing';
 import {canonicalOfflineEnvelope} from '../experiments/stage7-durable-ingress.mjs';
-import {publishSignedToNarrowEmulator} from '../experiments/signed-narrow-publisher-emulator.mjs';
+import {createSignedNarrowEmulatorPublisher} from '../experiments/signed-narrow-publisher-emulator.mjs';
+import {canonicalSyntheticPublicationAttestation} from '../experiments/synthetic-publication-attestation.mjs';
 
 if(process.env.FG_NARROW_SIGNED_BRIDGE_TEST!=='1'||
    process.env.FIREBASE_DATABASE_EMULATOR_HOST!=='127.0.0.1:9000')
@@ -17,6 +18,7 @@ const now=1700000003500,prior=now-3000;
 const path='/floodguard',pub=path+'/publicationLab/water';
 const deviceId='device-stage-a',publisherId='publisher-water-stage';
 const keyPair=generateKeyPairSync('ed25519');
+const persistedAttestor=generateKeyPairSync('ed25519');
 const fingerprint=key=>createHash('sha256')
   .update(key.export({format:'der',type:'spki'})).digest('hex');
 const trustedSigner=fingerprint(keyPair.publicKey);
@@ -38,21 +40,21 @@ const source=(seq=2,observedAtMs=now-400,opts={})=>{
     version:'floodguard-offline-receipt-v1',
     deviceId:envelope.deviceId,epoch:1,sequence:seq,digest,acceptedAtMs:now-100
   };
+  const attestation={
+    version:'floodguard-synthetic-persisted-attestation-v1',
+    deviceId:envelope.deviceId,epoch:1,sequence:seq,digest,
+    acceptedAtMs:receipt.acceptedAtMs,confirmedAtMs:now-50,
+    scope:'prototype-ingest-v1',deviceEnabled:true,
+    databaseState:'DATABASE_CONFIRMED'
+  };
   return {
     envelope,receipt,
     signature:sign(null,Buffer.from(JSON.stringify(receipt)),
       opts.signingKey??keyPair.privateKey).toString('base64url'),
-    trustedReceiptKey:opts.verificationKey??keyPair.publicKey,
-    expectedSignerFingerprint:trustedSigner,
-    registryBinding:{
-      deviceId:envelope.deviceId,epoch:1,enabled:true,
-      scope:'prototype-ingest-v1'
-    },
-    databaseRecord:{
-      deviceId:envelope.deviceId,epoch:1,sequence:seq,digest,
-      acceptedAtMs:receipt.acceptedAtMs,status:'DATABASE_CONFIRMED'
-    },
-    nowMs:now
+    attestation,
+    attestationSignature:sign(null,
+      Buffer.from(canonicalSyntheticPublicationAttestation(attestation)),
+      opts.attestorSigningKey??persistedAttestor.privateKey).toString('base64url')
   };
 };
 let env;
@@ -68,9 +70,12 @@ const readWater=()=>admin(async db=>(await db.ref(pub).get()).val());
 const adminSet=(p,v)=>admin(db=>db.ref(p).set(v));
 const client=(name=publisherId,claim=true)=>
   env.authenticatedContext(name,{fg_publish_water_v1:claim}).database();
-const project=(options,db=client())=>publishSignedToNarrowEmulator({
-  database:db,...options
+const createPublisher=(db=client())=>createSignedNarrowEmulatorPublisher({
+  database:db,trustedReceiptKey:keyPair.publicKey,
+  trustedAttestationKey:persistedAttestor.publicKey,
+  clock:()=>now
 });
+const project=(options,db=client())=>createPublisher(db)(options);
 before(async()=>{
   env=await initializeTestEnvironment({
     projectId:'demo-narrow-signed-bridge',
@@ -151,8 +156,8 @@ test('forged envelope or receipt, and unconfirmed database record, fail closed',
   const scenarios=[
     {...ok,envelope:{...ok.envelope,frame:{...ok.envelope.frame,risk:'DANGER'}}},
     {...ok,receipt:{...ok.receipt,digest:'f'.repeat(64)}},
-    {...ok,databaseRecord:{...ok.databaseRecord,status:'PENDING'}},
-    {...ok,databaseRecord:{...ok.databaseRecord,digest:'f'.repeat(64)}},
+    {...ok,attestation:{...ok.attestation,databaseState:'PENDING'}},
+    {...ok,attestation:{...ok.attestation,digest:'f'.repeat(64)}},
     {...ok,signature:'A'.repeat(86)}
   ];
   for(const candidate of scenarios){
@@ -164,19 +169,73 @@ test('forged envelope or receipt, and unconfirmed database record, fail closed',
 test('caller cannot select their own server verification key to forge an accepted receipt',async()=>{
   const impostor=generateKeyPairSync('ed25519');
   const changed=source(2,now-400,{
-    signingKey:impostor.privateKey,verificationKey:impostor.publicKey
+    signingKey:impostor.privateKey
   });
   const denied=await project(changed);
-  assert.deepEqual(denied,{published:false,reason:'receipt-signer-not-authorized'});
+  assert.deepEqual(denied,{published:false,reason:'receipt-unverified'});
   assert.deepEqual(await readWater(),initial);
   assert.equal((await project(source())).published,true);
+});
+
+
+test('caller-supplied trusted key overrides and forged persistence claims are denied',async()=>{
+  const unrelated=generateKeyPairSync('ed25519');
+  const fakeSource=source(2,now-400,{
+    attestorSigningKey:unrelated.privateKey
+  });
+  assert.deepEqual(await project(fakeSource),{
+    published:false,reason:'confirmed-attestation-unverified'
+  });
+  const original=source();
+  const forged={
+    ...original,
+    trustedReceiptKey:unrelated.publicKey,
+    trustedAttestationKey:unrelated.publicKey,
+    registryBinding:{deviceId,epoch:1,enabled:true,scope:'prototype-ingest-v1'},
+    databaseRecord:{status:'DATABASE_CONFIRMED'}
+  };
+  assert.deepEqual(await project(forged),{
+    published:false,reason:'invalid-request'
+  });
+  assert.deepEqual(await readWater(),initial);
+});
+
+test('a previously valid signed confirmation expires without refreshing its signature',async()=>{
+  const original=source();
+  const wrongClockPublisher=createSignedNarrowEmulatorPublisher({
+    database:client(),trustedReceiptKey:keyPair.publicKey,
+    trustedAttestationKey:persistedAttestor.publicKey,
+    clock:()=>now+6000
+  });
+  assert.deepEqual(await wrongClockPublisher(original),{
+    published:false,reason:'confirmed-attestation-unverified'
+  });
+  assert.deepEqual(await readWater(),initial);
+});
+
+test('attestation evidence rejects forged approval, mismatched receipt and extra fields',async()=>{
+  const signed=source();
+  const variants=[
+    {...signed,attestation:{...signed.attestation,deviceEnabled:false}},
+    {...signed,attestation:{...signed.attestation,databaseState:'PENDING'}},
+    {...signed,attestation:{...signed.attestation,scope:'operator-admin'}},
+    {...signed,attestation:{...signed.attestation,sequence:99}},
+    {...signed,attestation:{...signed.attestation,arbitrary:true}},
+    {...signed,attestationSignature:'A'.repeat(86)}
+  ];
+  for(const v of variants){
+    assert.deepEqual(await project(v),{
+      published:false,reason:'confirmed-attestation-unverified'
+    });
+    assert.deepEqual(await readWater(),initial);
+  }
 });
 
 test('revoked, different or mis-scoped source identity cannot bypass source checks',async()=>{
   const valid=source();
   const candidates=[
-    {...valid,registryBinding:{...valid.registryBinding,enabled:false}},
-    {...valid,registryBinding:{...valid.registryBinding,scope:'admin'}},
+    {...valid,attestation:{...valid.attestation,deviceEnabled:false}},
+    {...valid,attestation:{...valid.attestation,scope:'admin'}},
     {...valid,envelope:{...valid.envelope,deviceId:'device-stage-b'}},
     source(2,now-400,{deviceId:'device-stage-b'})
   ];
@@ -251,6 +310,9 @@ test('module cannot reference broad database root, Admin SDK or production keys'
   assert.match(s,/database\.ref\(PATH\)/);
   assert.match(s,/const PATH='\/floodguard\/publicationLab\/water'/);
   assert.match(s,/planStrictSyntheticPublicProjection/);
+  assert.match(s,/verifySyntheticPublicationAttestation/);
+  assert.match(s,/createSignedNarrowEmulatorPublisher/);
+  assert.doesNotMatch(s,/expectedSignerFingerprint|registryBinding,databaseRecord,nowMs/);
   assert.doesNotMatch(s,/firebase-admin|serviceAccount|https:\/\/|fetch\s*\(|\.listen\s*\(/);
   assert.doesNotMatch(s,/database\.ref\('\/floodguard'\)/);
   // SHA-256 hash.update is cryptographic, not an unrestricted database write.
