@@ -11,7 +11,7 @@ import { onValue, ref, type Unsubscribe } from "firebase/database";
 import { z } from "zod";
 import { database, LIVE_PATH } from "@/lib/firebase";
 import { ageSeconds, classifyTelemetryFreshness, parseFieldTimestamp } from "@/lib/telemetry-health.mjs";
-import { isExplicitWaterFault, reconcileReportedGateStatus } from "@/lib/telemetry-safety.mjs";
+import { isExplicitWaterFault, reconcileReportedGateStatus, reconcileWaterStatusWithoutMeasurement } from "@/lib/telemetry-safety.mjs";
 
 const shortText = z.string().max(80);
 const optionalNumber = (min: number, max: number) =>
@@ -149,7 +149,7 @@ function normalizeWaterGroup(source: Record<string, unknown>) {
   // Derive the website status from the exact level shown on screen so the
   // number, threshold card and status can never contradict each other.
   const status = levelCm === null
-    ? incomingStatus
+    ? reconcileWaterStatusWithoutMeasurement(incomingStatus)
     : levelCm >= WATER_DANGER_MIN_CM ? "DANGER"
     : levelCm >= WATER_WARNING_MIN_CM ? "WARNING"
     : "SAFE";
