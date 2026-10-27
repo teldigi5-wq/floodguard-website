@@ -2,11 +2,12 @@ name: Firebase Phase B identity prototype only
 
 on:
   pull_request:
-    branches: [main, security/firebase-privacy-phase-a-review]
+    branches: [main, security/firebase-privacy-phase-a-review, test/phase-b-complete-write-denial-20261027]
     paths:
       - 'docs/firebase/phase-b-*'
       - 'docs/firebase/authenticated-write-migration-plan.md'
       - 'firebase.phase-b.json'
+      - 'firebase.phase-b-strict.json'
       - 'tests/phase-b-*.mjs'
       - 'tests/offline-ingestion-gateway.test.mjs'
       - 'experiments/offline-ingestion-gateway.mjs'
@@ -48,3 +49,6 @@ jobs:
 
       - name: Verify simulated approved and denied RTDB writers
         run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-floodguard --config firebase.phase-b.json "FG_PHASE_B_TEST=1 node --test tests/phase-b-auth-emulator.mjs"
+
+      - name: Verify strict read-only public telemetry and private authenticated staging
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-floodguard-strict --config firebase.phase-b-strict.json "FG_PHASE_B_STRICT_TEST=1 node --test tests/phase-b-strict-emulator.mjs"
