@@ -28,6 +28,10 @@ test('fixed allowlisted five public outputs and private transaction checkpoint',
   assert.match(s,/databaseRecord:confirmed/);
   assert.match(s,/publication-state-unavailable/);
   assert.match(s,/staging-frame-mismatch/);
+  assert.match(s,/projectionControl\?\.waterAuthority/);
+  assert.match(s,/receiptSignerFingerprint/);
+  assert.match(s,/water-source-not-authorized/);
+  assert.match(s,/receipt-signer-not-authorized/);
 });
 
 test('emulator smoke suite is wired to a distinct local project, not deployed rules',()=>{
