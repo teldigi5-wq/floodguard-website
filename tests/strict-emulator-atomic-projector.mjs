@@ -37,7 +37,13 @@ function input(seq=1,changes={}) {
     trustedReceiptKey:server.publicKey,nowMs:now};
 }
 async function admin(callback){
-  return env.withSecurityRulesDisabled(async owner=>callback(owner.database()));
+  // Firebase's rules-unit-testing helper resolves to void, not the callback
+  // return. Explicitly capture it so test assertions observe actual results.
+  let output;
+  await env.withSecurityRulesDisabled(async owner=>{
+    output=await callback(owner.database());
+  });
+  return output;
 }
 async function root(){return admin(async db=>(await db.ref(path).get()).val());}
 async function amend(updates){return admin(db=>db.ref(path).update(updates));}
