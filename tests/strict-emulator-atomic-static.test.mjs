@@ -36,6 +36,9 @@ test('fixed allowlisted five public outputs and private transaction checkpoint',
   assert.match(s,/receiptSignerFingerprint/);
   assert.match(s,/water-source-not-authorized/);
   assert.match(s,/receipt-signer-not-authorized/);
+  assert.match(s,/public-timestamp-unavailable/);
+  assert.match(s,/public-timestamp-regression/);
+  assert.match(s,/priorTime>nowMs\+2000/);
 });
 
 test('emulator smoke suite is wired to a distinct local project, not deployed rules',()=>{
