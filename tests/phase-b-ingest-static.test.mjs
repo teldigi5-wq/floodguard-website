@@ -42,3 +42,41 @@ test('Stage 5 still disallows registry writes and preserves private ESP telemetr
   assert.equal(fb.live.esp8266.wifi['.read'],false);
   assert.equal(fb.live.esp8266['.read'],false);
 });
+
+
+test('Stage 19 requires device-specific authorization on every live prototype write leaf',()=>{
+  const leaves=[
+    fb.live.water.distanceCm,
+    fb.live.water.levelCm,
+    fb.live.water.status,
+    fb.live.gate.status,
+    fb.live.gate.angle,
+    fb.live.esp8266.status
+  ];
+  assert.equal(leaves.length,6);
+  for(const leaf of leaves){
+    const policy=leaf['.write'];
+    assert.equal(typeof policy,'string');
+    assert.match(policy,/auth != null/);
+    assert.match(policy,/deviceAuthorization/);
+    assert.match(policy,/child\(auth.uid\)/);
+    assert.match(policy,/child\('enabled'\)\.val\(\) === true/);
+    assert.match(policy,/prototype-primary-telemetry/);
+    assert.match(policy,/newData.exists\(\)/);
+  }
+  for(const ancestor of [rules,fb,fb.live,fb.live.water,
+    fb.live.gate,fb.live.esp8266]){
+    assert.notEqual(ancestor['.write'],true,'ancestor must not grant unrestricted device writes');
+  }
+});
+
+test('Stage 19 has no unconditional true write grant anywhere in the Phase B prototype',()=>{
+  function inspect(value,path='rules'){
+    if(!value || typeof value!=='object')return;
+    for(const [key,nested] of Object.entries(value)){
+      if(key==='.write')assert.notEqual(nested,true,'unexpected public writer at '+path);
+      else inspect(nested,path+'/'+key);
+    }
+  }
+  inspect(rules);
+});

@@ -177,3 +177,76 @@ test('Stage 5 revocation denies further writes while preserving previous synthet
   });
   if(stored.sequence!==1)throw Error('Revoked write changed synthetic data');
 });
+
+
+// Stage 19: every explicitly writable Phase B live leaf must remain denied
+// to anonymous, ordinary, revoked and wrong-scope identities. All values,
+// UIDs and network names are synthetic; this never uses production Firebase.
+const prototypeLeaves = Object.freeze([
+  ['water/distanceCm', 15.35],
+  ['water/levelCm', 9.65],
+  ['water/status', 'WARNING'],
+  ['gate/status', 'CLOSED'],
+  ['gate/angle', 0],
+  ['esp8266/status', 'ONLINE']
+]);
+
+test('Stage 19 denies every prototype live leaf to all untrusted writer classes',async()=>{
+  const denied=[
+    ['anonymous',visitor()],
+    ['ordinary',context('ordinary-user')],
+    ['revoked',context('device-demo-revoked')],
+    ['wrong-scope',context('device-demo-other')],
+    ['unregistered',context('no-device-binding')]
+  ];
+  for(const [identity,db] of denied){
+    for(const [leaf,value] of prototypeLeaves){
+      await assertFails(db.ref(live+'/'+leaf).set(value));
+    }
+  }
+});
+
+test('Stage 19 revocation stops all six valid live-leaf writes without changing prior data',async()=>{
+  const db=context('device-demo-a');
+  for(const [leaf,value] of prototypeLeaves){
+    await assertSucceeds(db.ref(live+'/'+leaf).set(value));
+  }
+  await env.withSecurityRulesDisabled(async admin=>{
+    await admin.database()
+      .ref('/floodguard/deviceAuthorization/device-demo-a/enabled').set(false);
+  });
+  for(const [leaf,value] of prototypeLeaves){
+    await assertFails(db.ref(live+'/'+leaf).set(value));
+    await assertFails(db.ref(live+'/'+leaf).remove());
+  }
+  await env.withSecurityRulesDisabled(async admin=>{
+    for(const [leaf,value] of prototypeLeaves){
+      const actual=(await admin.database().ref(live+'/'+leaf).get()).val();
+      if(actual!==value)throw Error('Revoked identity changed persisted demo telemetry');
+    }
+  });
+});
+
+test('Stage 19 rejects mixed root PATCH and parent PUT after a legitimate child write',async()=>{
+  const db=context('device-demo-a');
+  await assertSucceeds(db.ref(live+'/water/levelCm').set(9.65));
+  // A supported leaf must not elevate its owner to whole-parent, sibling,
+  // private metadata, or cross-domain writes.
+  await assertFails(db.ref(live).update({
+    'water/levelCm':10.5,
+    'esp8266/wifi':'EXAMPLE-NONSECRET'
+  }));
+  await assertFails(db.ref(live+'/water').set({
+    levelCm:10.5,status:'WARNING'
+  }));
+  await assertFails(db.ref(live+'/system').set({
+    lastUpdate:1234567890,overallRisk:'LOW'
+  }));
+  await assertFails(db.ref('/floodguard/deviceAuthorization/device-demo-a').update({
+    enabled:false
+  }));
+  await env.withSecurityRulesDisabled(async admin=>{
+    const stored=(await admin.database().ref(live+'/water/levelCm').get()).val();
+    if(stored!==9.65)throw Error('Denied mixed PATCH changed demo water level');
+  });
+});
