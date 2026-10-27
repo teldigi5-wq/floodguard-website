@@ -67,3 +67,6 @@ jobs:
 
       - name: Verify narrowly authorized authenticated RTDB publisher role
         run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-narrow-publisher --config firebase.phase-b-narrow-lab.json "FG_NARROW_PUBLISHER_EMULATOR_TEST=1 node --test tests/narrow-publisher-rules-emulator.mjs"
+
+      - name: Verify signed receipt to narrow authenticated publisher transaction
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-narrow-signed-bridge --config firebase.phase-b-narrow-lab.json "FG_NARROW_SIGNED_BRIDGE_TEST=1 node --test tests/narrow-signed-publisher-emulator.mjs"
