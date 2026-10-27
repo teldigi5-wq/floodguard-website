@@ -271,6 +271,11 @@ test('replayed signed and persisted frame does not advance the checkpoint twice'
 test('issuer module cannot write Firebase, issue network listeners or use Admin SDK',()=>{
   const s=readFileSync('experiments/read-only-staging-attestor-emulator.mjs','utf8');
   assert.doesNotMatch(s,/firebase-admin|serviceAccount|node:https|node:http/);
-  assert.doesNotMatch(s,/\.set\s*\(|\.update\s*\(|\.transaction\s*\(|\.listen\s*\(/);
+  // Node crypto hash.update is required to pin enrolled public keys.
+  // Deny only Firebase mutation, transaction and listener methods.
+  assert.doesNotMatch(s,/\b(?:database|db|ref)\.(?:set|update|transaction)\s*\(/);
+  assert.doesNotMatch(s,/\.ref\([^)]*\)\.(?:set|update|transaction)\s*\(/);
+  assert.doesNotMatch(s,/\b(?:writeFileSync|spawnSync|execSync)\s*\(/);
+  assert.doesNotMatch(s,/\.listen\s*\(/);
   assert.match(s,/database\.ref\(path\)\.get\(\)/);
 });
