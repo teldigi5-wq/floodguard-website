@@ -28,6 +28,8 @@ on:
       - 'firebase.phase-b-narrow-lab.json'
       - 'tests/narrow-publisher-rules-emulator.mjs'
       - 'experiments/signed-narrow-publisher-emulator.mjs'
+      - 'experiments/synthetic-publication-attestation.mjs'
+      - 'tests/synthetic-publication-attestation.test.mjs'
       - 'tests/narrow-signed-publisher-emulator.mjs'
       - '.github/workflows/firebase-phase-b-prototype.yml'
   workflow_dispatch:
