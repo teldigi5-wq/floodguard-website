@@ -31,6 +31,10 @@ on:
       - 'experiments/synthetic-publication-attestation.mjs'
       - 'tests/synthetic-publication-attestation.test.mjs'
       - 'tests/narrow-signed-publisher-emulator.mjs'
+      - 'docs/firebase/phase-b-attestor-lab.rules.json'
+      - 'firebase.phase-b-attestor-lab.json'
+      - 'experiments/read-only-staging-attestor-emulator.mjs'
+      - 'tests/read-only-staging-attestor-emulator.mjs'
       - '.github/workflows/firebase-phase-b-prototype.yml'
   workflow_dispatch:
 
@@ -72,3 +76,6 @@ jobs:
 
       - name: Verify signed receipt to narrow authenticated publisher transaction
         run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-narrow-signed-bridge --config firebase.phase-b-narrow-lab.json "FG_NARROW_SIGNED_BRIDGE_TEST=1 node --test tests/narrow-signed-publisher-emulator.mjs"
+
+      - name: Verify read-only signed staging attestor and scoped publisher end-to-end
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-read-only-attestor --config firebase.phase-b-attestor-lab.json "FG_READ_ONLY_ATTESTOR_TEST=1 FG_NARROW_SIGNED_BRIDGE_TEST=1 node --test tests/read-only-staging-attestor-emulator.mjs"
