@@ -10,7 +10,7 @@ import {spawnSync} from 'node:child_process';
 import {generateKeyPairSync,sign,randomBytes} from 'node:crypto';
 import {once} from 'node:events';
 import {createStage7OfflineLedger,canonicalOfflineEnvelope} from '../experiments/stage7-durable-ingress.mjs';
-import {createLoopbackSignedIngressHandler,LOOPBACK_INGEST_PATH} from '../experiments/loopback-signed-https-ingress.mjs';
+import {createLoopbackSignedIngressHandler,LOOPBACK_INGEST_PATH,REPLAY_LEDGER_BOOTSTRAP_DEVICE,REPLAY_LEDGER_BOOTSTRAP_FINGERPRINT} from '../experiments/loopback-signed-https-ingress.mjs';
 
 let dir,server,port,ca;
 let ledger,registry,device,clock,ready=true;
@@ -33,6 +33,13 @@ before(async()=>{
   ca=fs.readFileSync(path.join(dir,'fixture.crt'));
   device=generateKeyPairSync('ed25519');
   ledger=createStage7OfflineLedger({directory:dir,integrityKey:randomBytes(32)});
+  // Explicitly commissioned before enabling transport; the request handler
+  // cannot silently recreate this independent ledger marker after file loss.
+  const seeded=ledger.commit({
+    uid:REPLAY_LEDGER_BOOTSTRAP_DEVICE,epoch:1,sequence:1,
+    keyFingerprint:REPLAY_LEDGER_BOOTSTRAP_FINGERPRINT
+  });
+  assert.equal(seeded.accepted,true);
   registry=new Map([[uid,{
     enabled:true,scope:'prototype-ingest-v1',epoch:1,publicKey:device.publicKey
   }]]);
@@ -138,4 +145,18 @@ test('restart with same HMAC key is required for replay history, not an anonymou
   assert.match(source,/ledgerAvailable\(\)/);
   assert.match(source,/ledger\.commit\(/);
   assert.equal(ledger.last(uid).sequence,2);
+});
+
+test('lost canonical ledger after successful ingest is blocked, never treated as first startup',async()=>{
+  assert.equal(ledger.last(uid).sequence,2);
+  fs.unlinkSync(path.join(dir,'stage7-synthetic-ledger.json'));
+  // A faulty always-true readiness callback does NOT bypass the independent
+  // precommissioned HMAC-sealed record requirement in the handler.
+  ready=true;
+  const reply=await request({input:frame(3)});
+  assert.deepEqual(reply,{
+    status:503,payload:{accepted:false,status:'replay-ledger-unavailable'}
+  });
+  assert.equal(fs.existsSync(path.join(dir,'stage7-synthetic-ledger.json')),false,
+    'unavailable history must never be recreated by a network request');
 });
