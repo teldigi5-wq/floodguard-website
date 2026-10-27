@@ -11,7 +11,7 @@ import { onValue, ref, type Unsubscribe } from "firebase/database";
 import { z } from "zod";
 import { database, LIVE_PATH } from "@/lib/firebase";
 import { ageSeconds, classifyTelemetryFreshness, parseFieldTimestamp } from "@/lib/telemetry-health.mjs";
-import { isExplicitWaterFault, reconcileReportedGateStatus, reconcileWaterStatusWithoutMeasurement } from "@/lib/telemetry-safety.mjs";
+import { isExplicitWaterFault, reconcileReportedGateStatus, reconcileWaterStatusWithoutMeasurement, reconcileReportedRainStatus, reconcileDisplayedFloodRisk } from "@/lib/telemetry-safety.mjs";
 
 const shortText = z.string().max(80);
 const optionalNumber = (min: number, max: number) =>
@@ -157,27 +157,7 @@ function normalizeWaterGroup(source: Record<string, unknown>) {
   return { ...source, distanceCm: distance, levelCm, status };
 }
 
-function normalizeRainStatus(value: unknown, dailyMm?: unknown): string {
-  const state = upper(value);
-  if (["NORMAL", "HEAVY_RAIN", "FLOOD_WARNING", "EXTREME", "CRITICAL"].includes(state ?? "")) {
-    return state!;
-  }
-  // Compatibility for the brief firmware version that used ONLINE as the
-  // rain category. Derive a category only from a real numeric measurement.
-  if (state === "ONLINE" && typeof dailyMm === "number" && Number.isFinite(dailyMm)) {
-    if (dailyMm >= 300) return "CRITICAL";
-    if (dailyMm >= 200) return "EXTREME";
-    if (dailyMm >= 150) return "FLOOD_WARNING";
-    if (dailyMm >= 100) return "HEAVY_RAIN";
-    return "NORMAL";
-  }
-  if (["NOT_INSTALLED", "NOT INSTALLED", "REMOVED", "DISABLED"].includes(state ?? "")) {
-    return "NOT_INSTALLED";
-  }
-  return "UNKNOWN";
-}
-
-function normalizeGateStatus(value: unknown): string {
+ function normalizeGateStatus(value: unknown): string {
   const state = upper(value);
   if (["CLOSED", "COUNTDOWN", "OPENING", "OPEN", "CLOSING"].includes(state ?? "")) return state!;
   if (state === "OPENING_WARNING") return "COUNTDOWN";
@@ -215,7 +195,7 @@ function normalizeGroup(key: keyof Omit<LiveData, "esp8266">, value: unknown): u
   }
   if (key === "water") return normalizeWaterGroup(source);
   if (key === "rain") {
-    const status = normalizeRainStatus(source.status, source.dailyMm);
+    const status = reconcileReportedRainStatus({status:source.status,dailyMm:source.dailyMm});
     if (status === "UNKNOWN" || status === "NOT_INSTALLED") {
       return { ...source, status, currentMm: null, dailyMm: null, weightGrams: null };
     }
@@ -363,9 +343,22 @@ export function FloodProvider({ children }: { children: ReactNode }) {
     ageSeconds: age,
   });
 
-  const value = useMemo(
-    () => ({ data, freshness, age, lastUpdateMs: stamp, databaseConnected: connected, error }),
-    [data, freshness, age, stamp, connected, error],
-  );
+  // Merge source observations for display instead of trusting a standalone
+  // Firebase overallRisk=LOW. Never describe a stale snapshot as current.
+  const value = useMemo(() => {
+    const displayed: LiveData | null = data === null ? null : {
+      ...data,
+      system: {
+        ...(data.system ?? {}),
+        overallRisk: reconcileDisplayedFloodRisk({
+          waterStatus: data.water?.status,
+          rainStatus: data.rain?.status,
+          reportedRisk: data.system?.overallRisk,
+          freshness,
+        }),
+      },
+    };
+    return { data: displayed, freshness, age, lastUpdateMs: stamp, databaseConnected: connected, error };
+  }, [data, freshness, age, stamp, connected, error]);
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>;
 }
