@@ -13,6 +13,7 @@ The `experiments/strict-emulator-atomic-projector.mjs` function uses the **actua
 - Uses the tested Phase B signed projection planner with explicit freshness and replay checks.
 - Inside **one emulator RTDB transaction**, updates ONLY these five public child values: `live/water/distanceCm`, `live/water/levelCm`, `live/water/status`, `live/system/lastUpdate`, `live/system/overallRisk` (always `UNKNOWN`).
 - Atomically advances the private per-device publication checkpoint so duplicate/concurrent deliveries cannot advance or roll back readings. Existing gate, alarm, rainfall, ESP private metadata, identity and staging subtrees are preserved.
+- Rejects source-time rollback even when a device sequence increases or a different device is explicitly approved. The existing shared public `system.lastUpdate` must be a safe integer timestamp within the reviewed future-skew limit and the newly confirmed observation timestamp cannot be older. If another monitoring subsystem advances the shared timestamp first, this water-only publisher fails closed rather than misrepresenting an older observation as new; multi-sensor timestamp partitioning and merge semantics remain a production design task.
 - Aborts without mutation when checkpoints or confirmation records are missing, device enrollment is revoked, the staging frame differs, source clocks are stale, or a signed receipt is invalid.
 - Gives an explicit `OFFLINE_EMULATOR_PROJECTED_NOT_PRODUCTION` result, not a declaration of receipt, physical safety or public emergency alert delivery.
 
