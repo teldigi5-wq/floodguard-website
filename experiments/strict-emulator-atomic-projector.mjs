@@ -123,6 +123,20 @@ export async function publishStrictEmulatorFrame({
       if(!isRecord(water)||!isRecord(system)){
         reason='public-schema-unavailable';return;
       }
+      // A higher device sequence is NOT proof of a newer observation:
+      // clock rollback/reordered buffers or an authorized source handoff
+      // could otherwise move the shared public lastUpdate backwards.
+      // Check it in the same atomic transaction as the public change and
+      // per-device checkpoint, including after an operator source handoff.
+      const priorTime=system.lastUpdate;
+      const candidateTime=plan.proposedPublicChanges['system/lastUpdate'];
+      if(!Number.isSafeInteger(priorTime)||priorTime<0||
+         priorTime>nowMs+2000){
+        reason='public-timestamp-unavailable';return;
+      }
+      if(!Number.isSafeInteger(candidateTime)||candidateTime<priorTime){
+        reason='public-timestamp-regression';return;
+      }
       lastPlan=plan;
       const next={
         ...current,
