@@ -98,7 +98,7 @@
         ".read": false,
         ".write": false,
         "$deviceId": {
-          ".read": "auth != null && auth.uid === 'attestor-stage' && auth.token.fg_attest_ingest_v1 === true && root.child('floodguard/attestorLabAuthorization/attestor-stage/enabled').val() === true && root.child('floodguard/attestorLabAuthorization/attestor-stage/scope').val() === 'attestor-ingest-v1' && root.child('floodguard/attestorLabAuthorization/attestor-stage/deviceId').val() === $deviceId && root.child('floodguard/attestorLabAuthorization/attestor-stage/epoch').val() === 1",
+          ".read": "(auth != null && auth.uid === 'attestor-stage' && auth.token.fg_attest_ingest_v1 === true && root.child('floodguard/attestorLabAuthorization/attestor-stage/enabled').val() === true && root.child('floodguard/attestorLabAuthorization/attestor-stage/scope').val() === 'attestor-ingest-v1' && root.child('floodguard/attestorLabAuthorization/attestor-stage/deviceId').val() === $deviceId && root.child('floodguard/attestorLabAuthorization/attestor-stage/epoch').val() === 1) || (auth != null && auth.uid === 'confirmer-stage' && auth.token.fg_confirm_ingest_v1 === true && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/enabled').val() === true && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/scope').val() === 'confirmer-ingest-v1' && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/deviceId').val() === $deviceId && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/epoch').val() === 1)",
           ".write": false
         }
       },
