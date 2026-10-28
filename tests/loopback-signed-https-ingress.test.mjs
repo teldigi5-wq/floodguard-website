@@ -60,13 +60,14 @@ after(async()=>{
   if(dir)fs.rmSync(dir,{recursive:true,force:true});
 });
 function request({input,overrideSignature,method='POST',url=LOOPBACK_INGEST_PATH,
-  contentType='application/json',servername='localhost',trusted=true}={}){
+  contentType='application/json',servername='localhost',trusted=true,
+  targetPort=port}={}){
   const env=input??frame(1),body=JSON.stringify({
     envelope:env,signature:overrideSignature??signature(env)
   });
   return new Promise((resolve,reject)=>{
     const req=https.request({
-      hostname:'127.0.0.1',port,path:url,method,servername,
+      hostname:'127.0.0.1',port:targetPort,path:url,method,servername,
       ca:trusted?ca:undefined,rejectUnauthorized:true,agent:false,
       timeout:3000,headers:{'content-type':contentType,'content-length':Buffer.byteLength(body)}
     },res=>{
@@ -198,6 +199,70 @@ test('synthetic handler rejects unbounded body-read deadline settings',()=>{
       bodyReadDeadlineMs
     }),RangeError);
   }
+});
+
+// Each case gets a separate sealed ledger, so a deliberately flawed handler
+// cannot corrupt other tests or depend on production credentials.
+async function withLateAuthorizationFixture({clock:fixtureClock,ledgerAvailable},run){
+  const scratch=fs.mkdtempSync(path.join(dir,'late-ingress-'));
+  const isolated=createStage7OfflineLedger({
+    directory:scratch,integrityKey:randomBytes(32)
+  });
+  assert.equal(isolated.commit({
+    uid:REPLAY_LEDGER_BOOTSTRAP_DEVICE,epoch:1,sequence:1,
+    keyFingerprint:REPLAY_LEDGER_BOOTSTRAP_FINGERPRINT
+  }).accepted,true);
+  const handler=createLoopbackSignedIngressHandler({
+    identities:registry,ledger:isolated,
+    clock:fixtureClock,ledgerAvailable
+  });
+  const isolatedServer=https.createServer({
+    key:fs.readFileSync(path.join(dir,'fixture.key')),cert:ca,
+    minVersion:'TLSv1.2'
+  },(req,res)=>void handler(req,res));
+  try{
+    isolatedServer.listen(0,'127.0.0.1');
+    await once(isolatedServer,'listening');
+    await run(isolatedServer.address().port,isolated);
+  }finally{
+    if(isolatedServer.listening)
+      await new Promise(resolve=>isolatedServer.close(resolve));
+    fs.rmSync(scratch,{recursive:true,force:true});
+  }
+}
+
+test('post-body timestamp freshness is checked at acceptance, not before upload',async()=>{
+  let calls=0;
+  await withLateAuthorizationFixture({
+    clock:()=>++calls===1?now:now+31000,
+    ledgerAvailable:()=>true
+  },async (testPort,testLedger)=>{
+    // The signed envelope was fresh at connection start but is stale by the
+    // time the fully received request may be committed.
+    const response=await request({targetPort:testPort,input:frame(1)});
+    assert.deepEqual(response,{
+      status:422,payload:{accepted:false,status:'field-clock-unverified'}
+    });
+    assert.ok(calls>=2,'acceptance must sample an updated field clock');
+    assert.equal(testLedger.last(uid),null,
+      'expired telemetry must never consume a durable sequence');
+  });
+});
+
+test('replay-ledger authorization is rechecked after the full request body',async()=>{
+  let readiness=0;
+  await withLateAuthorizationFixture({
+    clock:()=>now,
+    ledgerAvailable:()=>++readiness===1
+  },async (testPort,testLedger)=>{
+    const response=await request({targetPort:testPort,input:frame(1)});
+    assert.deepEqual(response,{
+      status:503,payload:{accepted:false,status:'replay-ledger-unavailable'}
+    });
+    assert.equal(readiness,2,'the ledger readiness check must be repeated');
+    assert.equal(testLedger.last(uid),null,
+      'revoked ledger readiness must prevent signed frame acceptance');
+  });
 });
 
 test('lost canonical ledger after successful ingest is blocked, never treated as first startup',async()=>{
