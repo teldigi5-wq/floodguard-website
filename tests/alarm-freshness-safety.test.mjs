@@ -1,0 +1,72 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {reconcileDisplayedAlarmState} from '../lib/telemetry-safety.mjs';
+
+const state=(active,freshness='live')=>
+  reconcileDisplayedAlarmState({active,freshness});
+
+test('CLEAR requires explicit boolean false with live telemetry freshness',()=>{
+  assert.equal(state(false,'live'),'CLEAR');
+  assert.equal(state(true,'live'),'ACTIVE');
+});
+
+test('null, absent and malformed alarm values cannot be interpreted as CLEAR',()=>{
+  for(const active of [null,undefined,0,1,'false','true','CLEAR',{},[],NaN]){
+    assert.equal(state(active,'live'),'UNAVAILABLE');
+  }
+  assert.equal(reconcileDisplayedAlarmState({freshness:'live'}),'UNAVAILABLE');
+  assert.equal(reconcileDisplayedAlarmState({}),'UNAVAILABLE');
+});
+
+test('stale or disconnected false never displays a current clearance',()=>{
+  for(const freshness of ['stale','loading','unavailable',null,undefined,'unknown']){
+    assert.equal(state(false,freshness),'UNAVAILABLE');
+    assert.notEqual(state(false,freshness),'CLEAR');
+  }
+});
+
+test('stale ACTIVE remains a historical warning, not a live assertion',()=>{
+  assert.equal(state(true,'stale'),'LAST ACTIVE');
+  for(const freshness of ['loading','unavailable',null,undefined]){
+    assert.equal(state(true,freshness),'UNAVAILABLE');
+  }
+  assert.equal(state(null,'stale'),'UNAVAILABLE');
+});
+
+test('dashboard and shared quick metrics use same freshness-aware alarm policy',()=>{
+  const quick=readFileSync('components/page-kit.tsx','utf8');
+  const dashboard=readFileSync('app/dashboard/page.tsx','utf8');
+  for(const source of [quick,dashboard]){
+    assert.match(source,/reconcileDisplayedAlarmState\(\{active:data\?\.alarm\?\.active,freshness\}\)/);
+    assert.doesNotMatch(source,/data\?\.alarm\?\.active\?"ACTIVE":"CLEAR"/);
+    assert.doesNotMatch(source,/data\?\.alarm\?\.active===false\?"CLEAR"/);
+  }
+  assert.match(dashboard,/alarmGauge=alarmState==="ACTIVE"\?1:alarmState==="CLEAR"\?0:null/);
+  assert.match(dashboard,/value=\{alarmGauge\}/);
+  assert.match(dashboard,/display=\{alarmState\}/);
+  assert.match(quick,/title="Alarm" value=\{alarmState\}/);
+  assert.match(dashboard,/title="Alarm" value=\{alarmState\}/);
+});
+
+test('invalid or unreadable Firebase group updates remove cached group evidence',()=>{
+  const provider=readFileSync('providers/flood-provider.tsx','utf8');
+  const start=provider.indexOf('const publicSchemas = {');
+  const end=provider.indexOf('// The ESP node contains potentially private network details.');
+  const source=provider.slice(start,end);
+  assert.ok(start>=0&&end>start);
+  assert.match(source,/alarm: alarmSchema/);
+  assert.match(provider,/active: z\.boolean\(\)\.nullable\(\)\.optional\(\)/);
+  assert.match(source,/if \(!parsed\.success && raw !== null\)/);
+  assert.match(source,/setData\(\(previous\) => \{/);
+  assert.match(source,/delete \(next as Record<string, unknown>\)\[key\]/);
+  assert.equal(source.match(/delete \(next as Record<string, unknown>\)\[key\]/g)?.length,3,
+    'malformed payload, absent group and permission error must all clear old evidence');
+  assert.match(source,/if \(key === "water" \|\| key === "system"\)/);
+});
+
+test('alarm interpretation remains a pure read-only transformation',()=>{
+  const source=readFileSync('lib/telemetry-safety.mjs','utf8');
+  assert.match(source,/export function reconcileDisplayedAlarmState/);
+  assert.doesNotMatch(source,/firebase-admin|sendMessage\s*\(|gateCommand|node:https|node:http/);
+});
