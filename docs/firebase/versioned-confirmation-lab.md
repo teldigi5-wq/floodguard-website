@@ -15,6 +15,20 @@ Under `firebase.phase-b-versioned-confirmation-lab.json`, the isolated rules are
 - **Attestor** `attestor-stage` with `fg_attest_ingest_v1`: reads the specific immutable confirmed record and operator enrollment, verifies it against the device frame, signatures and receipt, and signs a short-lived confirmation. It does not rely on the mutable latest frame or write to Firebase.
 - **Publisher** `publisher-water-stage` with `fg_publish_water_v1`: verifies pinned receipt and attestation keys; atomically updates only `/floodguard/publicationLab/water`. Its write rule now checks *current* enrolled-device, confirmer and attestor enablement, protecting against publication using an earlier signed attestation after revocation.
 
+## Lost-acknowledgment and restart reconciliation
+
+A write-once confirmation can commit in Firebase even if the network response is lost. A blind retry would get `permission_denied` because the sequence record already exists, incorrectly signaling that the confirmed frame was never stored.
+
+The lab confirmer now has **read access to its own exact device/sequence confirmation record only**. Parent paths, other devices' records, and all confirmed-record mutations remain prohibited. After validating both signed source and receipt and current operator/device authorization, it can:
+- Find an existing record and **verify every expected field**, including the complete four-field frame, digest, timestamps, version, epoch and sequence.
+- Return `RECOVERED_IMMUTABLE_EMULATOR_RECORD_ONLY` when it matches, even after the device's mutable latest-stage pointer advances.
+- When an attempted write throws, reread that one immutable record. A matching persisted record permits an idempotent recovery; a contradictory record is `confirmed-record-conflict`.
+- Refuse success if it cannot establish an authentic matching record. Unreadable history returns `confirmed-record-outcome-unknown`, requiring human/operator reconciliation instead of declaring a non-existent or safe sensor reading.
+
+The recovery result is only a **local confirmation state**, not proof that downstream publication or WhatsApp delivery occurred. Recovered confirmation still requires a separate authorized attestor and a successful publisher transaction. Current revocation must not be bypassed by historical evidence.
+
+Emulator tests simulate a real database write followed by a thrown acknowledgment, a cold logical restart, concurrent duplicate confirmations, staged-frame advancement, fabricated record corruption, revocation and unavailable reads. The lab cannot prove outage semantics of real production Firebase without external fault-injection and authenticated device acceptance.
+
 ## Emulator coverage
 
 ```bash
