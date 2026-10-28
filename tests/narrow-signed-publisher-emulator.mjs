@@ -477,6 +477,63 @@ test('untrusted or expired message cannot recover a snapshot merely by matching 
   assert.deepEqual(await readWater(),before);
 });
 
+test('silent initial snapshot stream times out, detaches and never attempts publication',async()=>{
+  let listeners=0,detaches=0,reads=0,writes=0;
+  const silent={
+    ref(p){
+      assert.equal(p,pub,'never subscribe outside the scoped publication path');
+      return {
+        on:()=>{listeners++;}, // Simulates a listener with neither value nor error.
+        off:()=>{detaches++;},
+        get:async()=>{reads++;throw new Error('MUST_NOT_RECOVER_BEFORE_TRANSACTION');},
+        transaction:async()=>{writes++;throw new Error('MUST_NOT_WRITE');}
+      };
+    }
+  };
+  const publish=createSignedNarrowEmulatorPublisher({
+    database:silent,trustedReceiptKey:keyPair.publicKey,
+    trustedAttestationKey:persistedAttestor.publicKey,
+    clock:()=>now,initialSnapshotTimeoutMs:20
+  });
+  const before=await readWater();
+  assert.deepEqual(await publish(source()),{
+    published:false,reason:'publisher-outcome-unknown'
+  });
+  assert.equal(listeners,1);
+  assert.equal(detaches,1,'initial snapshot listener must be removed on timeout');
+  assert.equal(reads,0,'no pretransaction recovery read is justified');
+  assert.equal(writes,0,'never start a transaction without a verified initial snapshot');
+  assert.deepEqual(await readWater(),before);
+});
+
+test('initial snapshot callback failure never claims a prior match as recovered ACK',async()=>{
+  assert.equal((await project(source())).published,true);
+  const before=await readWater(); // Matches the signed candidate exactly.
+  const real=client();
+  let recoveryReads=0,writes=0,detaches=0;
+  const brokenInitialStream={
+    ref(p){
+      assert.equal(p,pub);
+      const actual=real.ref(p);
+      return {
+        on:(_event,_onValue,onError)=>onError(
+          new Error('SIMULATED_INITIAL_STREAM_FAILURE')
+        ),
+        off:()=>{detaches++;},
+        get:async()=>{recoveryReads++;return actual.get();},
+        transaction:async()=>{writes++;throw Error('MUST_NOT_WRITE');}
+      };
+    }
+  };
+  assert.deepEqual(await project(source(),brokenInitialStream),{
+    published:false,reason:'publisher-outcome-unknown'
+  });
+  assert.equal(recoveryReads,0,'a failed initial read is not a lost write acknowledgment');
+  assert.equal(writes,0);
+  assert.equal(detaches,1);
+  assert.deepEqual(await readWater(),before);
+});
+
 test('module cannot reference broad database root, Admin SDK or production keys',()=>{
   const s=readFileSync('experiments/signed-narrow-publisher-emulator.mjs','utf8');
   assert.match(s,/database\.ref\(PATH\)/);
