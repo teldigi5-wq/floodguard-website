@@ -49,6 +49,15 @@ test('dashboard and shared quick metrics use same freshness-aware alarm policy',
   assert.match(dashboard,/title="Alarm" value=\{alarmState\}/);
 });
 
+test('copied and downloaded observation preserve raw alarm flag and explicit freshness interpretation',()=>{
+  const source=readFileSync('components/status-snapshot.tsx','utf8');
+  assert.match(source,/displayState:reconcileDisplayedAlarmState\(\{active:data\?\.alarm\?\.active,freshness\}\)/);
+  assert.match(source,/active:data\?\.alarm\?\.active\?\?null/);
+  assert.match(source,/Alarm: \$\{s\.alarm\.displayState\}/);
+  assert.match(source,/JSON\.stringify\(snapshot\(\),null,2\)/);
+  assert.doesNotMatch(source,/s\.alarm\.active===false\?"CLEAR"/);
+});
+
 test('invalid or unreadable Firebase group updates remove cached group evidence',()=>{
   const provider=readFileSync('providers/flood-provider.tsx','utf8');
   const start=provider.indexOf('const publicSchemas = {');
