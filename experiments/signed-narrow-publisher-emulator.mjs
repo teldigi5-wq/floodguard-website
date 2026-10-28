@@ -19,6 +19,27 @@ const deny=reason=>Object.freeze({published:false,reason});
 const currentFields=['distanceCm','levelCm','status','observedAtMs','overallRisk'];
 const checkpointFields=['initialized','deviceId','epoch','sequence','digest','observedAtMs'];
 const requestFields=['envelope','receipt','signature','attestation','attestationSignature'];
+const sameSnapshot=(state,plan,envelope)=>{
+  // A checkpoint alone is NOT a proof of what public data was committed.
+  // Require the complete, exact fixed-schema current leaf AND checkpoint.
+  if(!exact(state,['current','checkpoint'])||
+     !exact(state.current,currentFields)||
+     !exact(state.checkpoint,checkpointFields)||
+     state.checkpoint.initialized!==true)return false;
+  const c=state.checkpoint,w=state.current,p=plan.proposedPublicChanges;
+  return c.deviceId===envelope.deviceId&&c.epoch===envelope.epoch&&
+    c.sequence===plan.sequence&&c.digest===plan.nextCheckpoint.digest&&
+    c.observedAtMs===p['system/lastUpdate']&&
+    w.distanceCm===p['water/distanceCm']&&
+    w.levelCm===p['water/levelCm']&&
+    w.status===p['water/status']&&
+    w.observedAtMs===p['system/lastUpdate']&&
+    w.overallRisk===p['system/overallRisk'];
+};
+const recovered=plan=>Object.freeze({
+  published:true,kind:'RECOVERED_SIGNED_NARROW_EMULATOR_ONLY',
+  sequence:plan.sequence
+});
 
 /**
  * The independent bootstrap supplies the two already-approved issuer keys
@@ -41,7 +62,17 @@ export function createSignedNarrowEmulatorPublisher({
     if(!exact(message,requestFields))
       return deny('invalid-request');
     const {envelope,receipt,signature,attestation,attestationSignature}=message;
-    let detach,reason='transaction-aborted',committedSequence;
+    let detach,reason='transaction-aborted',committedSequence,ref,verifiedPlan;
+    const recoverRead=async()=>{
+      // Server/cache availability and post-commit ordering cannot be assumed.
+      // Never retry the transaction and never infer success from exceptions.
+      try{
+        const value=(await ref.get()).val();
+        return sameSnapshot(value,verifiedPlan,envelope)
+          ? recovered(verifiedPlan)
+          : deny('publisher-outcome-unknown');
+      }catch{return deny('publisher-outcome-unknown');}
+    };
     try{
       // Trust is verified without looking at the caller's claimed registry
       // or confirmation record. No per-message key/issuer overrides exist.
@@ -50,7 +81,26 @@ export function createSignedNarrowEmulatorPublisher({
         publicKey:trustedAttestationKey,receipt,nowMs:clock()
       }))return deny('confirmed-attestation-unverified');
 
-      const ref=database.ref(PATH);
+      // Verify the real receipt signature, envelope digest, freshness and
+      // independently attested database claim before ANY recovery result.
+      // This is a pure synthetic validation plan, NOT a database write.
+      const registryBinding={
+        deviceId:attestation.deviceId,epoch:attestation.epoch,
+        enabled:attestation.deviceEnabled,scope:attestation.scope
+      };
+      const databaseRecord={
+        deviceId:attestation.deviceId,epoch:attestation.epoch,
+        sequence:attestation.sequence,digest:attestation.digest,
+        acceptedAtMs:attestation.acceptedAtMs,status:attestation.databaseState
+      };
+      verifiedPlan=planStrictSyntheticPublicProjection({
+        envelope,receipt,signature,trustedReceiptKey,registryBinding,
+        databaseRecord,lastPublished:{initialized:false},nowMs:clock()
+      });
+      if(verifiedPlan.allowed!==true)
+        return deny(verifiedPlan.reason??'publication-evidence-unverified');
+
+      ref=database.ref(PATH);
       const initial=await new Promise((resolve,reject)=>{
         let received=false;
         const onValue=snap=>{if(!received){received=true;resolve(snap);}};
@@ -58,6 +108,10 @@ export function createSignedNarrowEmulatorPublisher({
         ref.on('value',onValue,reject);
       });
       if(!initial.exists())return deny('publication-state-unavailable');
+      // A restarted worker recognizes its *exact* previously published
+      // snapshot without attempting a duplicate write or resetting replay.
+      if(sameSnapshot(initial.val(),verifiedPlan,envelope))
+        return recovered(verifiedPlan);
       const txn=await ref.transaction(state=>{
         if(!exact(state,['current','checkpoint'])||
            !exact(state.current,currentFields)||
@@ -135,9 +189,12 @@ export function createSignedNarrowEmulatorPublisher({
         sequence:committedSequence
       });
     }catch{
-      // Transport loss after commit means UNKNOWN outcome. A separate,
-      // authorized durable checkpoint reconciliation is required.
-      return deny('publisher-outcome-unknown');
+      // A transport failure may occur after RTDB COMMITTED the update but
+      // before the SDK reports success. Read only our already scoped
+      // publication subtree; exact checkpoint AND visible values must match.
+      // A missing/advanced/conflicting/unreadable record is UNKNOWN.
+      return ref&&verifiedPlan?.allowed===true
+        ?await recoverRead():deny('publisher-outcome-unknown');
     }finally{
       if(detach)detach();
     }
