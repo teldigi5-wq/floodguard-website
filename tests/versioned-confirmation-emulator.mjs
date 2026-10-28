@@ -152,7 +152,8 @@ test('immutable record cannot be overwritten or removed by confirmer after first
   assert.equal((await makeConfirmer()(item)).ok,true);
   const initial=await get(base+'/2');
   assert.deepEqual(await makeConfirmer()(item),{
-    ok:false,reason:'confirmed-record-write-denied'
+    ok:true,kind:'RECOVERED_IMMUTABLE_EMULATOR_RECORD_ONLY',
+    deviceId:uid,sequence:2,digest:item.receipt.digest
   });
   await assertFails(confirmer().ref(base+'/2').remove());
   await assertFails(confirmer().ref(base+'/2/frame/risk').set('SAFE'));
@@ -287,9 +288,123 @@ test('isolated record is write-once even with concurrent identical submissions',
   const results=await Promise.all([
     makeConfirmer()(item),makeConfirmer()(item)
   ]);
-  assert.equal(results.filter(x=>x.ok).length,1);
-  assert.equal(results.filter(x=>!x.ok).length,1);
+  assert.equal(results.filter(x=>x.ok).length,2);
+  assert.equal(results.filter(x=>x.kind==='IMMUTABLE_EMULATOR_RECORD_ONLY').length,1);
+  assert.equal(results.filter(x=>x.kind==='RECOVERED_IMMUTABLE_EMULATOR_RECORD_ONLY').length,1);
   assert.equal((await get(base+'/2')).digest,item.receipt.digest);
+});
+
+
+test('lost confirmation acknowledgment is reconciled from a matching durable record',async()=>{
+  await stage();
+  const request=evidence();
+  let committed=false;
+  const droppedAckDb={
+    ref(path){
+      const ref=confirmer().ref(path);
+      if(path!==base+'/2')return ref;
+      return {
+        get:()=>ref.get(),
+        set:async value=>{
+          await ref.set(value);
+          committed=true;
+          throw new Error('SIMULATED_ACK_DROPPED_AFTER_COMMIT');
+        }
+      };
+    }
+  };
+  const outcome=await makeConfirmer(droppedAckDb)(request);
+  assert.equal(committed,true);
+  assert.deepEqual(outcome,{
+    ok:true,kind:'RECOVERED_IMMUTABLE_EMULATOR_RECORD_ONLY',
+    deviceId:uid,sequence:2,digest:request.receipt.digest
+  });
+  assert.equal((await get(base+'/2')).digest,request.receipt.digest);
+  // Publishing happens only after the independent attestor confirms the
+  // record exists: a repaired write acknowledgment does not publish itself.
+  const checked=await makeAttestor()(request);
+  assert.equal(checked.ok,true);
+  const result=await makePublisher()({
+    envelope:request.envelope,receipt:request.receipt,
+    signature:request.receiptSignature,
+    attestation:checked.attestation,
+    attestationSignature:checked.attestationSignature
+  });
+  assert.equal(result.published,true);
+  assert.equal((await get(water+'/checkpoint')).sequence,2);
+});
+
+test('restart reconciles exactly matching record even after mutable staging advances',async()=>{
+  await stage();const request=evidence();
+  assert.equal((await makeConfirmer()(request)).ok,true);
+  await stage(frame(3,'DANGER'));
+  const original=await get(base+'/2');
+  const resumed=await makeConfirmer()(request);
+  assert.deepEqual(resumed,{
+    ok:true,kind:'RECOVERED_IMMUTABLE_EMULATOR_RECORD_ONLY',
+    deviceId:uid,sequence:2,digest:request.receipt.digest
+  });
+  assert.deepEqual(await get(base+'/2'),original);
+  assert.equal((await get(root+'/staging/ingestV1/'+uid)).sequence,3);
+});
+
+test('conflicting and partially corrupted confirmed records never recover as success',async()=>{
+  await stage();const request=evidence();
+  assert.equal((await makeConfirmer()(request)).ok,true);
+  const baseline=await get(base+'/2');
+  for(const modified of [
+    {...baseline,digest:'f'.repeat(64)},
+    {...baseline,acceptedAtMs:baseline.acceptedAtMs+1},
+    {...baseline,frame:{...baseline.frame,risk:'DANGER'}},
+    {...baseline,extra:true},
+    {...baseline,frame:{sequence:2}}
+  ]){
+    await set(base+'/2',modified); // operator test bypass, simulates corruption
+    const result=await makeConfirmer()(request);
+    assert.deepEqual(result,{ok:false,reason:'confirmed-record-conflict'});
+    assert.deepEqual(await get(base+'/2'),modified);
+  }
+});
+
+test('revoked operator or device never reconciles historical confirmation',async()=>{
+  await stage();const request=evidence();
+  assert.equal((await makeConfirmer()(request)).ok,true);
+  await set(root+'/deviceAuthorization/'+uid+'/enabled',false);
+  const blocked=await makeConfirmer()(request);
+  assert.equal(blocked.ok,false);
+  await set(root+'/deviceAuthorization/'+uid+'/enabled',true);
+  await set(root+'/confirmerLabAuthorization/confirmer-stage/enabled',false);
+  const revoked=await makeConfirmer()(request);
+  assert.equal(revoked.ok,false);
+  assert.equal((await get(base+'/2')).digest,request.receipt.digest);
+});
+
+test('only own immutable record is readable by confirmer; parents, other devices and writes denied',async()=>{
+  await stage();const request=evidence();
+  assert.equal((await makeConfirmer()(request)).ok,true);
+  await assertSucceeds(confirmer().ref(base+'/2').get());
+  for(const path of [
+    base,root+'/confirmedLab',root+'/confirmedLab/records',
+    root+'/confirmedLab/records/device-stage-b/2',
+    root+'/publicationLab/water/checkpoint',root+'/bot'
+  ])await assertFails(confirmer().ref(path).get());
+  await assertFails(confirmer().ref(base+'/2').remove());
+  await assertFails(confirmer().ref(base+'/2/frame/risk').set('DANGER'));
+});
+
+test('unreadable recovery history is explicitly uncertain, not declared a fresh write',async()=>{
+  await stage();const request=evidence();
+  const inaccessibleDb={
+    ref(path){
+      const ref=confirmer().ref(path);
+      if(path!==base+'/2')return ref;
+      return {get:async()=>{throw new Error('SIMULATED_READ_OUTAGE');},
+        set:async()=>{throw new Error('SIMULATED_CONNECTION_DROPPED');}};
+    }
+  };
+  const result=await makeConfirmer(inaccessibleDb)(request);
+  assert.deepEqual(result,{ok:false,reason:'confirmed-record-outcome-unknown'});
+  assert.equal(await get(base+'/2'),null);
 });
 
 test('versioned prototype module cannot mutate unrelated paths or open network services',()=>{
