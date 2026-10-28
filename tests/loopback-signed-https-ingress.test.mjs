@@ -11,6 +11,7 @@ import {generateKeyPairSync,sign,randomBytes} from 'node:crypto';
 import {once} from 'node:events';
 import {createStage7OfflineLedger,canonicalOfflineEnvelope} from '../experiments/stage7-durable-ingress.mjs';
 import {createLoopbackSignedIngressHandler,LOOPBACK_INGEST_PATH,REPLAY_LEDGER_BOOTSTRAP_DEVICE,REPLAY_LEDGER_BOOTSTRAP_FINGERPRINT} from '../experiments/loopback-signed-https-ingress.mjs';
+import {createOperatorDeviceRegistryLab} from '../experiments/operator-device-registry-lab.mjs';
 
 let dir,server,port,ca;
 let ledger,registry,device,clock,ready=true;
@@ -262,6 +263,66 @@ test('replay-ledger authorization is rechecked after the full request body',asyn
     assert.equal(readiness,2,'the ledger readiness check must be repeated');
     assert.equal(testLedger.last(uid),null,
       'revoked ledger readiness must prevent signed frame acceptance');
+  });
+});
+
+async function withSealedOperatorIngress(run){
+  const scratch=fs.mkdtempSync(path.join(dir,'operator-https-'));
+  const registryKey=randomBytes(32);
+  const makeRegistry=()=>createOperatorDeviceRegistryLab({
+    directory:scratch,integrityKey:registryKey
+  });
+  const operator=makeRegistry();
+  operator.commission();
+  operator.enroll(uid,device.publicKey);
+  const replay=createStage7OfflineLedger({
+    directory:scratch,integrityKey:randomBytes(32)
+  });
+  assert.equal(replay.commit({
+    uid:REPLAY_LEDGER_BOOTSTRAP_DEVICE,epoch:1,sequence:1,
+    keyFingerprint:REPLAY_LEDGER_BOOTSTRAP_FINGERPRINT
+  }).accepted,true);
+  const handler=createLoopbackSignedIngressHandler({
+    identities:operator,ledger:replay,ledgerAvailable:()=>true,clock:()=>now
+  });
+  const operatorServer=https.createServer({
+    key:fs.readFileSync(path.join(dir,'fixture.key')),cert:ca,minVersion:'TLSv1.2'
+  },(req,res)=>void handler(req,res));
+  try{
+    operatorServer.listen(0,'127.0.0.1');
+    await once(operatorServer,'listening');
+    await run({targetPort:operatorServer.address().port,operator,replay,makeRegistry,scratch});
+  }finally{
+    if(operatorServer.listening)
+      await new Promise(resolve=>operatorServer.close(resolve));
+    fs.rmSync(scratch,{recursive:true,force:true});
+  }
+}
+test('real TLS ingress uses commissioned operator identity; durable revocation blocks signed updates',async()=>{
+  await withSealedOperatorIngress(async({targetPort,operator,replay,makeRegistry})=>{
+    assert.deepEqual(await request({targetPort,input:frame(1)}),{
+      status:201,payload:{accepted:true,status:'LOCAL_LEDGER_ACCEPTED_ONLY'}
+    });
+    assert.equal(replay.last(uid).sequence,1);
+    assert.equal(operator.revoke(uid).revoked,true);
+    assert.equal(makeRegistry().get(uid).enabled,false);
+    assert.deepEqual(await request({targetPort,input:frame(2)}),{
+      status:403,payload:{accepted:false,status:'device-not-authorized'}
+    });
+    assert.equal(replay.last(uid).sequence,1,
+      'revoked source cannot consume a second replay sequence');
+  });
+});
+test('tampered persistent operator registry rejects TLS uploads without touching replay history',async()=>{
+  await withSealedOperatorIngress(async({targetPort,replay,scratch})=>{
+    const file=path.join(scratch,'operator-device-registry-lab.json');
+    const original=fs.readFileSync(file,'utf8');
+    assert.match(original,/"enabled":true/);
+    fs.writeFileSync(file,original.replace('"enabled":true','"enabled":false'));
+    assert.deepEqual(await request({targetPort,input:frame(1)}),{
+      status:503,payload:{accepted:false,status:'operator-registry-unavailable'}
+    });
+    assert.equal(replay.last(uid),null);
   });
 });
 
