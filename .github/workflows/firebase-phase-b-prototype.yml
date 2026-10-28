@@ -16,6 +16,9 @@ on:
       - 'experiments/signed-staging-emulator-writer.mjs'
       - 'tests/signed-staging-emulator.mjs'
       - 'tests/authority-only-signed-staging-emulator.mjs'
+      - 'tests/dual-authority-staging-emulator.mjs'
+      - 'experiments/signed-staging-approval-emulator.mjs'
+      - 'firebase.phase-b-dual-authority.json'
       - 'firebase.phase-b-authority-only.json'
       - 'experiments/stage8-ack-reconciliation.mjs'
       - 'tests/stage8-ack-reconciliation.test.mjs'
@@ -81,6 +84,9 @@ jobs:
 
       - name: Verify authority-only RTDB staging rules and signed evidence
         run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-authority-only-ingest --config firebase.phase-b-authority-only.json "FG_SIGNED_STAGING_BRIDGE_TEST=1 FG_TRUSTED_INGEST_AUTHORITY_TEST=1 node --test tests/authority-only-signed-staging-emulator.mjs"
+
+      - name: Verify separate evidence verifier approval and staging authority RTDB rules
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-dual-authority-ingest --config firebase.phase-b-dual-authority.json "FG_SIGNED_STAGING_BRIDGE_TEST=1 FG_DUAL_AUTHORITY_TEST=1 node --test tests/dual-authority-staging-emulator.mjs"
 
       - name: Verify emulator-only signed-to-public atomic projector
         run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-strict-projector --config firebase.phase-b-strict.json "FG_STRICT_EMULATOR_PROJECTOR_TEST=1 node --test tests/strict-emulator-atomic-projector.mjs"
