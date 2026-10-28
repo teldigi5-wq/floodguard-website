@@ -306,6 +306,177 @@ test('new later signed and confirmed frame can advance but not alter existing li
   assert.deepEqual(after.bot,before.bot);
 });
 
+
+test('lost publisher acknowledgment AFTER actual RTDB commit recovers exact snapshot and checkpoint',async()=>{
+  let committed=false,transactionAttempts=0;
+  const genuine=client();
+  const simulatedLostAck={
+    ref(p){
+      const actual=genuine.ref(p);
+      if(p!==pub)return actual;
+      return {
+        on:(...args)=>actual.on(...args),
+        off:(...args)=>actual.off(...args),
+        get:()=>actual.get(),
+        async transaction(...args){
+          transactionAttempts++;
+          const result=await actual.transaction(...args);
+          if(result.committed){
+            committed=true;
+            throw new Error('SIMULATED_PUBLISHER_ACK_LOST_AFTER_COMMIT');
+          }
+          return result;
+        }
+      };
+    }
+  };
+  const before=await readRoot();
+  const result=await project(source(),simulatedLostAck);
+  assert.equal(committed,true);
+  assert.equal(transactionAttempts,1);
+  assert.deepEqual(result,{
+    published:true,kind:'RECOVERED_SIGNED_NARROW_EMULATOR_ONLY',sequence:2
+  });
+  const after=await readRoot();
+  assert.equal(after.publicationLab.water.checkpoint.sequence,2);
+  assert.equal(after.publicationLab.water.checkpoint.digest,source().receipt.digest);
+  assert.equal(after.publicationLab.water.current.status,'WARNING');
+  assert.equal(after.publicationLab.water.current.observedAtMs,now-400);
+  assert.deepEqual(after.live,before.live);
+  assert.deepEqual(after.bot,before.bot);
+  assert.deepEqual(after.staging,before.staging);
+});
+
+test('restart after exact persisted publication does not attempt a second transaction',async()=>{
+  assert.equal((await project(source())).kind,'SIGNED_NARROW_EMULATOR_ONLY');
+  const before=await readWater();
+  let called=false;
+  const real=client();
+  const mustNotWrite={
+    ref(p){
+      const actual=real.ref(p);
+      return {
+        on:(...a)=>actual.on(...a),
+        off:(...a)=>actual.off(...a),
+        get:()=>actual.get(),
+        transaction:async()=>{
+          called=true;throw new Error('REPLAY_MUST_NOT_ATTEMPT_WRITE');
+        }
+      };
+    }
+  };
+  assert.deepEqual(await project(source(),mustNotWrite),{
+    published:true,kind:'RECOVERED_SIGNED_NARROW_EMULATOR_ONLY',sequence:2
+  });
+  assert.equal(called,false);
+  assert.deepEqual(await readWater(),before);
+});
+
+test('precommit failure with no persisted matching snapshot remains unknown and never retries',async()=>{
+  let attempts=0;
+  const real=client();
+  const droppedBeforeCommit={
+    ref(p){
+      const actual=real.ref(p);
+      return {
+        on:(...a)=>actual.on(...a),
+        off:(...a)=>actual.off(...a),
+        get:()=>actual.get(),
+        transaction:async()=>{attempts++;throw new Error('NO_COMMIT_HAPPENED');}
+      };
+    }
+  };
+  const before=await readWater();
+  const outcome=await project(source(),droppedBeforeCommit);
+  assert.deepEqual(outcome,{published:false,reason:'publisher-outcome-unknown'});
+  assert.equal(attempts,1,'unknown result must not trigger another write');
+  assert.deepEqual(await readWater(),before);
+});
+
+test('ambiguous commit with unreadable persisted snapshot is UNKNOWN, not reported published',async()=>{
+  const real=client();
+  let committed=false;
+  const unavailableRead={
+    ref(p){
+      const actual=real.ref(p);
+      return {
+        on:(...a)=>actual.on(...a),
+        off:(...a)=>actual.off(...a),
+        get:async()=>{throw new Error('SIMULATED_CHECKPOINT_READ_OUTAGE');},
+        transaction:async(...a)=>{
+          const result=await actual.transaction(...a);
+          if(result.committed){
+            committed=true;
+            throw new Error('SIMULATED_ACK_LOST');
+          }
+          return result;
+        }
+      };
+    }
+  };
+  const result=await project(source(),unavailableRead);
+  assert.equal(committed,true);
+  assert.deepEqual(result,{published:false,reason:'publisher-outcome-unknown'});
+  assert.equal((await readWater()).checkpoint.sequence,2,
+    'real persistence and response confidence are separate');
+});
+
+test('mismatched or corrupted public snapshot is never accepted as recovered publication',async()=>{
+  assert.equal((await project(source())).published,true);
+  const valid=await readWater();
+  const forgedStates=[
+    {...valid,current:{...valid.current,status:'DANGER'}},
+    {...valid,current:{...valid.current,distanceCm:15}},
+    {...valid,current:{...valid.current,overallRisk:'LOW'}},
+    {...valid,current:{...valid.current,observedAtMs:valid.current.observedAtMs+1}},
+    {...valid,checkpoint:{...valid.checkpoint,digest:'f'.repeat(64)}},
+    {...valid,checkpoint:{...valid.checkpoint,sequence:3}},
+    {...valid,checkpoint:{...valid.checkpoint,observedAtMs:valid.checkpoint.observedAtMs+1}},
+    {...valid,current:{...valid.current,extra:'inject'}},
+    {...valid,checkpoint:{...valid.checkpoint,extra:true}},
+    {current:valid.current},
+    null
+  ];
+  // This is a controlled emulator-only privileged fixture which simulates a
+  // corrupted persisted record, NEVER a permitted publisher operation.
+  for(const state of forgedStates){
+    await adminSet(pub,state);
+    const real=client();
+    const failTransaction={
+      ref(p){
+        const actual=real.ref(p);
+        return {
+          on:(...a)=>actual.on(...a),
+          off:(...a)=>actual.off(...a),
+          get:()=>actual.get(),
+          transaction:async()=>{throw new Error('SIMULATED_AMBIGUOUS_OUTCOME');}
+        };
+      }
+    };
+    const result=await project(source(),failTransaction);
+    assert.notEqual(result.kind,'RECOVERED_SIGNED_NARROW_EMULATOR_ONLY');
+    assert.equal(result.published,false);
+  }
+});
+
+test('untrusted or expired message cannot recover a snapshot merely by matching sequence',async()=>{
+  assert.equal((await project(source())).published,true);
+  const before=await readWater();
+  const impostor=generateKeyPairSync('ed25519');
+  const forged=source(2,now-400,{signingKey:impostor.privateKey});
+  assert.equal((await project(forged)).published,false);
+  const old=source(2,now-400);
+  const late=createSignedNarrowEmulatorPublisher({
+    database:client(),trustedReceiptKey:keyPair.publicKey,
+    trustedAttestationKey:persistedAttestor.publicKey,
+    clock:()=>now+6000
+  });
+  assert.deepEqual(await late(old),{
+    published:false,reason:'confirmed-attestation-unverified'
+  });
+  assert.deepEqual(await readWater(),before);
+});
+
 test('module cannot reference broad database root, Admin SDK or production keys',()=>{
   const s=readFileSync('experiments/signed-narrow-publisher-emulator.mjs','utf8');
   assert.match(s,/database\.ref\(PATH\)/);
