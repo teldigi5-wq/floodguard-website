@@ -5,10 +5,12 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {generateKeyPairSync,randomBytes} from 'node:crypto';
+import {generateKeyPairSync,randomBytes,createHash} from 'node:crypto';
+import {createStage7OfflineLedger} from '../experiments/stage7-durable-ingress.mjs';
 import {createOperatorDeviceRegistryLab} from '../experiments/operator-device-registry-lab.mjs';
 
 const uid='device-stage-a',uid2='device-stage-b';
+const fp=key=>createHash('sha256').update(key.export({format:'der',type:'spki'})).digest('hex');
 function fixture(run){
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),'floodguard-operator-registry-'));
   const integrityKey=randomBytes(32);
@@ -42,10 +44,13 @@ test('revocation persists across independent registry instances and refuses impl
   assert.equal(make().status().revision,3);
 }));
 
-test('staged rotation stays disabled until explicit epoch activation',()=>fixture(({make})=>{
+test('staged rotation stays disabled until exact sealed replay checkpoint agrees',()=>fixture(({make,directory})=>{
   const registry=make(),first=generateKeyPairSync('ed25519');
-  const next=generateKeyPairSync('ed25519');
+  const next=generateKeyPairSync('ed25519'),oldFp=fp(first.publicKey),newFp=fp(next.publicKey);
+  const replay=createStage7OfflineLedger({directory,integrityKey:randomBytes(32)});
   registry.commission();registry.enroll(uid,first.publicKey);
+  assert.deepEqual(replay.commit({uid,epoch:1,sequence:7,keyFingerprint:oldFp}),
+    {accepted:true,sequence:7});
   assert.throws(()=>registry.stageRotation(uid,next.publicKey),/requires revoked/);
   registry.revoke(uid);
   assert.throws(()=>registry.stageRotation(uid,first.publicKey),/requires revoked/);
@@ -56,10 +61,29 @@ test('staged rotation stays disabled until explicit epoch activation',()=>fixtur
   assert.equal(make().get(uid).epoch,2);
   assert.equal(make().get(uid).publicKey.export({format:'pem',type:'spki'}),
     next.publicKey.export({format:'pem',type:'spki'}));
-  assert.throws(()=>make().activateStaged(uid,1),/mismatch/);
-  assert.deepEqual(make().activateStaged(uid,2),{activated:true,deviceId:uid,epoch:2});
+  assert.throws(()=>make().activateStaged(uid,2),/independent sealed replay ledger/);
+  assert.throws(()=>make().activateStaged(uid,1,{replayLedger:replay,expectedSequence:7}),
+    /mismatch/);
+  assert.throws(()=>make().activateStaged(uid,2,{replayLedger:replay,expectedSequence:7}),
+    /not independently confirmed/);
+  assert.equal(registry.get(uid).enabled,false);
+  assert.deepEqual(replay.rebind({
+    uid,expected:{epoch:1,sequence:7,keyFingerprint:oldFp},
+    next:{epoch:2,keyFingerprint:newFp},operatorRegistry:make()
+  }),{rebound:true,kind:'OFFLINE_OPERATOR_REBIND_ONLY',epoch:2,sequence:7});
+  assert.deepEqual(replay.last(uid),{epoch:2,sequence:7,keyFingerprint:newFp});
+  assert.throws(()=>make().activateStaged(uid,2,{replayLedger:replay,expectedSequence:6}),
+    /not independently confirmed/);
+  assert.deepEqual(make().activateStaged(uid,2,{replayLedger:replay,expectedSequence:7}),
+    {activated:true,deviceId:uid,epoch:2});
   assert.equal(registry.get(uid).enabled,true);
-  assert.throws(()=>registry.activateStaged(uid,2),/mismatch/);
+  assert.deepEqual(replay.commit({uid,epoch:1,sequence:8,keyFingerprint:oldFp}),
+    {accepted:false,reason:'identity-epoch-mismatch'});
+  assert.deepEqual(replay.commit({uid,epoch:2,sequence:7,keyFingerprint:newFp}),
+    {accepted:false,reason:'replay-or-out-of-order'});
+  assert.deepEqual(replay.commit({uid,epoch:2,sequence:8,keyFingerprint:newFp}),
+    {accepted:true,sequence:8});
+  assert.throws(()=>registry.activateStaged(uid,2,{replayLedger:replay,expectedSequence:8}),/mismatch/);
 }));
 
 test('duplicate device public keys cannot be reused for another device',()=>fixture(({make})=>{
