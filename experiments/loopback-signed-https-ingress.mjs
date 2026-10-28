@@ -40,12 +40,15 @@ function fingerprint(publicKey){
  * establish that replay history exists, all ingress must fail closed.
  */
 export function createLoopbackSignedIngressHandler({
-  identities,ledger,ledgerAvailable,clock=Date.now
+  identities,ledger,ledgerAvailable,clock=Date.now,bodyReadDeadlineMs=10000
 }={}) {
   if(!(identities instanceof Map)||!ledger||
      typeof ledger.commit!=='function'||typeof ledger.last!=='function'||
      typeof ledgerAvailable!=='function'||typeof clock!=='function')
     throw new TypeError('Explicit identity, sequence ledger and readiness required');
+  if(!Number.isSafeInteger(bodyReadDeadlineMs)||
+     bodyReadDeadlineMs<50||bodyReadDeadlineMs>30000)
+    throw new RangeError('Bounded synthetic body-read deadline required');
 
   return async function localIngress(req,res){
     // No reliance on X-Forwarded-For, X-Forwarded-Proto or request body for TLS.
@@ -81,6 +84,12 @@ export function createLoopbackSignedIngressHandler({
     }
 
     let total=0,body;
+    // A verified TLS client can still stall an incomplete chunked upload.
+    // Enforce an absolute body-read deadline, not a resettable idle timeout.
+    // On deadline close the incomplete socket; no ledger commit is possible.
+    const deadline=setTimeout(()=>{
+      if(!req.destroyed)req.destroy(new Error('synthetic-body-read-deadline'));
+    },bodyReadDeadlineMs);
     try{
       const chunks=[];
       for await(const chunk of req){
@@ -92,7 +101,11 @@ export function createLoopbackSignedIngressHandler({
       }
       body=JSON.parse(Buffer.concat(chunks).toString('utf8'));
     }catch{
+      // Destroyed requests cannot reliably receive an HTTP error response.
+      // The client must treat a connection reset as an unacknowledged write.
       respond(res,400,'invalid-request');return;
+    }finally{
+      clearTimeout(deadline);
     }
     if(!exact(body,['envelope','signature'])||typeof body.signature!=='string'||
        !SIG.test(body.signature)){
