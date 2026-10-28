@@ -111,12 +111,14 @@ export function createSignedNarrowEmulatorPublisher({
           if(finished)return;
           finished=true;
           clearTimeout(timer);
-          // A disconnected emulator may never deliver either callback.
-          // Detach promptly, even on timeout or registration failure.
-          try{if(detach)detach();}catch{/* Fail closed below. */}
-          detach=undefined;
-          if(error)reject(error);
-          else resolve(snapshot);
+          // Preserve the value listener after a successful first snapshot:
+          // the RTDB SDK transaction needs its initialized local cache.
+          // On error/timeout, detach immediately and fail closed instead.
+          if(error){
+            try{if(detach)detach();}catch{/* Fail closed below. */}
+            detach=undefined;
+            reject(error);
+          }else resolve(snapshot);
         };
         const onValue=snap=>finish(null,snap);
         detach=()=>ref.off('value',onValue);
