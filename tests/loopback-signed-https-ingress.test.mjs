@@ -147,6 +147,59 @@ test('restart with same HMAC key is required for replay history, not an anonymou
   assert.equal(ledger.last(uid).sequence,2);
 });
 
+test('stalled authenticated loopback TLS upload is cut off without a ledger commit',async()=>{
+  // The synthetic listener never binds publicly; this exercises a real TLS
+  // socket whose JSON body starts but whose chunked request never finishes.
+  const before=ledger.last(uid).sequence;
+  const handler=createLoopbackSignedIngressHandler({
+    identities:registry,ledger,clock,ledgerAvailable:()=>ready,
+    bodyReadDeadlineMs:120
+  });
+  const stalledServer=https.createServer({
+    key:fs.readFileSync(path.join(dir,'fixture.key')),cert:ca,
+    minVersion:'TLSv1.2'
+  },(req,res)=>void handler(req,res));
+  try{
+    stalledServer.listen(0,'127.0.0.1');
+    await once(stalledServer,'listening');
+    const stalledPort=stalledServer.address().port;
+    const result=await new Promise(resolve=>{
+      const req=https.request({
+        hostname:'127.0.0.1',port:stalledPort,path:LOOPBACK_INGEST_PATH,
+        method:'POST',servername:'localhost',ca,
+        rejectUnauthorized:true,agent:false,
+        headers:{'content-type':'application/json'},
+        timeout:3000
+      },res=>{
+        res.resume();
+        res.once('end',()=>resolve({status:res.statusCode}));
+      });
+      req.once('error',error=>resolve({error:error.code||error.message}));
+      req.once('timeout',()=>req.destroy(new Error('client-deadline-exceeded')));
+      req.write('{"envelope":');
+      // Deliberately never call req.end(); the server must terminate the body.
+    });
+    assert.equal(result.error,'ECONNRESET',
+      'server must terminate the stalled TLS stream before the client timeout');
+    assert.equal(ledger.last(uid).sequence,before,
+      'a partial signed body must never advance replay history');
+  }finally{
+    if(stalledServer.listening)
+      await new Promise(resolve=>stalledServer.close(resolve));
+  }
+  assert.equal((await request({input:frame(before+1)})).status,201,
+    'a later complete request still works on the separate original server');
+});
+
+test('synthetic handler rejects unbounded body-read deadline settings',()=>{
+  for(const bodyReadDeadlineMs of [0,49,30001,Infinity,NaN,1.5,'5000']){
+    assert.throws(()=>createLoopbackSignedIngressHandler({
+      identities:registry,ledger,clock,ledgerAvailable:()=>ready,
+      bodyReadDeadlineMs
+    }),RangeError);
+  }
+});
+
 test('lost canonical ledger after successful ingest is blocked, never treated as first startup',async()=>{
   assert.equal(ledger.last(uid).sequence,2);
   fs.unlinkSync(path.join(dir,'stage7-synthetic-ledger.json'));
