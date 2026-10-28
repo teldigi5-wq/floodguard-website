@@ -264,7 +264,9 @@ test('replayed signed and persisted frame does not advance the checkpoint twice'
   assert.equal((await forward(data)).published.published,true);
   const afterFirst=await read(publication);
   const second=await forward(data);
-  assert.equal(second.published.published,false);
+  assert.deepEqual(second.published,{
+    published:true,kind:'RECOVERED_SIGNED_NARROW_EMULATOR_ONLY',sequence:2
+  });
   assert.deepEqual(await read(publication),afterFirst);
 });
 
