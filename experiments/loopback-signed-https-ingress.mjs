@@ -32,9 +32,10 @@ function fingerprint(publicKey){
   return createHash('sha256').update(publicKey.export({format:'der',type:'spki'})).digest('hex');
 }
 /**
- * identities: operator-supplied Map UID -> {publicKey,epoch,scope,enabled}.
- * No HTTP route can create/revoke a binding. Registry MUST come from an
- * independently secured, durable operator store before real-world use.
+ * identities: operator-supplied Map OR offline operator registry with a
+ * read-only get(deviceId) returning {publicKey,epoch,scope,enabled}.
+ * No HTTP route can create/revoke a binding. The injected registry is
+ * trusted application setup, NOT a device-supplied identity claim.
  * ledger: Stage 7 synthetic HMAC-sealed offline sequence ledger.
  * ledgerAvailable: independently supplied readiness check; when it cannot
  * establish that replay history exists, all ingress must fail closed.
@@ -42,8 +43,10 @@ function fingerprint(publicKey){
 export function createLoopbackSignedIngressHandler({
   identities,ledger,ledgerAvailable,clock=Date.now,bodyReadDeadlineMs=10000
 }={}) {
-  if(!(identities instanceof Map)||!ledger||
-     typeof ledger.commit!=='function'||typeof ledger.last!=='function'||
+  if((!(identities instanceof Map)&&
+      !(identities&&typeof identities.get==='function'&&
+        typeof identities.status==='function'&&Object.isFrozen(identities)))||
+     !ledger||typeof ledger.commit!=='function'||typeof ledger.last!=='function'||
      typeof ledgerAvailable!=='function'||typeof clock!=='function')
     throw new TypeError('Explicit identity, sequence ledger and readiness required');
   if(!Number.isSafeInteger(bodyReadDeadlineMs)||
@@ -136,7 +139,12 @@ export function createLoopbackSignedIngressHandler({
     if(!DEVICE.test(deviceId)||deviceId===REPLAY_LEDGER_BOOTSTRAP_DEVICE){
       respond(res,403,'device-not-authorized');return;
     }
-    const binding=identities.get(deviceId);
+    // A corrupted/unavailable operator registry is not an unknown device:
+    // return service unavailable rather than throwing or accepting stale
+    // cached enrollment. This read occurs AFTER the bounded body.
+    let binding;
+    try{binding=identities.get(deviceId);}
+    catch{respond(res,503,'operator-registry-unavailable');return;}
     if(!binding||binding.enabled!==true||
        binding.scope!=='prototype-ingest-v1'||
        binding.epoch!==body.envelope.epoch||
