@@ -18,6 +18,12 @@ The ONLY success outcome is 201 with status LOCAL_LEDGER_ACCEPTED_ONLY. This is 
 
 Run: node --test tests/loopback-signed-https-ingress.test.mjs
 
+## Bounded incomplete request-body handling — 28 October 2026
+
+The test-only handler now accepts a trusted bootstrap setting `bodyReadDeadlineMs` (10 seconds by default; integer range 50–30,000 ms). A real, authenticated loopback TLS client can still send an incomplete chunked POST indefinitely unless the application bounds its body reader. An **absolute** read deadline now destroys an unfinished TLS request instead of relying on an idle timeout that a drip-feeding client could repeatedly reset. The replay ledger is touched only after the complete, size-limited, schema-validated and signed envelope is read. A timed-out request can surface to the client as a connection reset rather than a guaranteed HTTP status; callers must treat this as **unknown**, not retry with a new sequence or claim that it was committed.
+
+The Node regression exercises a genuinely established local TLS connection with a partial body that never ends and asserts a bounded connection reset, unchanged persisted sequence, and that a separate valid signed request continues to receive its normal replay-denial status. It also rejects unbounded deadline configuration. This only bounds reading of the request body in the isolated localhost experiment; it does **not** prove bounded execution of arbitrary operator readiness callbacks, disk I/O, TLS handshakes, Firebase operations, or behavior under a real ESP8266/network. A production ingress still needs independent end-to-end deadline budgets, resource limits, rate limiting, authenticated credential lifecycle and real-cloud durability tests.
+
 ## Stop conditions before any production use
 
 1. Privately inspect the actual flashed ESP8266 revision, TLS library, upload paths, clock and credential storage. No firmware repo/revision was found among the three FloodGuard repositories; do NOT reflash or reset the currently working unit without owner approval.
