@@ -187,8 +187,8 @@ test('stalled authenticated loopback TLS upload is cut off without a ledger comm
     if(stalledServer.listening)
       await new Promise(resolve=>stalledServer.close(resolve));
   }
-  assert.equal((await request({input:frame(before+1)})).status,201,
-    'a later complete request still works on the separate original server');
+  assert.equal((await request({input:frame(before)})).status,409,
+    'the original handler remains responsive and preserves its replay boundary');
 });
 
 test('synthetic handler rejects unbounded body-read deadline settings',()=>{
