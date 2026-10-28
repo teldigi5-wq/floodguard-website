@@ -48,13 +48,16 @@ const recovered=plan=>Object.freeze({
  * by the isolated RTDB Security Rules. No production client is created.
  */
 export function createSignedNarrowEmulatorPublisher({
-  database,trustedReceiptKey,trustedAttestationKey,clock
+  database,trustedReceiptKey,trustedAttestationKey,clock,
+  initialSnapshotTimeoutMs=5000
 }={}) {
   if(!database||typeof database.ref!=='function'||
      !publicEd25519(trustedReceiptKey)||
      !publicEd25519(trustedAttestationKey)||
-     typeof clock!=='function')
-    throw new TypeError('Explicit scoped emulator client, two trusted issuer keys and clock required');
+     typeof clock!=='function'||
+     !Number.isSafeInteger(initialSnapshotTimeoutMs)||
+     initialSnapshotTimeoutMs<10||initialSnapshotTimeoutMs>30000)
+    throw new TypeError('Explicit scoped emulator client, keys, clock and bounded initial-snapshot timeout required');
   return async function publish(message) {
     if(process.env.FG_NARROW_SIGNED_BRIDGE_TEST!=='1'||
        process.env.FIREBASE_DATABASE_EMULATOR_HOST!==EMULATOR)
@@ -63,6 +66,7 @@ export function createSignedNarrowEmulatorPublisher({
       return deny('invalid-request');
     const {envelope,receipt,signature,attestation,attestationSignature}=message;
     let detach,reason='transaction-aborted',committedSequence,ref,verifiedPlan;
+    let transactionAttempted=false;
     const recoverRead=async()=>{
       // Server/cache availability and post-commit ordering cannot be assumed.
       // Never retry the transaction and never infer success from exceptions.
@@ -102,16 +106,33 @@ export function createSignedNarrowEmulatorPublisher({
 
       ref=database.ref(PATH);
       const initial=await new Promise((resolve,reject)=>{
-        let received=false;
-        const onValue=snap=>{if(!received){received=true;resolve(snap);}};
+        let finished=false,timer;
+        const finish=(error,snapshot)=>{
+          if(finished)return;
+          finished=true;
+          clearTimeout(timer);
+          // A disconnected emulator may never deliver either callback.
+          // Detach promptly, even on timeout or registration failure.
+          try{if(detach)detach();}catch{/* Fail closed below. */}
+          detach=undefined;
+          if(error)reject(error);
+          else resolve(snapshot);
+        };
+        const onValue=snap=>finish(null,snap);
         detach=()=>ref.off('value',onValue);
-        ref.on('value',onValue,reject);
+        timer=setTimeout(()=>finish(new Error('initial-snapshot-timeout')),
+          initialSnapshotTimeoutMs);
+        try{ref.on('value',onValue,error=>finish(
+          error||new Error('initial-snapshot-unavailable')
+        ));}
+        catch(error){finish(error);}
       });
       if(!initial.exists())return deny('publication-state-unavailable');
       // A restarted worker recognizes its *exact* previously published
       // snapshot without attempting a duplicate write or resetting replay.
       if(sameSnapshot(initial.val(),verifiedPlan,envelope))
         return recovered(verifiedPlan);
+      transactionAttempted=true;
       const txn=await ref.transaction(state=>{
         if(!exact(state,['current','checkpoint'])||
            !exact(state.current,currentFields)||
@@ -193,7 +214,9 @@ export function createSignedNarrowEmulatorPublisher({
       // before the SDK reports success. Read only our already scoped
       // publication subtree; exact checkpoint AND visible values must match.
       // A missing/advanced/conflicting/unreadable record is UNKNOWN.
-      return ref&&verifiedPlan?.allowed===true
+      // A failed INITIAL read is not a lost transaction acknowledgment.
+      // Reconcile only after a transaction was actually attempted.
+      return transactionAttempted&&ref&&verifiedPlan?.allowed===true
         ?await recoverRead():deny('publisher-outcome-unknown');
     }finally{
       if(detach)detach();
