@@ -86,6 +86,89 @@ test('staged rotation stays disabled until exact sealed replay checkpoint agrees
   assert.throws(()=>registry.activateStaged(uid,2,{replayLedger:replay,expectedSequence:8}),/mismatch/);
 }));
 
+test('rebind refuses active identities, forged checkpoints, skipped epochs and wrong fingerprints',()=>fixture(({make,directory})=>{
+  const operator=make(),original=generateKeyPairSync('ed25519'),next=generateKeyPairSync('ed25519');
+  const oldFp=fp(original.publicKey),newFp=fp(next.publicKey);
+  const replay=createStage7OfflineLedger({directory,integrityKey:randomBytes(32)});
+  operator.commission();operator.enroll(uid,original.publicKey);
+  replay.commit({uid,epoch:1,sequence:19,keyFingerprint:oldFp});
+  const request=(expected={epoch:1,sequence:19,keyFingerprint:oldFp},
+    following={epoch:2,keyFingerprint:newFp})=>({
+      uid,expected,next:following,operatorRegistry:make()
+    });
+  assert.deepEqual(replay.rebind(request()),{
+    rebound:false,reason:'staged-identity-unverified'
+  });
+  operator.revoke(uid);operator.stageRotation(uid,next.publicKey);
+  for(const bad of [
+    request({epoch:1,sequence:18,keyFingerprint:oldFp}),
+    request({epoch:1,sequence:19,keyFingerprint:'e'.repeat(64)}),
+    request({epoch:2,sequence:19,keyFingerprint:oldFp})
+  ]){
+    assert.deepEqual(replay.rebind(bad),{
+      rebound:false,reason:'prior-ledger-binding-mismatch'
+    });
+  }
+  for(const bad of [
+    request(undefined,{epoch:3,keyFingerprint:newFp}),
+    request(undefined,{epoch:2,keyFingerprint:oldFp}),
+    request(undefined,{epoch:2,keyFingerprint:'d'.repeat(64)})
+  ])assert.throws(()=>replay.rebind(bad),/Exact prior checkpoint|staged/);
+  assert.deepEqual(replay.last(uid),{epoch:1,sequence:19,keyFingerprint:oldFp});
+  assert.equal(operator.get(uid).enabled,false);
+}));
+
+test('offline rotation crash after ledger rebind remains disabled until explicit recovery',()=>fixture(({make,directory})=>{
+  const registry=make(),old=generateKeyPairSync('ed25519'),fresh=generateKeyPairSync('ed25519');
+  const replayKey=randomBytes(32);
+  const ledger=()=>createStage7OfflineLedger({directory,integrityKey:replayKey});
+  registry.commission();registry.enroll(uid,old.publicKey);
+  ledger().commit({uid,epoch:1,sequence:41,keyFingerprint:fp(old.publicKey)});
+  registry.revoke(uid);registry.stageRotation(uid,fresh.publicKey);
+  assert.deepEqual(ledger().rebind({
+    uid,expected:{epoch:1,sequence:41,keyFingerprint:fp(old.publicKey)},
+    next:{epoch:2,keyFingerprint:fp(fresh.publicKey)},operatorRegistry:registry
+  }),{rebound:true,kind:'OFFLINE_OPERATOR_REBIND_ONLY',epoch:2,sequence:41});
+  // Simulated process restart: no activation happened before the crash.
+  assert.equal(make().get(uid).enabled,false);
+  assert.deepEqual(ledger().commit({uid,epoch:2,sequence:42,keyFingerprint:fp(old.publicKey)}),
+    {accepted:false,reason:'identity-epoch-mismatch'});
+  assert.deepEqual(ledger().rebind({
+    uid,expected:{epoch:1,sequence:41,keyFingerprint:fp(old.publicKey)},
+    next:{epoch:2,keyFingerprint:fp(fresh.publicKey)},operatorRegistry:make()
+  }),{rebound:false,reason:'prior-ledger-binding-mismatch'});
+  assert.deepEqual(make().activateStaged(uid,2,{replayLedger:ledger(),expectedSequence:41}),
+    {activated:true,deviceId:uid,epoch:2});
+  assert.equal(make().get(uid).enabled,true);
+  assert.deepEqual(ledger().last(uid),{
+    epoch:2,sequence:41,keyFingerprint:fp(fresh.publicKey)
+  });
+}));
+
+test('missing or tampered replay ledger blocks staged activation; no implicit recovery',()=>fixture(({make,directory})=>{
+  const registry=make(),old=generateKeyPairSync('ed25519'),fresh=generateKeyPairSync('ed25519');
+  const replay=createStage7OfflineLedger({directory,integrityKey:randomBytes(32)});
+  registry.commission();registry.enroll(uid,old.publicKey);
+  replay.commit({uid,epoch:1,sequence:11,keyFingerprint:fp(old.publicKey)});
+  registry.revoke(uid);registry.stageRotation(uid,fresh.publicKey);
+  replay.rebind({
+    uid,expected:{epoch:1,sequence:11,keyFingerprint:fp(old.publicKey)},
+    next:{epoch:2,keyFingerprint:fp(fresh.publicKey)},operatorRegistry:make()
+  });
+  const file=path.join(directory,'stage7-synthetic-ledger.json');
+  const original=fs.readFileSync(file,'utf8');
+  fs.writeFileSync(file,original.replace('"sequence":11','"sequence":1'));
+  assert.throws(()=>make().activateStaged(uid,2,{
+    replayLedger:replay,expectedSequence:11
+  }),/integrity failure/);
+  assert.equal(make().get(uid).enabled,false);
+  fs.unlinkSync(file);
+  assert.throws(()=>make().activateStaged(uid,2,{
+    replayLedger:replay,expectedSequence:11
+  }),/not independently confirmed/);
+  assert.equal(make().get(uid).enabled,false);
+}));
+
 test('duplicate device public keys cannot be reused for another device',()=>fixture(({make})=>{
   const r=make(),same=generateKeyPairSync('ed25519'),other=generateKeyPairSync('ed25519');
   r.commission();r.enroll(uid,same.publicKey);
