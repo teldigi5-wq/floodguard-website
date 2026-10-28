@@ -115,6 +115,50 @@ export function createStage7OfflineLedger({directory,integrityKey}={}){
       return withLock(state=>({write:false,result:state.records[uid]?
         {...state.records[uid]}:null}));
     },
+    // Offline operator-only compare-and-swap binding. The highest previously
+    // accepted sequence is PRESERVED across key/epoch rotation; no replay
+    // counter reset, HTTP caller, firmware fallback or implicit enrollment.
+    rebind({uid,expected,next,operatorRegistry}={}){
+      if(!DEVICE.test(uid)||uid==='device-stage-bootstrap'||
+         !exact(expected,['epoch','sequence','keyFingerprint'])||
+         !exact(next,['epoch','keyFingerprint'])||
+         !validInteger(expected.epoch,1,9999)||
+         !validInteger(expected.sequence,1,2147483647)||
+         !/^[0-9a-f]{64}$/.test(expected.keyFingerprint)||
+         next.epoch!==expected.epoch+1||
+         !/^[0-9a-f]{64}$/.test(next.keyFingerprint)||
+         next.keyFingerprint===expected.keyFingerprint||
+         !operatorRegistry||typeof operatorRegistry.get!=='function'||
+         typeof operatorRegistry.status!=='function'||
+         !Object.isFrozen(operatorRegistry))
+        throw new TypeError('Exact prior checkpoint and disabled staged operator identity required');
+      // A public key is an operator-owned trust anchor, not caller-supplied
+      // JSON. The staged identity must already be REVOKED/DISABLED.
+      const binding=operatorRegistry.get(uid);
+      if(!binding||binding.enabled!==false||
+         binding.scope!=='prototype-ingest-v1'||
+         binding.epoch!==next.epoch||
+         !(binding.publicKey instanceof KeyObject)||
+         binding.publicKey.type!=='public'||
+         binding.publicKey.asymmetricKeyType!=='ed25519'||
+         fingerprint(binding.publicKey)!==next.keyFingerprint)
+        return {rebound:false,reason:'staged-identity-unverified'};
+      return withLock(state=>{
+        const current=state.records[uid];
+        if(!current||current.epoch!==expected.epoch||
+           current.sequence!==expected.sequence||
+           current.keyFingerprint!==expected.keyFingerprint)
+          return {write:false,result:{rebound:false,reason:'prior-ledger-binding-mismatch'}};
+        state.records[uid]={
+          epoch:next.epoch,sequence:current.sequence,
+          keyFingerprint:next.keyFingerprint
+        };
+        return {write:true,result:{
+          rebound:true,kind:'OFFLINE_OPERATOR_REBIND_ONLY',
+          epoch:next.epoch,sequence:current.sequence
+        }};
+      });
+    },
     commit({uid,epoch,sequence,keyFingerprint}){
       if(!DEVICE.test(uid)||!validInteger(epoch,1,10000)
         ||!validInteger(sequence,1,2147483647)||!/^[0-9a-f]{64}$/.test(keyFingerprint))
