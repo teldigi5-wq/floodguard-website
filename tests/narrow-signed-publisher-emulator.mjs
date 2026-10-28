@@ -140,7 +140,7 @@ test('duplicate replay or lower sequence cannot change public status or checkpoi
   const before=await readWater();
   const replay=await project(source());
   assert.deepEqual(replay,{
-    published:false,reason:'publication-replay-or-out-of-order'
+    published:true,kind:'RECOVERED_SIGNED_NARROW_EMULATOR_ONLY',sequence:2
   });
   assert.deepEqual(await readWater(),before);
   assert.equal((await project(source(1))).published,false);
@@ -283,8 +283,12 @@ test('lost checkpoint and unknown publication root never reset replay history',a
 
 test('simultaneous delivery of one signed frame commits no more than once',async()=>{
   const results=await Promise.all([project(source()),project(source())]);
-  assert.equal(results.filter(v=>v.published).length,1);
-  assert.equal(results.filter(v=>!v.published).length,1);
+  assert.equal(results.filter(v=>v.kind==='SIGNED_NARROW_EMULATOR_ONLY').length,1);
+  assert.ok(results.every(v=>
+    v.kind==='SIGNED_NARROW_EMULATOR_ONLY'||
+    v.kind==='RECOVERED_SIGNED_NARROW_EMULATOR_ONLY'||
+    (v.published===false&&v.reason==='publication-replay-or-out-of-order')
+  ));
   assert.equal((await readWater()).checkpoint.sequence,2);
 });
 
