@@ -13,6 +13,8 @@ on:
       - 'experiments/offline-ingestion-gateway.mjs'
       - 'experiments/stage7-durable-ingress.mjs'
       - 'tests/stage7-durable-ingress.test.mjs'
+      - 'experiments/signed-staging-emulator-writer.mjs'
+      - 'tests/signed-staging-emulator.mjs'
       - 'experiments/stage8-ack-reconciliation.mjs'
       - 'tests/stage8-ack-reconciliation.test.mjs'
       - 'experiments/stage9-downstream-outbox.mjs'
@@ -71,6 +73,9 @@ jobs:
 
       - name: Verify strict read-only public telemetry and private authenticated staging
         run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-floodguard-strict --config firebase.phase-b-strict.json "FG_PHASE_B_STRICT_TEST=1 node --test tests/phase-b-strict-emulator.mjs"
+
+      - name: Verify signature- and receipt-gated scoped staging client writes
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-floodguard-strict --config firebase.phase-b-strict.json "FG_SIGNED_STAGING_BRIDGE_TEST=1 node --test tests/signed-staging-emulator.mjs"
 
       - name: Verify emulator-only signed-to-public atomic projector
         run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-strict-projector --config firebase.phase-b-strict.json "FG_STRICT_EMULATOR_PROJECTOR_TEST=1 node --test tests/strict-emulator-atomic-projector.mjs"
