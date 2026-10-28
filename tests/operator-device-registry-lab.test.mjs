@@ -111,9 +111,11 @@ test('rebind refuses active identities, forged checkpoints, skipped epochs and w
   }
   for(const bad of [
     request(undefined,{epoch:3,keyFingerprint:newFp}),
-    request(undefined,{epoch:2,keyFingerprint:oldFp}),
-    request(undefined,{epoch:2,keyFingerprint:'d'.repeat(64)})
-  ])assert.throws(()=>replay.rebind(bad),/Exact prior checkpoint|staged/);
+    request(undefined,{epoch:2,keyFingerprint:oldFp})
+  ])assert.throws(()=>replay.rebind(bad),/Exact prior checkpoint/);
+  assert.deepEqual(replay.rebind(request(undefined,{
+    epoch:2,keyFingerprint:'d'.repeat(64)
+  })),{rebound:false,reason:'staged-identity-unverified'});
   assert.deepEqual(replay.last(uid),{epoch:1,sequence:19,keyFingerprint:oldFp});
   assert.equal(operator.get(uid).enabled,false);
 }));
