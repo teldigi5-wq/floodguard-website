@@ -7,7 +7,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import https from 'node:https';
 import {spawnSync} from 'node:child_process';
-import {generateKeyPairSync,sign,randomBytes} from 'node:crypto';
+import {generateKeyPairSync,sign,randomBytes,createHash} from 'node:crypto';
 import {once} from 'node:events';
 import {createStage7OfflineLedger,canonicalOfflineEnvelope} from '../experiments/stage7-durable-ingress.mjs';
 import {createLoopbackSignedIngressHandler,LOOPBACK_INGEST_PATH,REPLAY_LEDGER_BOOTSTRAP_DEVICE,REPLAY_LEDGER_BOOTSTRAP_FINGERPRINT} from '../experiments/loopback-signed-https-ingress.mjs';
@@ -313,6 +313,47 @@ test('real TLS ingress uses commissioned operator identity; durable revocation b
       'revoked source cannot consume a second replay sequence');
   });
 });
+test('operator rebind preserves replay sequence: old TLS identity revoked and new epoch only advances',async()=>{
+  await withSealedOperatorIngress(async({targetPort,operator,replay,makeRegistry})=>{
+    const first=await request({targetPort,input:frame(1)});
+    assert.equal(first.status,201);
+    const nextKey=generateKeyPairSync('ed25519');
+    const digest=publicKey=>createHash('sha256')
+      .update(publicKey.export({type:'spki',format:'der'})).digest('hex');
+    const originalFp=digest(device.publicKey),replacementFp=digest(nextKey.publicKey);
+    operator.revoke(uid);
+    operator.stageRotation(uid,nextKey.publicKey);
+    const newEnvelope={...frame(2),epoch:2};
+    const newSignature=sign(null,Buffer.from(canonicalOfflineEnvelope(newEnvelope)),
+      nextKey.privateKey).toString('base64url');
+    const proposed={targetPort,input:newEnvelope,overrideSignature:newSignature};
+    assert.equal((await request(proposed)).status,403,
+      'new staged key remains disabled before replay-ledger rebind');
+    assert.throws(()=>makeRegistry().activateStaged(uid,2,{
+      replayLedger:replay,expectedSequence:1
+    }),/not independently confirmed/);
+    assert.deepEqual(replay.rebind({
+      uid,expected:{epoch:1,sequence:1,keyFingerprint:originalFp},
+      next:{epoch:2,keyFingerprint:replacementFp},operatorRegistry:makeRegistry()
+    }),{rebound:true,kind:'OFFLINE_OPERATOR_REBIND_ONLY',epoch:2,sequence:1});
+    assert.equal((await request(proposed)).status,403,
+      'new key remains disabled until independent operator activation');
+    makeRegistry().activateStaged(uid,2,{replayLedger:replay,expectedSequence:1});
+    assert.equal((await request({targetPort,input:frame(2)})).status,403,
+      'retired epoch-1 key can never resume writes');
+    assert.deepEqual(await request(proposed),{
+      status:201,payload:{accepted:true,status:'LOCAL_LEDGER_ACCEPTED_ONLY'}
+    });
+    assert.equal(replay.last(uid).sequence,2);
+    assert.equal(replay.last(uid).epoch,2);
+    assert.equal((await request({...proposed,input:{...frame(1),epoch:2},
+      overrideSignature:sign(null,Buffer.from(canonicalOfflineEnvelope({
+        ...frame(1),epoch:2
+      })),nextKey.privateKey).toString('base64url')
+    })).status,409,'new epoch cannot replay prior accepted sequence');
+  });
+});
+
 test('tampered persistent operator registry rejects TLS uploads without touching replay history',async()=>{
   await withSealedOperatorIngress(async({targetPort,replay,scratch})=>{
     const file=path.join(scratch,'operator-device-registry-lab.json');
