@@ -52,6 +52,19 @@ function recordFor(envelope,receipt,digest){
     frame:{...envelope.frame}
   };
 }
+// Verify every field against the independently signed candidate. Never
+// accept a record merely because its device ID, sequence or digest matches.
+// An existing record cannot be rewritten, including after a lost ACK.
+function sameConfirmedRecord(stored,expected){
+  return exact(stored,KEYS) &&
+    KEYS.filter(k=>k!=='frame').every(k=>stored[k]===expected[k]) &&
+    exact(stored.frame,FRAME) &&
+    FRAME.every(k=>stored.frame[k]===expected.frame[k]);
+}
+const restored=(envelope,digest)=>Object.freeze({
+  ok:true,kind:'RECOVERED_IMMUTABLE_EMULATOR_RECORD_ONLY',
+  deviceId:envelope.deviceId,sequence:envelope.frame.sequence,digest
+});
 const fp=pub=>createHash('sha256')
   .update(pub.export({format:'der',type:'spki'})).digest('hex');
 function requireSetup(db,deviceId,devicePublicKey,receiptPublicKey,clock){
@@ -72,11 +85,14 @@ export function createVersionedEmulatorConfirmer({
     if(!evidence)return deny('source-or-receipt-unverified');
     const {envelope,receipt}=message;
     const base=ROOT+'/confirmedLab/records/'+deviceId+'/'+envelope.frame.sequence;
+    const candidate=recordFor(envelope,receipt,evidence.digest);
     try{
-      const [operator,auth,staged]=await Promise.all([
+      // Recheck the independent operator binding and active device before
+      // using historical data; an old confirmation must not defeat revocation.
+      const [operator,auth,existing]=await Promise.all([
         fixedRead(database,ROOT+'/confirmerLabAuthorization/confirmer-stage'),
         fixedRead(database,ROOT+'/deviceAuthorization/'+deviceId),
-        fixedRead(database,ROOT+'/staging/ingestV1/'+deviceId)
+        fixedRead(database,base)
       ]);
       if(!exact(operator,['enabled','scope','deviceId','epoch','deviceKeyFingerprint'])||
          operator.enabled!==true||operator.scope!=='confirmer-ingest-v1'||
@@ -84,16 +100,39 @@ export function createVersionedEmulatorConfirmer({
          operator.deviceKeyFingerprint!==fp(devicePublicKey)||
          !exact(auth,['enabled','scope'])||auth.enabled!==true||
          auth.scope!=='prototype-ingest-v1')return deny('operator-not-authorized');
+
+      // Allows restart after a lost response, including when staging has
+      // already advanced. Conflicting or malformed records are never treated
+      // as success. A live database read is required, not a caller claim.
+      if(existing!==null){
+        return sameConfirmedRecord(existing,candidate)
+          ?restored(envelope,evidence.digest)
+          :deny('confirmed-record-conflict');
+      }
+      const staged=await fixedRead(database,ROOT+'/staging/ingestV1/'+deviceId);
       if(!exact(staged,FRAME)||FRAME.some(k=>staged[k]!==envelope.frame[k]))
         return deny('staged-frame-mismatch');
-      const candidate=recordFor(envelope,receipt,evidence.digest);
-      // The Firebase rule atomically checks that the staged frame is
-      // STILL identical, device enabled, record absent and writer bound.
-      // A normal set fails if a second concurrent confirmer won.
-      await database.ref(base).set(candidate);
-      return Object.freeze({ok:true,kind:'IMMUTABLE_EMULATOR_RECORD_ONLY',
-        deviceId,sequence:envelope.frame.sequence,digest:evidence.digest});
-    }catch{return deny('confirmed-record-write-denied');}
+      try{
+        // Rules compare the current staged frame at write time and forbid
+        // rewriting even in a race with another confirmer.
+        await database.ref(base).set(candidate);
+        return Object.freeze({ok:true,kind:'IMMUTABLE_EMULATOR_RECORD_ONLY',
+          deviceId,sequence:envelope.frame.sequence,digest:evidence.digest});
+      }catch{
+        // A dropped ACK can occur AFTER a successful commit. Re-read the
+        // single allowlisted sequence path; never assume a failed request
+        // means data did not persist. Do not retry the write blindly.
+        try{
+          const persisted=await fixedRead(database,base);
+          if(persisted===null)return deny('confirmed-record-write-denied');
+          return sameConfirmedRecord(persisted,candidate)
+            ?restored(envelope,evidence.digest)
+            :deny('confirmed-record-conflict');
+        }catch{
+          return deny('confirmed-record-outcome-unknown');
+        }
+      }
+    }catch{return deny('confirmed-record-outcome-unknown');}
   };
 }
 
