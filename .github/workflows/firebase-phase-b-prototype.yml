@@ -35,6 +35,10 @@ on:
       - 'firebase.phase-b-attestor-lab.json'
       - 'experiments/read-only-staging-attestor-emulator.mjs'
       - 'tests/read-only-staging-attestor-emulator.mjs'
+      - 'docs/firebase/phase-b-versioned-confirmation-lab.rules.json'
+      - 'firebase.phase-b-versioned-confirmation-lab.json'
+      - 'experiments/versioned-confirmation-emulator.mjs'
+      - 'tests/versioned-confirmation-emulator.mjs'
       - '.github/workflows/firebase-phase-b-prototype.yml'
   workflow_dispatch:
 
@@ -79,3 +83,6 @@ jobs:
 
       - name: Verify read-only signed staging attestor and scoped publisher end-to-end
         run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-read-only-attestor --config firebase.phase-b-attestor-lab.json "FG_READ_ONLY_ATTESTOR_TEST=1 FG_NARROW_SIGNED_BRIDGE_TEST=1 node --test tests/read-only-staging-attestor-emulator.mjs"
+
+      - name: Verify versioned immutable confirmation and publication revocation gates
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-versioned-confirmation-lab --config firebase.phase-b-versioned-confirmation-lab.json "FG_VERSIONED_CONFIRMATION_TEST=1 FG_NARROW_SIGNED_BRIDGE_TEST=1 node --test tests/versioned-confirmation-emulator.mjs"
