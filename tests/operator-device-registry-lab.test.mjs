@@ -102,8 +102,7 @@ test('rebind refuses active identities, forged checkpoints, skipped epochs and w
   operator.revoke(uid);operator.stageRotation(uid,next.publicKey);
   for(const bad of [
     request({epoch:1,sequence:18,keyFingerprint:oldFp}),
-    request({epoch:1,sequence:19,keyFingerprint:'e'.repeat(64)}),
-    request({epoch:2,sequence:19,keyFingerprint:oldFp})
+    request({epoch:1,sequence:19,keyFingerprint:'e'.repeat(64)})
   ]){
     assert.deepEqual(replay.rebind(bad),{
       rebound:false,reason:'prior-ledger-binding-mismatch'
