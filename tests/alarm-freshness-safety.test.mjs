@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {reconcileDisplayedAlarmState} from '../lib/telemetry-safety.mjs';
 
-const state=(active,freshness='live')=>
+const state=(active,freshness)=>
   reconcileDisplayedAlarmState({active,freshness});
 
 test('CLEAR requires explicit boolean false with live telemetry freshness',()=>{
