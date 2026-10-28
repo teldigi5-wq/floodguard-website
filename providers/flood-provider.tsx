@@ -263,7 +263,18 @@ export function FloodProvider({ children }: { children: ReactNode }) {
               const raw = snapshot.val();
               const parsed = publicSchemas[key].safeParse(normalizeGroup(key, raw));
               if (!parsed.success && raw !== null) {
-                console.warn(`FloodGuard ignored invalid ${key} payload`, parsed.error.issues);
+                console.warn(`FloodGuard rejected invalid ${key} payload`, parsed.error.issues);
+                // A malformed update must NOT retain an old CLEAR, SAFE,
+                // or CLOSED report while other branches keep updating.
+                setData((previous) => {
+                  if (previous === null || !Object.hasOwn(previous, key)) return previous;
+                  const next: LiveData = { ...previous };
+                  delete (next as Record<string, unknown>)[key];
+                  return Object.keys(next).length ? next : null;
+                });
+                if (key === "water" || key === "system") {
+                  setError("Live monitoring data failed validation.");
+                }
               } else {
                 setData((previous) => {
                   const next: LiveData = { ...previous };
@@ -279,6 +290,14 @@ export function FloodProvider({ children }: { children: ReactNode }) {
               release();
             },
             () => {
+              // Permission/network denial must not leave a cached alarm CLEAR
+              // (or prior water SAFE) presented beside newer group updates.
+              setData((previous) => {
+                if (previous === null || !Object.hasOwn(previous, key)) return previous;
+                const next: LiveData = { ...previous };
+                delete (next as Record<string, unknown>)[key];
+                return Object.keys(next).length ? next : null;
+              });
               if (key === "water" || key === "system") {
                 setError("Live monitoring data is currently unavailable.");
               }
