@@ -24,6 +24,14 @@ The test-only handler now accepts a trusted bootstrap setting `bodyReadDeadlineM
 
 The Node regression exercises a genuinely established local TLS connection with a partial body that never ends and asserts a bounded connection reset, unchanged persisted sequence, and that a separate valid signed request continues to receive its normal replay-denial status. It also rejects unbounded deadline configuration. This only bounds reading of the request body in the isolated localhost experiment; it does **not** prove bounded execution of arbitrary operator readiness callbacks, disk I/O, TLS handshakes, Firebase operations, or behavior under a real ESP8266/network. A production ingress still needs independent end-to-end deadline budgets, resource limits, rate limiting, authenticated credential lifecycle and real-cloud durability tests.
 
+## Read-to-commit freshness and operator availability revalidation — 28 October 2026
+
+A request-body deadline alone does not ensure that decisions made **before** receiving the body remain valid. The experimental handler formerly captured its device-observation clock and checked the operator's replay-ledger availability before awaiting the bounded stream. A signed envelope that was fresh when its upload began could become expired before the upload completed; a previously ready ledger could be revoked or disconnected while the client was still streaming.
+
+The handler now performs a *second* explicit readiness check after full body receipt and obtains the clock sample used for the device's 30-second freshness / 2-second future-skew check **only after that final readiness step**. The enrolled public key and current operator-enabled binding are checked after the wait as before. The sealed ledger's separate synchronous `last` and `commit` checks still enforce replay protection, including failures after a ready result. Neither attempt creates Firebase records, physically authenticates an ESP8266, nor advances the public website.
+
+Two real loopback HTTPS regressions use isolated HMAC-sealed replay ledgers: (1) a clock that advances outside the allowed freshness window between the initial check and body completion must return 422 with **no committed sequence**, and (2) ledger readiness revoked after the first check must return 503 with **no committed sequence**. These are deterministic injected-time/operator-callback tests, not cloud consistency or real revocation-latency benchmarks. An external operator registry, secure identity provisioning/rotation, certificate-validating flashed firmware, persistent cloud IAM and authorized field testing remain release blockers.
+
 ## Stop conditions before any production use
 
 1. Privately inspect the actual flashed ESP8266 revision, TLS library, upload paths, clock and credential storage. No firmware repo/revision was found among the three FloodGuard repositories; do NOT reflash or reset the currently working unit without owner approval.
