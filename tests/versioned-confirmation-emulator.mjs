@@ -223,6 +223,8 @@ test('read-only attestor cannot write confirmation, modify device or read other 
 test('scoped confirmer may only read one staging path and write its own write-once record',async()=>{
   await stage();
   await assertSucceeds(confirmer().ref(root+'/staging/ingestV1/'+uid).get());
+  await assertSucceeds(confirmer().ref(root+'/deviceAuthorization/'+uid).get());
+  await assertFails(confirmer().ref(root+'/deviceAuthorization').get());
   await assertFails(confirmer().ref(root+'/live/gate/angle').set(90));
   await assertFails(confirmer().ref(root+'/publicationLab/water').set(initialized));
   await assertFails(confirmer().ref(root+'/deviceAuthorization/'+uid+'/enabled').set(false));
@@ -294,6 +296,8 @@ test('versioned prototype module cannot mutate unrelated paths or open network s
   const c=readFileSync('experiments/versioned-confirmation-emulator.mjs','utf8');
   assert.match(c,/ROOT\+'\/confirmedLab\/records\/'/);
   assert.doesNotMatch(c,/firebase-admin|serviceAccount|node:https|node:http|\.listen\s*\(/);
-  assert.doesNotMatch(c,/\.update\s*\(|\.transaction\s*\(/);
+  // SHA-256 hash.update() is required for signing evidence, not an RTDB write.
+  assert.doesNotMatch(c,/\.ref\([^)]*\)\.(?:update|transaction|remove)\s*\(/);
+  assert.doesNotMatch(c,/\b(?:database|db)\.(?:update|transaction|remove)\s*\(/);
   assert.doesNotMatch(c,/\.ref\('\/floodguard'\)/);
 });
