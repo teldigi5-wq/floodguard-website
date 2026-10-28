@@ -153,13 +153,24 @@ export function createOperatorDeviceRegistryLab({directory,integrityKey}={}){
         return Object.freeze({staged:true,deviceId,epoch:binding.epoch,enabled:false});
       });
     },
-    activateStaged(deviceId,expectedEpoch){
-      if(!ID.test(deviceId)||!Number.isSafeInteger(expectedEpoch))
-        throw TypeError('Explicit device and epoch required');
+    activateStaged(deviceId,expectedEpoch,{replayLedger,expectedSequence}={}){
+      if(!ID.test(deviceId)||!Number.isSafeInteger(expectedEpoch)||
+         !Number.isSafeInteger(expectedSequence)||expectedSequence<1||
+         !replayLedger||typeof replayLedger.last!=='function'||
+         typeof replayLedger.rebind!=='function'||!Object.isFrozen(replayLedger))
+        throw TypeError('Explicit epoch, sequence and independent sealed replay ledger required');
       return change(state=>{
         const b=state.devices[deviceId];
         if(!b||b.enabled||b.epoch<=1||b.epoch!==expectedEpoch)
           throw Error('Staged identity or approval epoch mismatch');
+        // All registry modifications remain disabled until the separate
+        // replay ledger has durably advanced to the SAME key and epoch,
+        // preserving the operator-verified last accepted sequence.
+        const checkpoint=replayLedger.last(deviceId);
+        if(!checkpoint||checkpoint.epoch!==expectedEpoch||
+           checkpoint.sequence!==expectedSequence||
+           checkpoint.keyFingerprint!==b.fingerprint)
+          throw Error('Replay-ledger rotation not independently confirmed');
         b.enabled=true;
         return Object.freeze({activated:true,deviceId,epoch:b.epoch});
       });
