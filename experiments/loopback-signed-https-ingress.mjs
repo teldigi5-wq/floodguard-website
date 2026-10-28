@@ -66,17 +66,20 @@ export function createLoopbackSignedIngressHandler({
     if(len!==undefined&&(!/^\d+$/.test(len)||Number(len)>MAX_BODY)){
       respond(res,413,'request-too-large');return;
     }
-    const now=clock();
-    if(!validClock(now)){
+    // The early check rejects unready installations before parsing data.
+    // Never trust this snapshot for the later signed-data commit: a slow
+    // client can outlive an operator's revocation or ledger availability.
+    if(!validClock(clock())){
       respond(res,503,'clock-unavailable');return;
     }
-    try{
-      if(await ledgerAvailable()!==true){
-        respond(res,503,'replay-ledger-unavailable');return;
-      }
+    const ledgerIsReady=async()=>{
+      if(await ledgerAvailable()!==true)return false;
       const bootstrap=ledger.last(REPLAY_LEDGER_BOOTSTRAP_DEVICE);
-      if(!bootstrap||bootstrap.epoch!==1||bootstrap.sequence!==1||
-         bootstrap.keyFingerprint!==REPLAY_LEDGER_BOOTSTRAP_FINGERPRINT){
+      return Boolean(bootstrap&&bootstrap.epoch===1&&bootstrap.sequence===1&&
+        bootstrap.keyFingerprint===REPLAY_LEDGER_BOOTSTRAP_FINGERPRINT);
+    };
+    try{
+      if(!await ledgerIsReady()){
         respond(res,503,'replay-ledger-unavailable');return;
       }
     }catch{
@@ -106,6 +109,21 @@ export function createLoopbackSignedIngressHandler({
       respond(res,400,'invalid-request');return;
     }finally{
       clearTimeout(deadline);
+    }
+    // Re-establish readiness AFTER the complete body has been read.
+    // An operator may revoke the ledger while a TLS client is trickling data.
+    try{
+      if(!await ledgerIsReady()){
+        respond(res,503,'replay-ledger-unavailable');return;
+      }
+    }catch{
+      respond(res,503,'replay-ledger-unavailable');return;
+    }
+    // Freshness is measured at the actual acceptance boundary, NOT from
+    // the request's arrival time or before waiting for its full body.
+    const now=clock();
+    if(!validClock(now)){
+      respond(res,503,'clock-unavailable');return;
     }
     if(!exact(body,['envelope','signature'])||typeof body.signature!=='string'||
        !SIG.test(body.signature)){
