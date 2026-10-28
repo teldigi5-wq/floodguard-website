@@ -15,6 +15,8 @@ on:
       - 'tests/stage7-durable-ingress.test.mjs'
       - 'experiments/signed-staging-emulator-writer.mjs'
       - 'tests/signed-staging-emulator.mjs'
+      - 'tests/authority-only-signed-staging-emulator.mjs'
+      - 'firebase.phase-b-authority-only.json'
       - 'experiments/stage8-ack-reconciliation.mjs'
       - 'tests/stage8-ack-reconciliation.test.mjs'
       - 'experiments/stage9-downstream-outbox.mjs'
@@ -76,6 +78,9 @@ jobs:
 
       - name: Verify signature- and receipt-gated scoped staging client writes
         run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-floodguard-strict --config firebase.phase-b-strict.json "FG_SIGNED_STAGING_BRIDGE_TEST=1 node --test tests/signed-staging-emulator.mjs"
+
+      - name: Verify authority-only RTDB staging rules and signed evidence
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-authority-only-ingest --config firebase.phase-b-authority-only.json "FG_SIGNED_STAGING_BRIDGE_TEST=1 FG_TRUSTED_INGEST_AUTHORITY_TEST=1 node --test tests/authority-only-signed-staging-emulator.mjs"
 
       - name: Verify emulator-only signed-to-public atomic projector
         run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-strict-projector --config firebase.phase-b-strict.json "FG_STRICT_EMULATOR_PROJECTOR_TEST=1 node --test tests/strict-emulator-atomic-projector.mjs"
