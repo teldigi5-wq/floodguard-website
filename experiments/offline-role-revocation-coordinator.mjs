@@ -9,7 +9,7 @@ const safeState=s=>s&&typeof s==='object'&&typeof s.enabled==='boolean'&&
   safeInt(s.roleGeneration)&&s.roleGeneration>0&&safeInt(s.revokeTime);
 
 export function createOfflineRoleRevocationCoordinator({
-  uid,roleStore,auth,clock,independentWitness=null
+  uid,roleStore,auth,clock,independentWitness=null,externalWitness=null
 }={}){
   if(!UID.test(uid)||!Object.isFrozen(roleStore)||!Object.isFrozen(auth)||
      typeof roleStore.read!=='function'||
@@ -19,7 +19,10 @@ export function createOfflineRoleRevocationCoordinator({
      typeof auth.getUser!=='function'||typeof clock!=='function'||
      (independentWitness!==null&&(!Object.isFrozen(independentWitness)||
        typeof independentWitness.snapshot!=='function'||
-       typeof independentWitness.advance!=='function')))
+       typeof independentWitness.advance!=='function'))||
+     (externalWitness!==null&&(!Object.isFrozen(externalWitness)||
+       typeof externalWitness.snapshot!=='function'||
+       typeof externalWitness.advance!=='function')))
     throw TypeError('Explicit frozen emulator-only role and Auth adapters required');
   let pending=false;
   return Object.freeze({
@@ -47,6 +50,18 @@ export function createOfflineRoleRevocationCoordinator({
              previous.roleGeneration!==initial.roleGeneration||
              previous.revokeTime!==initial.revokeTime)
             return fail('independent-checkpoint-mismatch');
+        }
+        // Check an independently SIGNED, nonce-bound remote checkpoint
+        // before any role mutation, separate from the optional local HMAC.
+        if(externalWitness!==null){
+          let anchored;
+          try{anchored=await externalWitness.snapshot(uid);}
+          catch{return fail('external-authority-unavailable');}
+          if(!anchored||anchored.ok!==true||
+             anchored.uid!==uid||
+             anchored.roleGeneration!==initial.roleGeneration||
+             anchored.revokeTime!==initial.revokeTime)
+            return fail('external-authority-mismatch');
         }
         if(initial.enabled){
           if(resumeDisabled)return fail('resume-requires-disabled-role');
@@ -113,6 +128,29 @@ export function createOfflineRoleRevocationCoordinator({
              witnessed.roleGeneration!==verified.roleGeneration||
              witnessed.revokeTime!==verified.revokeTime)
             return fail('independent-checkpoint-persistence-unverified');
+        }
+        if(externalWitness!==null){
+          let updated;
+          try{
+            updated=await externalWitness.advance(uid,{
+              expectedGeneration,expectedRevokeTime:initial.revokeTime,
+              nextGeneration:verified.roleGeneration,
+              nextRevokeTime:verified.revokeTime
+            });
+          }catch{return fail('external-authority-advance-uncertain');}
+          if(!updated||updated.ok!==true||
+             updated.uid!==uid||
+             updated.roleGeneration!==verified.roleGeneration||
+             updated.revokeTime!==verified.revokeTime)
+            return fail('external-authority-advance-uncertain');
+          let confirmed;
+          try{confirmed=await externalWitness.snapshot(uid);}
+          catch{return fail('external-authority-persistence-unverified');}
+          if(!confirmed||confirmed.ok!==true||
+             confirmed.uid!==uid||
+             confirmed.roleGeneration!==verified.roleGeneration||
+             confirmed.revokeTime!==verified.revokeTime)
+            return fail('external-authority-persistence-unverified');
         }
         return Object.freeze({
           completed:true,roleDisabled:true,
