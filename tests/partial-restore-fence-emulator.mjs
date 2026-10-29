@@ -42,7 +42,13 @@ const grant=({generation=4,authTime=1002}={})=>({
 });
 let env;
 const actor=(id,settings)=>env.authenticatedContext(id,token(id,settings)).database();
-const fixture=async fn=>env.withSecurityRulesDisabled(async ctx=>fn(ctx.database()));
+const fixture=async fn=>{
+  let result;
+  await env.withSecurityRulesDisabled(async ctx=>{
+    result=await fn(ctx.database());
+  });
+  return result;
+};
 const elevated=async (path,value)=>fixture(d=>d.ref(path).set(value));
 const observed=path=>fixture(async d=>(await d.ref(path).get()).val());
 const record=(enabled=true,generation=4,revokeTime=0)=>({
