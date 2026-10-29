@@ -9,14 +9,17 @@ const safeState=s=>s&&typeof s==='object'&&typeof s.enabled==='boolean'&&
   safeInt(s.roleGeneration)&&s.roleGeneration>0&&safeInt(s.revokeTime);
 
 export function createOfflineRoleRevocationCoordinator({
-  uid,roleStore,auth,clock
+  uid,roleStore,auth,clock,independentWitness=null
 }={}){
   if(!UID.test(uid)||!Object.isFrozen(roleStore)||!Object.isFrozen(auth)||
      typeof roleStore.read!=='function'||
      typeof roleStore.disableRoleCAS!=='function'||
      typeof roleStore.advanceSessionCAS!=='function'||
      typeof auth.revokeRefreshTokens!=='function'||
-     typeof auth.getUser!=='function'||typeof clock!=='function')
+     typeof auth.getUser!=='function'||typeof clock!=='function'||
+     (independentWitness!==null&&(!Object.isFrozen(independentWitness)||
+       typeof independentWitness.snapshot!=='function'||
+       typeof independentWitness.advance!=='function')))
     throw TypeError('Explicit frozen emulator-only role and Auth adapters required');
   let pending=false;
   return Object.freeze({
@@ -36,6 +39,15 @@ export function createOfflineRoleRevocationCoordinator({
         try{initial=await roleStore.read(uid);}catch{return fail('initial-state-unavailable');}
         if(!safeState(initial)||initial.roleGeneration!==expectedGeneration)
           return fail('initial-state-mismatch');
+        if(independentWitness!==null){
+          let previous;
+          try{previous=independentWitness.snapshot(uid);}
+          catch{return fail('independent-checkpoint-unavailable');}
+          if(!previous||previous.uid!==uid||
+             previous.roleGeneration!==initial.roleGeneration||
+             previous.revokeTime!==initial.revokeTime)
+            return fail('independent-checkpoint-mismatch');
+        }
         if(initial.enabled){
           if(resumeDisabled)return fail('resume-requires-disabled-role');
           let disabled;
@@ -80,6 +92,28 @@ export function createOfflineRoleRevocationCoordinator({
            verified.roleGeneration!==expectedGeneration+1||
            verified.revokeTime<cutoff)
           return fail('cutoff-persistence-unverified');
+        // An independent high-water anchor is optional for old lab callers,
+        // but mandatory for the rollback-aware test. Record only after the
+        // database confirms the new cutoff; NEVER auto-heal divergence.
+        if(independentWitness!==null){
+          let anchored;
+          try{
+            anchored=independentWitness.advance(uid,{
+              expectedGeneration,expectedRevokeTime:initial.revokeTime,
+              nextGeneration:verified.roleGeneration,
+              nextRevokeTime:verified.revokeTime
+            });
+          }catch{return fail('independent-checkpoint-advance-uncertain');}
+          if(anchored!==true)
+            return fail('independent-checkpoint-advance-uncertain');
+          let witnessed;
+          try{witnessed=independentWitness.snapshot(uid);}
+          catch{return fail('independent-checkpoint-persistence-unverified');}
+          if(!witnessed||witnessed.uid!==uid||
+             witnessed.roleGeneration!==verified.roleGeneration||
+             witnessed.revokeTime!==verified.revokeTime)
+            return fail('independent-checkpoint-persistence-unverified');
+        }
         return Object.freeze({
           completed:true,roleDisabled:true,
           roleGeneration:verified.roleGeneration,
