@@ -35,7 +35,12 @@ const http=async(url,method='GET',payload)=>{
 const url=(path,token)=>{
   if(!path.startsWith(ROOT+'/'))throw Error('Outside synthetic database root');
   const u=new URL(RTDB+path+'.json');
-  u.searchParams.set('ns',NS);u.searchParams.set('auth',token);
+  u.searchParams.set('ns',NS);
+  // The RTDB emulator's special owner bypass is an OAuth-style
+  // access_token query, NOT an ordinary Firebase ID token 'auth' query.
+  // Keep this capability out of all client requests.
+  if(token==='owner')u.searchParams.set('access_token','owner');
+  else u.searchParams.set('auth',token);
   return u;
 };
 const seed=async(path,value)=>{
