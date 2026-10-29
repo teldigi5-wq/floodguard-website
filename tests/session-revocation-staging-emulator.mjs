@@ -242,12 +242,15 @@ test('rotated role session alone cannot resurrect a verifier grant after revocat
     revokeTime:baseAuthTime,roleGeneration:roleGeneration+1
   }));
   await assertFails(writer().ref(stagePath).set(frame(1)));
-  assert.deepEqual(await makeVerifier()(signed(2)),{
-    approved:false,reason:'approval-write-outcome-unverified'
-  });
+  // First advance the INDEPENDENT sealed replay checkpoint to make a
+  // sequence-2 request otherwise admissible. The old role session must
+  // then be rejected by RTDB Rules, not by an earlier signature/ledger guard.
   assert.equal(ledger.commit({
     uid:deviceId,epoch:1,sequence:2,keyFingerprint
   }).accepted,true);
+  assert.deepEqual(await makeVerifier()(signed(2)),{
+    approved:false,reason:'approval-write-outcome-unverified'
+  });
   const newTime=baseAuthTime+1,newGeneration=roleGeneration+1;
   assert.equal((await makeVerifier(verifier(newTime,newGeneration),newTime,newGeneration)(
     signed(2)
