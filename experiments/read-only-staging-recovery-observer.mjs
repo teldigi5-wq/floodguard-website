@@ -34,7 +34,8 @@ export function createReadOnlyStagingRecoveryObserver({
   const root='/floodguard';
   const paths=[root+'/ingestApprovalLab/'+deviceId,
     root+'/staging/ingestV1/'+deviceId,
-    root+'/deviceAuthorization/'+deviceId];
+    ...['enabled','scope','epoch'].map(field=>
+      root+'/deviceAuthorization/'+deviceId+'/'+field)];
   const snapshot=async()=>{
     const read=async path=>(await database.ref(path).get()).val();
     return Promise.all(paths.map(read));
@@ -96,10 +97,9 @@ export function createReadOnlyStagingRecoveryObserver({
 
     if(JSON.stringify(first)!==JSON.stringify(second))
       return reply('concurrent-state-change-unverified');
-    const [approval,staged,auth]=second;
-    if(!exact(auth,['enabled','scope','epoch'])||
-       auth.enabled!==true||auth.scope!=='prototype-ingest-v1'||
-       auth.epoch!==envelope.epoch)
+    const [approval,staged,enabled,scope,epoch]=second;
+    if(enabled!==true||scope!=='prototype-ingest-v1'||
+       epoch!==envelope.epoch)
       return reply('cloud-authorization-unverified');
 
     const matches=(data,keys)=>keys.every(k=>data[k]===envelope.frame[k]);
