@@ -98,8 +98,17 @@
         ".read": false,
         ".write": false,
         "$deviceId": {
-          ".read": "auth != null && auth.uid === 'ingest-observer-stage-a' && auth.token.fg_ingest_observer_v1 === true && root.child('floodguard/ingestObserverLab/ingest-observer-stage-a/enabled').val() === true && root.child('floodguard/ingestObserverLab/ingest-observer-stage-a/scope').val() === 'prototype-ingest-observer-v1' && root.child('floodguard/ingestObserverLab/ingest-observer-stage-a/deviceId').val() === $deviceId",
-          ".write": false
+          ".read": false,
+          ".write": false,
+          "enabled": {
+            ".read": "auth != null && auth.uid === 'ingest-observer-stage-a' && auth.token.fg_ingest_observer_v1 === true && root.child('floodguard/ingestObserverLab/ingest-observer-stage-a/enabled').val() === true && root.child('floodguard/ingestObserverLab/ingest-observer-stage-a/scope').val() === 'prototype-ingest-observer-v1' && root.child('floodguard/ingestObserverLab/ingest-observer-stage-a/deviceId').val() === $deviceId"
+          },
+          "scope": {
+            ".read": "auth != null && auth.uid === 'ingest-observer-stage-a' && auth.token.fg_ingest_observer_v1 === true && root.child('floodguard/ingestObserverLab/ingest-observer-stage-a/enabled').val() === true && root.child('floodguard/ingestObserverLab/ingest-observer-stage-a/scope').val() === 'prototype-ingest-observer-v1' && root.child('floodguard/ingestObserverLab/ingest-observer-stage-a/deviceId').val() === $deviceId"
+          },
+          "epoch": {
+            ".read": "auth != null && auth.uid === 'ingest-observer-stage-a' && auth.token.fg_ingest_observer_v1 === true && root.child('floodguard/ingestObserverLab/ingest-observer-stage-a/enabled').val() === true && root.child('floodguard/ingestObserverLab/ingest-observer-stage-a/scope').val() === 'prototype-ingest-observer-v1' && root.child('floodguard/ingestObserverLab/ingest-observer-stage-a/deviceId').val() === $deviceId"
+          }
         }
       },
       "staging": {
