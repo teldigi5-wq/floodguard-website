@@ -5,10 +5,15 @@
 import {before,after,beforeEach,test} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomBytes} from 'node:crypto';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {initializeApp,deleteApp} from 'firebase-admin/app';
 import {getAuth} from 'firebase-admin/auth';
 import {createOfflineRoleRevocationCoordinator}
   from '../experiments/offline-role-revocation-coordinator.mjs';
+import {createOfflineRevocationWitness}
+  from '../experiments/offline-revocation-highwater.mjs';
 
 const PROJECT='demo-fg-auth-lifecycle';
 const AUTH='http://127.0.0.1:9099';
@@ -277,4 +282,40 @@ test('crash after disable leaves real Auth token unable to grant and allows expl
   assert.equal(completed.completed,true);
   assert.equal(completed.roleDisabled,true);
   await denied(await set(APPROVAL,old.token,approval(old)));
+});
+
+test('independently sealed checkpoint detects emulator RTDB backup restoring old role',async()=>{
+  const dir=mkdtempSync(join(tmpdir(),'fg-db-restore-check-'));
+  try{
+    const witness=createOfflineRevocationWitness({
+      directory:dir,integrityKey:randomBytes(32)
+    });
+    witness.bootstrap({uid:V,roleGeneration:GENERATION,revokeTime:0});
+    const actor=createOfflineRoleRevocationCoordinator({
+      uid:V,roleStore:verifierRevocationStore(),
+      auth:Object.freeze({
+        revokeRefreshTokens:id=>admin.revokeRefreshTokens(id),
+        getUser:id=>admin.getUser(id)
+      }),
+      clock:()=>Date.now(),independentWitness:witness
+    });
+    const first=await actor.revoke({expectedGeneration:GENERATION});
+    assert.equal(first.completed,true);
+    assert.equal(witness.snapshot(V).roleGeneration,GENERATION+1);
+    // Simulate a privileged emulator-side backup restoration of ONLY
+    // the RTDB authorization/session state. The independent filesystem
+    // witness remains forward-only, and coordinator refuses to touch Auth.
+    await seed(ROOT+'/ingestVerifierLab/'+V,{
+      enabled:true,scope:'prototype-signed-approval-verifier-v1',
+      deviceId:DEVICE
+    });
+    await seed(SESSION(V),{revokeTime:0,roleGeneration:GENERATION});
+    const blocked=await actor.revoke({expectedGeneration:GENERATION});
+    assert.equal(blocked.completed,false);
+    assert.equal(blocked.step,'independent-checkpoint-mismatch');
+    assert.equal(witness.snapshot(V).roleGeneration,GENERATION+1);
+    // CRITICAL: RTDB Rules do NOT consult this separate filesystem file.
+    // This test asserts only that the coordinator detects rollback, NOT
+    // that restored RTDB permissions automatically reject client tokens.
+  }finally{rmSync(dir,{recursive:true,force:true});}
 });
