@@ -243,6 +243,81 @@ test('nonresponsive SDK read is bounded and remains non-mutating',async()=>{
   });
 });
 
+test('uncancellable timed-out SDK reads hold single-flight budget until truly settled',async()=>{
+  const pending=[];
+  let calls=0,blocked=true;
+  const response=path=>{
+    if(path===authPath+'/enabled')return true;
+    if(path===authPath+'/scope')return 'prototype-ingest-v1';
+    if(path===authPath+'/epoch')return 1;
+    return null;
+  };
+  const stuck=Object.freeze({ref(path){
+    return {get(){
+      calls++;
+      if(!blocked)return Promise.resolve({val:()=>response(path)});
+      return new Promise(resolve=>pending.push({path,resolve}));
+    }};
+  }});
+  const reconcile=observe(stuck,60),message=signed();
+  assert.deepEqual(await reconcile(message),{
+    observed:false,status:'observation-unavailable'
+  });
+  assert.equal(calls,5,'only the five allowlisted first-pass reads start');
+  assert.deepEqual(await reconcile(message),{
+    observed:false,status:'observer-read-in-flight'
+  });
+  assert.equal(calls,5,
+    'subsequent requests must not start a second uncancellable batch');
+  blocked=false;
+  for(const {path,resolve} of pending)
+    resolve({val:()=>response(path)});
+  // Original timed-out read is allowed to complete in the background, but
+  // its outcome never becomes an automatic success or a retried write.
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls,10,'only the one previously pending second pass runs');
+  assert.deepEqual(await reconcile(message),{
+    observed:false,status:'target-not-observed-unsafe-to-retry'
+  });
+  assert.equal(calls,20,'single-flight guard releases after actual settlement');
+});
+
+test('simultaneous reconciliation callers share no unbounded read fan-out',async()=>{
+  const pending=[];
+  let reads=0;
+  const blocked=Object.freeze({ref(path){
+    return {get(){
+      reads++;
+      return new Promise(resolve=>pending.push({path,resolve}));
+    }};
+  }});
+  const reconcile=observe(blocked,100),m=signed();
+  const first=reconcile(m);
+  assert.deepEqual(await reconcile(m),{
+    observed:false,status:'observer-read-in-flight'
+  });
+  assert.equal(reads,5,'second caller cannot fan out five additional requests');
+  const result=await first;
+  assert.deepEqual(result,{observed:false,status:'observation-unavailable'});
+  assert.deepEqual(await reconcile(m),{
+    observed:false,status:'observer-read-in-flight'
+  });
+  assert.equal(reads,5,'timeout does not release an unresolved SDK batch');
+  // Resolve the real underlying SDK calls to avoid leaving test resources
+  // dangling. The pending batch still must never trigger writes or retries.
+  const val=path=>{
+    if(path===authPath+'/enabled')return true;
+    if(path===authPath+'/scope')return 'prototype-ingest-v1';
+    if(path===authPath+'/epoch')return 1;
+    return null;
+  };
+  const immediate={ref(path){return {get:async()=>({val:()=>val(path)})}}};
+  // The first pass's pending promises are settled explicitly, and the
+  // second pass is permitted to remain pending until this test returns.
+  for(const item of pending)item.resolve({val:()=>val(item.path)});
+  assert.ok(immediate.ref(approvalPath));
+});
+
 test('inconsistent two-pass data cannot yield an observed result',async()=>{
   const m=signed(),a={...frame(1),epoch:1,digest:m.receipt.digest,
     issuedAtMs:now,expiresAtMs:now+10000};
