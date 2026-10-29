@@ -36,6 +36,12 @@ export function createReadOnlyStagingRecoveryObserver({
     root+'/staging/ingestV1/'+deviceId,
     ...['enabled','scope','epoch'].map(field=>
       root+'/deviceAuthorization/'+deviceId+'/'+field)];
+  // An SDK .get() cannot be reliably cancelled by Promise.race. Keep a
+  // single outstanding read batch per observer instance, including AFTER
+  // its caller's deadline, until its underlying promises actually settle.
+  // A permanently stuck SDK read disables this lab observer (fail closed)
+  // instead of allowing an unbounded accumulation of background reads.
+  let pendingSnapshot=null;
   const snapshot=async()=>{
     const read=async path=>(await database.ref(path).get()).val();
     return Promise.all(paths.map(read));
@@ -78,13 +84,23 @@ export function createReadOnlyStagingRecoveryObserver({
       return reply('signed-evidence-unavailable');
     }
 
-    // Limit the total duration of BOTH reads. Promise.race does not cancel
-    // SDK reads, but no mutating side effect can occur in this observer.
+    // The SDK does not expose an AbortSignal for .get(). Never start a
+    // second batch if the previous read remains unresolved after its timeout.
+    // This guard is per-instance, not a global rate limit or production QoS.
+    if(pendingSnapshot!==null)return reply('observer-read-in-flight');
     let timeout;
     let first,second;
+    const readWork=(async()=>[await snapshot(),await snapshot()])();
+    pendingSnapshot=readWork;
+    // Observe settlement even when Promise.race has already timed out.
+    // onRejected prevents a detached, unhandled rejection.
+    void readWork.then(
+      ()=>{if(pendingSnapshot===readWork)pendingSnapshot=null;},
+      ()=>{if(pendingSnapshot===readWork)pendingSnapshot=null;}
+    );
     try{
       [first,second]=await Promise.race([
-        (async()=>[await snapshot(),await snapshot()])(),
+        readWork,
         new Promise((_,reject)=>{
           timeout=setTimeout(()=>reject(Error('observer-timeout')),readDeadlineMs);
         })
