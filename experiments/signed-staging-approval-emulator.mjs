@@ -14,13 +14,17 @@ const fingerprint=k=>createHash('sha256').update(
 const reject=reason=>Object.freeze({approved:false,reason});
 
 export function createSignedStagingApprovalEmulator({
-  database,deviceId,operatorRegistry,replayLedger,receiptIssuerPublicKey,clock
+  database,deviceId,operatorRegistry,replayLedger,receiptIssuerPublicKey,clock,
+  verifierAuthTime=null,verifierRoleGeneration=null
 }={}){
   if(!ID.test(deviceId)||!database||typeof database.ref!=='function'||
      !operatorRegistry||typeof operatorRegistry.get!=='function'||
      typeof operatorRegistry.status!=='function'||!Object.isFrozen(operatorRegistry)||
      !replayLedger||typeof replayLedger.last!=='function'||!Object.isFrozen(replayLedger)||
-     !usableKey(receiptIssuerPublicKey)||typeof clock!=='function')
+     !usableKey(receiptIssuerPublicKey)||typeof clock!=='function'||
+     ((verifierAuthTime!==null||verifierRoleGeneration!==null)&&
+       (!Number.isSafeInteger(verifierAuthTime)||verifierAuthTime<1||
+        !Number.isSafeInteger(verifierRoleGeneration)||verifierRoleGeneration<1)))
     throw new TypeError('Explicit read-only trust roots and scoped verifier test client required');
   return async function approve({envelope,deviceSignature,receipt,receiptSignature}={}){
     if(process.env.FG_DUAL_AUTHORITY_TEST!=='1'||
@@ -67,6 +71,13 @@ export function createSignedStagingApprovalEmulator({
         epoch:envelope.epoch,digest,
         issuedAtMs:now,expiresAtMs:now+10000
       };
+      // The optional session-bound grant is checked AGAINST auth.token
+      // by separate RTDB rules. Constructor options alone are not an
+      // authentication or a trusted credential issuer.
+      if(verifierAuthTime!==null){
+        grant.verifierAuthTime=verifierAuthTime;
+        grant.verifierRoleGeneration=verifierRoleGeneration;
+      }
     }catch{
       return reject('identity-or-evidence-unavailable');
     }
