@@ -7,6 +7,8 @@ import assert from 'node:assert/strict';
 import {randomBytes} from 'node:crypto';
 import {initializeApp,deleteApp} from 'firebase-admin/app';
 import {getAuth} from 'firebase-admin/auth';
+import {createOfflineRoleRevocationCoordinator}
+  from '../experiments/offline-role-revocation-coordinator.mjs';
 
 const PROJECT='demo-fg-auth-lifecycle';
 const AUTH='http://127.0.0.1:9099';
@@ -165,4 +167,114 @@ test('claim changes never alter the already issued JWT payload',async()=>{
   assert.equal(decode(old).fg_role_generation,GENERATION);
   const next=await signin(V);
   assert.equal(next.payload.fg_role_generation,GENERATION+1);
+});
+
+const etagRead=async path=>{
+  const result=await fetch(url(path,'owner'),{
+    headers:{'X-Firebase-ETag':'true'},
+    signal:AbortSignal.timeout(5000)
+  });
+  if(result.status!==200)throw Error('emulator ETag read failed');
+  const tag=result.headers.get('etag');
+  if(!tag)throw Error('missing emulator ETag');
+  return {value:await result.json(),etag:tag};
+};
+const conditionalPut=async(path,etag,value)=>{
+  const res=await fetch(url(path,'owner'),{
+    method:'PUT',headers:{'if-match':etag,'content-type':'application/json'},
+    body:JSON.stringify(value),signal:AbortSignal.timeout(5000)
+  });
+  if(res.status===412)return false;
+  if(res.status!==200)throw Error('conditional emulator write uncertain');
+  return true;
+};
+function verifierRevocationStore(){
+  const rolePath=ROOT+'/ingestVerifierLab/'+V;
+  const sessionPath=SESSION(V);
+  const read=async()=>{
+    const [r,m]=await Promise.all([
+      get(rolePath,'owner'),get(sessionPath,'owner')
+    ]);
+    if(r.status!==200||m.status!==200||!r.value||!m.value)
+      throw Error('operator role evidence unavailable');
+    return {
+      enabled:r.value.enabled,roleGeneration:m.value.roleGeneration,
+      revokeTime:m.value.revokeTime
+    };
+  };
+  return Object.freeze({
+    read,
+    async disableRoleCAS(uid,expected){
+      if(uid!==V)return false;
+      const [s,{value,etag}]=await Promise.all([
+        read(),etagRead(rolePath)
+      ]);
+      if(!s.enabled||s.roleGeneration!==expected||
+         value?.enabled!==true||
+         value?.scope!=='prototype-signed-approval-verifier-v1'||
+         value?.deviceId!==DEVICE)return false;
+      return conditionalPut(rolePath,etag,{...value,enabled:false});
+    },
+    async advanceSessionCAS(uid,{expectedGeneration,cutoffSeconds,nextGeneration}){
+      if(uid!==V)return false;
+      const [s,{value,etag}]=await Promise.all([
+        read(),etagRead(sessionPath)
+      ]);
+      if(s.enabled||s.roleGeneration!==expectedGeneration||
+         value?.roleGeneration!==expectedGeneration||
+         !Number.isSafeInteger(cutoffSeconds)||
+         cutoffSeconds<value.revokeTime||
+         nextGeneration!==expectedGeneration+1)return false;
+      return conditionalPut(sessionPath,etag,{
+        ...value,revokeTime:cutoffSeconds,roleGeneration:nextGeneration
+      });
+    }
+  });
+}
+const coordinator=(store=verifierRevocationStore(),gateway=Object.freeze({
+  revokeRefreshTokens:uid=>admin.revokeRefreshTokens(uid),
+  getUser:uid=>admin.getUser(uid)
+}))=>createOfflineRoleRevocationCoordinator({
+  uid:V,roleStore:store,auth:gateway,clock:()=>Date.now()
+});
+
+test('Auth Emulator coordinator disables role before refresh revoke and cutoff commit',async()=>{
+  const old=sessions[V],w=sessions[W];
+  assert.equal((await set(APPROVAL,old.token,approval(old))).status,200);
+  const output=await coordinator().revoke({expectedGeneration:GENERATION});
+  assert.equal(output.completed,true,
+    'Auth Emulator must expose a verifiable tokensValidAfterTime after revoke');
+  assert.equal(output.roleDisabled,true);
+  assert.equal(output.roleGeneration,GENERATION+1);
+  const role=(await get(ROOT+'/ingestVerifierLab/'+V,'owner')).value;
+  const session=(await get(SESSION(V),'owner')).value;
+  assert.equal(role.enabled,false);
+  assert.equal(session.revokeTime,output.revokeTime);
+  assert.equal(session.roleGeneration,GENERATION+1);
+  await denied(await set(APPROVAL,old.token,approval(old)));
+  await denied(await set(STAGE,w.token,frame));
+  // A fresh sign-in is NOT sufficient; the role is still disabled and
+  // needs separately authorized operator re-enablement (not done here).
+  const fresh=await signin(V);
+  await denied(await set(APPROVAL,fresh.token,approval(fresh)));
+});
+
+test('crash after disable leaves real Auth token unable to grant and allows explicit resume',async()=>{
+  const old=sessions[V];
+  const crashing=Object.freeze({
+    async revokeRefreshTokens(){throw Error('SIMULATED_AUTH_TIMEOUT');},
+    getUser:uid=>admin.getUser(uid)
+  });
+  const first=await coordinator(verifierRevocationStore(),crashing)
+    .revoke({expectedGeneration:GENERATION});
+  assert.equal(first.step,'auth-revocation-uncertain');
+  assert.equal(first.completed,false);
+  assert.equal((await get(ROOT+'/ingestVerifierLab/'+V,'owner')).value.enabled,false);
+  await denied(await set(APPROVAL,old.token,approval(old)));
+  const completed=await coordinator().revoke({
+    expectedGeneration:GENERATION,resumeDisabled:true
+  });
+  assert.equal(completed.completed,true);
+  assert.equal(completed.roleDisabled,true);
+  await denied(await set(APPROVAL,old.token,approval(old)));
 });
