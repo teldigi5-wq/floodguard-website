@@ -21,6 +21,9 @@ on:
       - 'firebase.phase-b-dual-authority.json'
       - 'firebase.phase-b-observer-recovery.json'
       - 'firebase.phase-b-session-revocation.json'
+      - 'docs/firebase/phase-b-partial-restore-fence.rules.json'
+      - 'firebase.phase-b-partial-restore-fence.json'
+      - 'tests/partial-restore-fence-emulator.mjs'
       - 'firebase.phase-b-auth-lifecycle.json'
       - 'tests/auth-emulator-lifecycle.mjs'
       - 'tests/offline-role-revocation-coordinator.mjs'
@@ -104,6 +107,9 @@ jobs:
 
       - name: Verify revocable verifier writer and observer sessions and stale-approval denial
         run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-fg-session-revocation --config firebase.phase-b-session-revocation.json "FG_SIGNED_STAGING_BRIDGE_TEST=1 FG_DUAL_AUTHORITY_TEST=1 FG_SESSION_REVOCATION_TEST=1 node --test tests/session-revocation-staging-emulator.mjs"
+
+      - name: Verify partial-backup restore fences block direct RTDB role access
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-partial-restore-fence --config firebase.phase-b-partial-restore-fence.json "FG_RESTORE_FENCE_TEST=1 node --test tests/partial-restore-fence-emulator.mjs"
 
       - name: Verify Auth emulator issued tokens against RTDB revocation and scoped roles
         run: npx --yes firebase-tools@14.18.0 emulators:exec --only auth,database --project demo-fg-auth-lifecycle --config firebase.phase-b-auth-lifecycle.json "FG_REAL_AUTH_LIFECYCLE_TEST=1 FG_REVOCATION_SAGA_TEST=1 GCLOUD_PROJECT=demo-fg-auth-lifecycle node --test tests/auth-emulator-lifecycle.mjs tests/offline-role-revocation-coordinator.mjs tests/offline-revocation-highwater.test.mjs"
