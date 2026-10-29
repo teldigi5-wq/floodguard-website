@@ -163,15 +163,15 @@ test('observer cannot write anything or read another source, parent, WiFi, bot o
   const ob=witness();
   for(const path of [root+'/ingestApprovalLab/'+other,
     root+'/staging/ingestV1/'+other,root+'/deviceAuthorization/'+other,
-    root+'/live/esp8266/ip',root+'/live/gate/status',
-    root+'/bot',root+'/ingestObserverLab',root+'/ingestApprovalLab']){
+    root+'/live/esp8266/ip',root+'/bot',
+    root+'/ingestObserverLab',root+'/ingestApprovalLab',authPath]){
     await assertFails(ob.ref(path).get());
   }
   for(const path of [approvalPath,stagePath,authPath,
     root+'/ingestObserverLab/'+observerId,root+'/live/water/levelCm']){
     await assertFails(ob.ref(path).set(null));
   }
-  for(const p of [approvalPath,stagePath,authPath])
+  for(const p of [approvalPath,stagePath,...['enabled','scope','epoch'].map(x=>authPath+'/'+x)])
     await assertSucceeds(ob.ref(p).get());
   await assertFails(db(id,{fg_ingest_v1:true}).ref(approvalPath).get());
   await assertFails(verifier().ref(stagePath).get());
@@ -251,8 +251,10 @@ test('inconsistent two-pass data cannot yield an observed result',async()=>{
     return {async get(){
       n++;
       if(p===approvalPath)return {val:()=>a};
-      if(p===authPath)return {val:()=>({enabled:true,scope:'prototype-ingest-v1',epoch:1})};
-      if(p===stagePath)return {val:()=>n<=3?null:frame(1)};
+      if(p===authPath+'/enabled')return {val:()=>true};
+      if(p===authPath+'/scope')return {val:()=> 'prototype-ingest-v1'};
+      if(p===authPath+'/epoch')return {val:()=>1};
+      if(p===stagePath)return {val:()=>n<=5?null:frame(1)};
       throw Error('wrong observer path');
     }};
   }});
