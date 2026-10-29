@@ -21,6 +21,8 @@ on:
       - 'firebase.phase-b-dual-authority.json'
       - 'firebase.phase-b-observer-recovery.json'
       - 'firebase.phase-b-session-revocation.json'
+      - 'firebase.phase-b-auth-lifecycle.json'
+      - 'tests/auth-emulator-lifecycle.mjs'
       - 'tests/session-revocation-staging-emulator.mjs'
       - 'experiments/read-only-staging-recovery-observer.mjs'
       - 'tests/read-only-staging-recovery-observer-emulator.mjs'
@@ -74,7 +76,7 @@ jobs:
       - name: Install test-only dependencies
         run: |
           npm ci
-          npm install --no-save --package-lock=false --ignore-scripts @firebase/rules-unit-testing@5.0.2
+          npm install --no-save --package-lock=false --ignore-scripts @firebase/rules-unit-testing@5.0.2 firebase-admin@14.5.0
       - name: Verify offline static and application regression suite
         run: npm test
 
@@ -98,6 +100,9 @@ jobs:
 
       - name: Verify revocable verifier writer and observer sessions and stale-approval denial
         run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-fg-session-revocation --config firebase.phase-b-session-revocation.json "FG_SIGNED_STAGING_BRIDGE_TEST=1 FG_DUAL_AUTHORITY_TEST=1 FG_SESSION_REVOCATION_TEST=1 node --test tests/session-revocation-staging-emulator.mjs"
+
+      - name: Verify Auth emulator issued tokens against RTDB revocation and scoped roles
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only auth,database --project demo-fg-auth-lifecycle --config firebase.phase-b-auth-lifecycle.json "FG_REAL_AUTH_LIFECYCLE_TEST=1 node --test tests/auth-emulator-lifecycle.mjs"
 
       - name: Verify emulator-only signed-to-public atomic projector
         run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-strict-projector --config firebase.phase-b-strict.json "FG_STRICT_EMULATOR_PROJECTOR_TEST=1 node --test tests/strict-emulator-atomic-projector.mjs"
