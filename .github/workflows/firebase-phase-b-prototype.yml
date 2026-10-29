@@ -30,6 +30,8 @@ on:
       - 'experiments/offline-role-revocation-coordinator.mjs'
       - 'experiments/offline-revocation-highwater.mjs'
       - 'tests/offline-revocation-highwater.test.mjs'
+      - 'experiments/external-revocation-proof-client.mjs'
+      - 'tests/external-revocation-proof.test.mjs'
       - 'tests/session-revocation-staging-emulator.mjs'
       - 'experiments/read-only-staging-recovery-observer.mjs'
       - 'tests/read-only-staging-recovery-observer-emulator.mjs'
@@ -112,7 +114,7 @@ jobs:
         run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-partial-restore-fence --config firebase.phase-b-partial-restore-fence.json "FG_RESTORE_FENCE_TEST=1 node --test tests/partial-restore-fence-emulator.mjs"
 
       - name: Verify Auth emulator issued tokens against RTDB revocation and scoped roles
-        run: npx --yes firebase-tools@14.18.0 emulators:exec --only auth,database --project demo-fg-auth-lifecycle --config firebase.phase-b-auth-lifecycle.json "FG_REAL_AUTH_LIFECYCLE_TEST=1 FG_REVOCATION_SAGA_TEST=1 GCLOUD_PROJECT=demo-fg-auth-lifecycle node --test tests/auth-emulator-lifecycle.mjs tests/offline-role-revocation-coordinator.mjs tests/offline-revocation-highwater.test.mjs"
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only auth,database --project demo-fg-auth-lifecycle --config firebase.phase-b-auth-lifecycle.json "FG_REAL_AUTH_LIFECYCLE_TEST=1 FG_REVOCATION_SAGA_TEST=1 GCLOUD_PROJECT=demo-fg-auth-lifecycle node --test tests/auth-emulator-lifecycle.mjs tests/offline-role-revocation-coordinator.mjs tests/offline-revocation-highwater.test.mjs tests/external-revocation-proof.test.mjs"
 
       - name: Verify emulator-only signed-to-public atomic projector
         run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-strict-projector --config firebase.phase-b-strict.json "FG_STRICT_EMULATOR_PROJECTOR_TEST=1 node --test tests/strict-emulator-atomic-projector.mjs"
