@@ -20,6 +20,37 @@ Its result vocabulary deliberately avoids promising eventual consistency, Fireba
 
 The observer does not grant the right to perform old-epoch replay, claim safety, publish live water readings, or send WhatsApp notifications. A two-pass emulator read cannot replace a signed immutable cloud audit checkpoint; an actively changing database may still change **after** observation. A revoked local operator binding or a rotated signing key may invalidate the ability to assess historic evidence and should trigger manual review.
 
+## 29 October 2026 — single-flight protection after an SDK read timeout
+
+The Firebase RTDB `.get()` calls are **not cancelled** when the observer's
+`Promise.race` deadline expires. A client could previously invoke this
+read-only observer repeatedly while the SDK was unresponsive, causing multiple
+unresolved, five-path snapshot batches to accumulate in memory. Even though
+these reads cannot modify Firebase, unbounded requests are a reliability and
+resource-exhaustion risk.
+
+The observer now tracks the **actual unsettled SDK batch** per constructed
+observer instance. One batch at a time may run. A second reconciliation call
+while that batch is still unresolved returns `observer-read-in-flight`
+without issuing more database reads. A timeout returns
+`observation-unavailable` to the original caller but does **not** release
+the read budget until the underlying first and second snapshots have really
+settled. A settled batch releases its budget in both successful and rejected
+paths, including after a prior timeout; no delayed response can retroactively
+change the original timeout result. No automatic retries or writes are added.
+
+A permanently hung SDK batch therefore makes that instance **unavailable**
+until its outstanding operation settles or the process is explicitly
+restarted. This is a deliberate fail-closed reliability tradeoff, not a global
+rate limiter, cancellation API, cloud connection budget, or production
+service-level guarantee. Additional deployment isolation, request admission
+and per-process resource limits would be required before any public use.
+
+Two new synthetic tests cover resource-bounded repeated calls after deadline
+expiry, parallel reconciliation attempts, eventual settlement/release, and
+preservation of the original unknown outcome. No hardware or real Firebase
+service is exercised.
+
 ## Test command
 
 ```sh
