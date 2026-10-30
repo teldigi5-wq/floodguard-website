@@ -109,7 +109,8 @@ test('source-bound water freshness accepts a coherent recent attested sample sha
   });
   assert.equal(evaluate(frame), 'live');
   assert.equal(evaluate(frame, {prior: {
-    sourceId: 'ultrasonic-1', epoch: 4, sequence: 40
+    sourceId: 'ultrasonic-1', epoch: 4, sequence: 40,
+    observedAt: now - 6_000, receivedAt: now - 5_000
   }}), 'live');
   assert.equal(evaluate(frame, {connected: false}), 'stale');
   assert.equal(evaluate(frame, {loading: true}), 'loading');
@@ -150,13 +151,16 @@ test('unknown, mismatched, malformed, future or replayed source metadata fails c
     {...good, observedAt: now - 2000, receivedAt: now - 9000}
   ]) assert.equal(evaluate(observation), 'stale', JSON.stringify(observation));
   assert.equal(evaluate(good, {prior: {
-    sourceId: 'water-1', epoch: 3, sequence: 102
+    sourceId: 'water-1', epoch: 3, sequence: 102,
+    observedAt: now - 4_000, receivedAt: now - 3_000
   }}), 'stale');
   assert.equal(evaluate(good, {prior: {
-    sourceId: 'water-1', epoch: 4, sequence: 101
+    sourceId: 'water-1', epoch: 4, sequence: 101,
+    observedAt: now - 4_000, receivedAt: now - 3_000
   }}), 'stale');
   assert.equal(evaluate(good, {prior: {
-    sourceId: 'other-sensor', epoch: 3, sequence: 101
+    sourceId: 'other-sensor', epoch: 3, sequence: 101,
+    observedAt: now - 4_000, receivedAt: now - 3_000
   }}), 'stale');
 });
 test('source freshness prototype is not wired to unauthenticated live provider', () => {
@@ -164,4 +168,29 @@ test('source freshness prototype is not wired to unauthenticated live provider',
   const helper = readFileSync('lib/telemetry-health.mjs', 'utf8');
   assert.match(helper, /classifySourceBoundFreshness/);
   assert.doesNotMatch(provider, /classifySourceBoundFreshness/);
+});
+
+test('higher sequence cannot disguise observation-time or receipt-clock rollback', () => {
+  const frame = {
+    stream: 'water', sourceId: 'ultrasonic-A', epoch: 9, sequence: 103,
+    observedAt: now - 3_000, receivedAt: now - 2_000
+  };
+  const previous = {
+    sourceId: frame.sourceId, epoch: frame.epoch, sequence: 102,
+    observedAt: now - 4_000, receivedAt: now - 3_000
+  };
+  const evaluate = (prior) => classifySourceBoundFreshness({
+    stream: 'water', observation: frame,
+    hasData: true, connected: true, nowMs: now, prior
+  });
+  assert.equal(evaluate(previous), 'live');
+  assert.equal(evaluate({...previous, observedAt: now - 2_000}), 'stale',
+    'new sequence must not excuse rolled-back sensor observation time');
+  assert.equal(evaluate({...previous, receivedAt: now - 1_000}), 'stale',
+    'new sequence must not excuse rolled-back trusted receipt clock');
+  assert.equal(evaluate({...previous, observedAt: undefined}), 'stale');
+  assert.equal(evaluate({...previous, receivedAt: undefined}), 'stale');
+  assert.equal(evaluate({...previous, observedAt: now + 60_000}), 'stale');
+  assert.equal(evaluate({...previous, receivedAt: now + 60_000}), 'stale');
+  assert.equal(evaluate({...previous, sequence: 103}), 'stale');
 });
