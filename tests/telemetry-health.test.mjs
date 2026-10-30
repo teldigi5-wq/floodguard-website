@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ageSeconds, classifyTelemetryFreshness, parseFieldTimestamp } from "../lib/telemetry-health.mjs";
+import { ageSeconds, classifyTelemetryFreshness, parseFieldTimestamp, createCriticalStreamHealthTracker } from "../lib/telemetry-health.mjs";
+import { readFileSync } from "node:fs";
 
 const now = Date.UTC(2026, 9, 13, 4, 50, 0);
 const healthy = { loading: false, hasData: true, connected: true, error: false, ageSeconds: 4 };
@@ -60,4 +61,39 @@ test("historical field timestamps are never silently refreshed to browser time",
   assert.equal(parsed, now - 86400 * 1000);
   assert.equal(ageSeconds(parsed, now), 86400);
   assert.equal(classifyTelemetryFreshness({ ...healthy, ageSeconds: 86400 }), "stale");
+});
+
+test("water failure persists despite successful unrelated child snapshots", () => {
+  const streams = createCriticalStreamHealthTracker();
+  assert.equal(streams.healthy, true);
+  assert.equal(streams.update("water", false), false);
+  for (const sibling of ["rain","gate","alarm","devices","esp8266","rssi"]) {
+    assert.equal(streams.update(sibling, true), false, sibling);
+    assert.deepEqual(streams.failures, ["water"]);
+  }
+  assert.equal(streams.update("water", true), true);
+  assert.deepEqual(streams.failures, []);
+});
+
+test("system and water failures clear only after each critical stream recovers", () => {
+  const streams = createCriticalStreamHealthTracker();
+  assert.equal(streams.update("water", false), false);
+  assert.equal(streams.update("system", false), false);
+  assert.deepEqual(streams.failures, ["system","water"]);
+  assert.equal(streams.update("water", true), false);
+  assert.equal(streams.update("rain", true), false);
+  assert.deepEqual(streams.failures, ["system"]);
+  assert.equal(streams.update("system", true), true);
+  assert.equal(streams.update("system", false), false, "later failure must be noticed");
+  assert.equal(streams.update("system", undefined), false, "missing child is not healthy");
+  assert.equal(streams.update("system", true), true);
+});
+
+test("live provider uses independent critical child failure tracking", () => {
+  const provider = readFileSync("providers/flood-provider.tsx", "utf8");
+  assert.match(provider, /createCriticalStreamHealthTracker\(\)/);
+  assert.match(provider, /criticalStreams\.update\(key, healthy\)/);
+  assert.match(provider, /updateCriticalStatus\(key, false\)/);
+  assert.match(provider, /updateCriticalStatus\(key, parsed\.success && raw !== null\)/);
+  assert.doesNotMatch(provider, /if \(parsed\.success && raw !== null\) setError\(null\)/);
 });
