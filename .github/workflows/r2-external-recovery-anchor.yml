@@ -1,0 +1,60 @@
+name: R2 Independent Recovery Anchor Lab
+
+on:
+  push:
+    branches:
+      - test/r2-external-recovery-anchor-20261030
+    paths:
+      - 'experiments/r2-recovery-anchor-lab.mjs'
+      - 'tests/r2-recovery-anchor-lab.test.mjs'
+      - 'tests/r2-attested-dual-stream-publisher-emulator.mjs'
+      - 'docs/firebase/R2_INDEPENDENT_RECOVERY_ANCHOR_LAB_20261030.md'
+      - '.github/workflows/r2-external-recovery-anchor.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r2-recovery-anchor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Independently signed high-water recovery rehearsal
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Install patched Node 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22.23.4'
+          cache: npm
+      - name: Setup Java for local Firebase Emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install locked application dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install test-only emulator rules helper
+        run: npm install --no-save --package-lock=false --ignore-scripts @firebase/rules-unit-testing@5.0.2
+      - name: Verify recovery anchor unit tests and existing issuer receipts
+        run: |
+          node --test tests/r2-recovery-anchor-lab.test.mjs
+          node --test tests/r2-attested-dual-stream-publisher.test.mjs
+      - name: Run offline application regressions
+        run: npm test
+      - name: Verify database-restore detection in actual RTDB emulator
+        run: |
+          npx --yes firebase-tools@14.18.0 emulators:exec --only database \
+            --project demo-fg-r2-attested --config firebase.r2-dual-stream-lab.json \
+            "FG_R2_ATTESTED_PUBLISHER_LAB_TEST=1 FG_R2_RECOVERY_ANCHOR_LAB_TEST=1 node --test tests/r2-attested-dual-stream-publisher-emulator.mjs"
+      - name: Typecheck and lint
+        run: |
+          npm run typecheck
+          npm run lint
