@@ -634,3 +634,24 @@ test('R2 proof adapter remains strictly offline, read only and never a browser A
   const provider=readFileSync('providers/flood-provider.tsx','utf8');
   assert.doesNotMatch(provider,/r2-signed-water-receipt-evidence/);
 });
+
+
+test('R2 signed server acceptance time cannot precede water observation',async()=>{
+  const proof=input();
+  assert.equal((await project(proof)).published,true);
+  const snapshot=await root();
+  const receipt={...proof.receipt,acceptedAtMs:proof.envelope.observedAtMs-500};
+  const signature=sign(null,Buffer.from(JSON.stringify(receipt)),server.privateKey)
+    .toString('base64url');
+  // Hypothetical read-only corruption: consistent cryptographic material,
+  // but causal clock ordering is impossible. Do NOT change emulator state.
+  const fake=structuredClone(snapshot);
+  fake.confirmedIngest[uid].acceptedAtMs=receipt.acceptedAtMs;
+  const verdict=inspectSyntheticWaterReceipt({
+    snapshot:fake,...proof,receipt,signature,connected:true
+  });
+  assert.deepEqual(verdict,{
+    accepted:false,freshness:'stale',reason:'receipt-time-order-invalid'
+  });
+  assert.deepEqual(await root(),snapshot);
+});
