@@ -10,7 +10,7 @@ import {
 import { onValue, ref, type Unsubscribe } from "firebase/database";
 import { z } from "zod";
 import { database, LIVE_PATH } from "@/lib/firebase";
-import { ageSeconds, classifyTelemetryFreshness, parseFieldTimestamp } from "@/lib/telemetry-health.mjs";
+import { ageSeconds, classifyTelemetryFreshness, parseFieldTimestamp, createCriticalStreamHealthTracker } from "@/lib/telemetry-health.mjs";
 import { reconcileCalibratedWaterMeasurement, reconcileReportedGateStatus, reconcileReportedRainStatus, reconcileDisplayedFloodRisk } from "@/lib/telemetry-safety.mjs";
 
 const shortText = z.string().max(80);
@@ -190,6 +190,16 @@ export function FloodProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubscribers: Unsubscribe[] = [];
+    const criticalStreams = createCriticalStreamHealthTracker();
+    const updateCriticalStatus = (key: string, healthy: boolean) => {
+      // Independent child listeners may succeed in an arbitrary order.
+      // Neither a healthy unrelated stream nor a partial recovery may
+      // erase a failed water/system stream and imply current safety.
+      if (key === "water" || key === "system") {
+        const allHealthy = criticalStreams.update(key, healthy);
+        setError(allHealthy ? null : "Critical water or system telemetry is unavailable or invalid.");
+      }
+    };
     let released = false;
 
     const release = () => {
@@ -242,9 +252,7 @@ export function FloodProvider({ children }: { children: ReactNode }) {
                   delete (next as Record<string, unknown>)[key];
                   return Object.keys(next).length ? next : null;
                 });
-                if (key === "water" || key === "system") {
-                  setError("Live monitoring data failed validation.");
-                }
+                updateCriticalStatus(key, false);
               } else {
                 setData((previous) => {
                   const next: LiveData = { ...previous };
@@ -255,7 +263,7 @@ export function FloodProvider({ children }: { children: ReactNode }) {
                   }
                   return Object.keys(next).length ? next : null;
                 });
-                if (parsed.success && raw !== null) setError(null);
+                updateCriticalStatus(key, parsed.success && raw !== null);
               }
               release();
             },
@@ -268,9 +276,7 @@ export function FloodProvider({ children }: { children: ReactNode }) {
                 delete (next as Record<string, unknown>)[key];
                 return Object.keys(next).length ? next : null;
               });
-              if (key === "water" || key === "system") {
-                setError("Live monitoring data is currently unavailable.");
-              }
+              updateCriticalStatus(key, false);
               release();
             },
           ),
