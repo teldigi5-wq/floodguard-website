@@ -1,6 +1,7 @@
 // No RTDB connection, private credentials or device interfaces.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {generateKeyPairSync,sign} from 'node:crypto';
 import {canonicalR2PublicEvidence,R2_PUBLIC_PROOF_VERSION}
   from '../experiments/r2-dual-stream-public-evidence.mjs';
@@ -100,9 +101,7 @@ test('water anchor never approves a rain checkpoint or an epoch rebinding',()=>{
     'authority-or-epoch-diverged');
 });
 test('recovery preflight never persists a checkpoint, contacts hardware or treats file rollback as safe',()=>{
-  const source=await import('node:fs').then(fs=>fs.readFileSync(
-    'experiments/r2-recovery-anchor-lab.mjs','utf8'
-  ));
+  const source=readFileSync('experiments/r2-recovery-anchor-lab.mjs','utf8');
   assert.doesNotMatch(source,/firebase-admin|serviceAccount|node:https|node:http|sendMessage\s*\(/);
   assert.doesNotMatch(source,/writeFileSync|renameSync|mkdirSync|\.listen\s*\(/);
 });
