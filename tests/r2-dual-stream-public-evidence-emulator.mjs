@@ -186,7 +186,7 @@ test('rules alone cannot verify a forged signature; independent Ed25519 verifica
 });
 
 test('inspection and rules harness cannot reach production or run autonomous writes',()=>{
-  const source=readFileSync('tests/r2-dual-stream-public-evidence-emulator.mjs','utf8');
+  const source=readFileSync('experiments/r2-dual-stream-public-evidence.mjs','utf8');
   assert.match(source,/FG_R2_DUAL_STREAM_EMULATOR_TEST/);
   assert.doesNotMatch(source,/firebase-admin|serviceAccount|https:\/\/|sendMessage\s*\(/);
 });
