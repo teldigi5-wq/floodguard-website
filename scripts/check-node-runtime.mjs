@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
  * Verify a patched Node 24 release at build time independently of semver.
  */
 export function isPatchedNode24(value) {
-  const match = /^24\\.(\\d+)\\.(\\d+)$/.exec(value);
+  const match = /^24\.(\d+)\.(\d+)$/.exec(value);
   if (!match) return false;
   const minor = Number(match[1]);
   const patch = Number(match[2]);
