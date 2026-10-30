@@ -36,6 +36,37 @@ test('missing, malformed or unknown position/status cannot assert CLOSED',()=>{
     {status:'CLOSED',angle:-1,countdownSeconds:0}
   ])assert.equal(reconcileReportedGateStatus(input),'UNKNOWN');
 });
+test('malformed servo angles and countdowns cannot be reported as confirmed gate states',()=>{
+  for(const bad of [-1,1.2,11,60,3600,Number.NaN,Number.POSITIVE_INFINITY,'0']) {
+    assert.equal(reconcileReportedGateStatus({
+      status:'CLOSED',angle:0,countdownSeconds:bad
+    }),'UNKNOWN',String(bad));
+  }
+  for(const badAngle of [-1,0.5,91,Number.POSITIVE_INFINITY,'0']) {
+    assert.equal(reconcileReportedGateStatus({
+      status:'CLOSED',angle:badAngle,countdownSeconds:0
+    }),'UNKNOWN',String(badAngle));
+  }
+  assert.equal(reconcileReportedGateStatus({
+    status:'COUNTDOWN',angle:0,countdownSeconds:10
+  }),'COUNTDOWN');
+  assert.equal(reconcileReportedGateStatus({
+    status:'COUNTDOWN',angle:0,countdownSeconds:10.5
+  }),'UNKNOWN');
+});
+
+test('missing controller angle never proves OPEN or CLOSED',()=>{
+  for(const status of ['OPEN','CLOSED']) {
+    for(const angle of [undefined,null]) {
+      assert.equal(reconcileReportedGateStatus({
+        status,angle,countdownSeconds:0
+      }),'UNKNOWN',status);
+    }
+  }
+  assert.equal(gate('CLOSED',0,0),'CLOSED');
+  assert.equal(gate('OPEN',90,0),'OPEN');
+});
+
 test('explicit water sensor error cannot be overridden by numeric value',()=>{
   for(const status of ['SENSOR_ERROR','ERROR','OFFLINE','INVALID',' sensor_error '])
     assert.equal(isExplicitWaterFault(status),true);
@@ -81,7 +112,10 @@ test('live provider uses the safety helper for sensor and gate normalization',()
   const source=readFileSync('providers/flood-provider.tsx','utf8');
   assert.match(source,/reconcileCalibratedWaterMeasurement\(source\)/);
   assert.doesNotMatch(source,/Math\.max\(0, Math\.min\(WATER_SENSOR_TO_BOTTOM_CM/);
-  assert.match(source,/reconcileReportedGateStatus\(\{status:rawStatus,angle,countdownSeconds:countdown\}\)/);
+  assert.match(source,/reconcileReportedGateStatus\\(\\{/);
+  assert.match(source,/angle: source\\.angle/);
+  assert.match(source,/countdownSeconds: source\\.countdownSeconds/);
+  assert.doesNotMatch(source,/Math\\.max\\(0, source\\.countdownSeconds\\)/);
   assert.doesNotMatch(source,/status = "CLOSED";/);
 });
 test('the helper cannot access production services or actuate hardware',()=>{
