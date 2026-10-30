@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {isExplicitWaterFault,reconcileReportedGateStatus,reconcileWaterStatusWithoutMeasurement} from '../lib/telemetry-safety.mjs';
+import {isExplicitWaterFault,reconcileCalibratedWaterMeasurement,reconcileReportedGateStatus,reconcileWaterStatusWithoutMeasurement} from '../lib/telemetry-safety.mjs';
 
 const gate=(status,angle,countdownSeconds=0)=>
   reconcileReportedGateStatus({status,angle,countdownSeconds});
@@ -50,10 +50,37 @@ test('missing water measurement cannot turn a stored SAFE flag into clearance',(
   assert.equal(reconcileWaterStatusWithoutMeasurement('WARNING'),'WARNING');
   assert.equal(reconcileWaterStatusWithoutMeasurement('SENSOR_ERROR'),'SENSOR_ERROR');
 });
+
+test('out-of-installation air gap cannot produce SAFE through clamping',()=>{
+  for(const invalid of [25.0001,26,400,-1,Number.NaN,Number.POSITIVE_INFINITY,null,'25']) {
+    const x=reconcileCalibratedWaterMeasurement({
+      distanceCm:invalid,levelCm:0,status:'SAFE'
+    });
+    assert.deepEqual(x,{distanceCm:null,levelCm:null,status:'UNKNOWN'},String(invalid));
+  }
+  assert.deepEqual(reconcileCalibratedWaterMeasurement({
+    distanceCm:26,levelCm:0,status:'DANGER'
+  }),{distanceCm:null,levelCm:null,status:'DANGER'});
+});
+
+test('valid calibrated readings retain previously reported hazards',()=>{
+  const read=(distanceCm,status)=>reconcileCalibratedWaterMeasurement({distanceCm,status});
+  assert.deepEqual(read(25,'SAFE'),{distanceCm:25,levelCm:0,status:'SAFE'});
+  assert.equal(read(16.5,'SAFE').status,'WARNING');
+  assert.equal(read(14,'SAFE').status,'DANGER');
+  assert.equal(read(0,'SAFE').status,'DANGER'); // provisional website zero-echo semantics
+  assert.equal(read(25,'WARNING').status,'WARNING');
+  assert.equal(read(25,'DANGER').status,'DANGER');
+  assert.equal(read(14,'SENSOR_ERROR').status,'SENSOR_ERROR');
+  assert.equal(read(25,'DISCONNECTED').status,'SENSOR_ERROR');
+  assert.equal(reconcileCalibratedWaterMeasurement({levelCm:12,status:'SAFE'}).status,'DANGER');
+  assert.equal(reconcileCalibratedWaterMeasurement({status:'SAFE'}).status,'UNKNOWN');
+});
+
 test('live provider uses the safety helper for sensor and gate normalization',()=>{
   const source=readFileSync('providers/flood-provider.tsx','utf8');
-  assert.match(source,/if \(isExplicitWaterFault\(source\.status\)\)/);
-  assert.match(source,/reconcileWaterStatusWithoutMeasurement\(incomingStatus\)/);
+  assert.match(source,/reconcileCalibratedWaterMeasurement\(source\)/);
+  assert.doesNotMatch(source,/Math\.max\(0, Math\.min\(WATER_SENSOR_TO_BOTTOM_CM/);
   assert.match(source,/reconcileReportedGateStatus\(\{status:rawStatus,angle,countdownSeconds:countdown\}\)/);
   assert.doesNotMatch(source,/status = "CLOSED";/);
 });
