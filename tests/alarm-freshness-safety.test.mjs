@@ -71,7 +71,8 @@ test('invalid or unreadable Firebase group updates remove cached group evidence'
   assert.match(source,/delete \(next as Record<string, unknown>\)\[key\]/);
   assert.equal(source.match(/delete \(next as Record<string, unknown>\)\[key\]/g)?.length,3,
     'malformed payload, absent group and permission error must all clear old evidence');
-  assert.match(source,/if \(key === "water" \|\| key === "system"\)/);
+  assert.match(source,/updateCriticalStatus\(key, false\)/);
+  assert.match(provider,/if \(key === "water" \|\| key === "system"\)/);
 });
 
 test('alarm interpretation remains a pure read-only transformation',()=>{
