@@ -8,7 +8,9 @@ test('trusted projector is gated to local Firebase Emulator and never auto-start
   assert.match(s,/FIREBASE_DATABASE_EMULATOR_HOST/);
   assert.match(s,/const EMULATOR='127\.0\.0\.1:9000'/);
   assert.match(s,/database\.ref\('\/floodguard'\)/);
-  assert.match(s,/target\.on\('value',onValue,reject\)/);
+  assert.ok(s.includes("target.on('value',onValue,error=>finish("));
+  assert.ok(s.includes("initialSnapshotTimeoutMs=5000"));
+  assert.ok(s.includes("setTimeout(()=>finish(new Error('initial-snapshot-timeout'))"));
   assert.match(s,/target\.off\('value',onValue\)/);
   assert.match(s,/target\.transaction\(/);
   assert.doesNotMatch(s,/firebase-admin|serviceAccount|https:\/\/|http:\/\/|fetch\s*\(|\.listen\s*\(/);
