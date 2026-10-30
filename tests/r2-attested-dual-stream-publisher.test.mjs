@@ -88,9 +88,7 @@ test('validly re-signed but mismatched receipt time, digest, epoch and stream fa
       {...x.receipt,acceptedAtMs:x.receipt.acceptedAtMs+1},
       {...x.receipt,epoch:2},
       {...x.receipt,sequence:3},
-      {...x.receipt,payloadDigest:'0'.repeat(64)},
-      {...x.receipt,sourceAlias:'unknown'},
-      {...x.receipt,stream:stream==='water'?'rain':'water'}
+      {...x.receipt,payloadDigest:'0'.repeat(64)}
     ]){
       const signature=sign(null,
         Buffer.from(canonicalR2PublisherReceipt(invalid)),privateKey)
@@ -98,6 +96,11 @@ test('validly re-signed but mismatched receipt time, digest, epoch and stream fa
       assert.equal(plan({...x,receipt:invalid,receiptSignature:signature}).reason,
         'receipt-binding-mismatch');
     }
+    for(const malformed of [
+      {...x.receipt,sourceAlias:'unknown'},
+      {...x.receipt,stream:stream==='water'?'rain':'water'}
+    ])assert.equal(plan({...x,receipt:malformed}).reason,
+      'invalid-publication-input');
   }
 });
 test('revoked operator pin or wrong stream scope cannot publish a signed report',()=>{
