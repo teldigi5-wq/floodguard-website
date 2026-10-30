@@ -1,0 +1,71 @@
+{
+  "schema": "floodguard-stage12-operator-acceptance-v1",
+  "releaseDecision": "NO_GO_REVIEW_ONLY",
+  "evidenceType": "DOCUMENTED_AND_SYNTHETIC_CI_ONLY",
+  "reviewedAt": "2026-10-14",
+  "sourceRevisions": {
+    "website": "9895952837ef9b33246cb9f0234efe4912593f1b",
+    "bot": "b2048d05d47ccc634c20ea562d1efee3fb158476",
+    "mobile": "1b40c15e4e2ed7fae58ab35584794b7502f4f96c"
+  },
+  "syntheticChecks": [
+    "representative-firmware-put-patch",
+    "private-esp-redaction",
+    "no-parent-read",
+    "stale-future-missing-clock",
+    "cross-client-freshness-policy-divergence",
+    "anonymous-writes-still-open"
+  ],
+  "realWorldGates": [
+    {
+      "id": "effective-firebase-rules-and-private-backup",
+      "status": "UNVERIFIED",
+      "approved": false
+    },
+    {
+      "id": "firebase-anonymous-write-remediation",
+      "status": "UNVERIFIED",
+      "approved": false
+    },
+    {
+      "id": "real-device-hardware-and-tls",
+      "status": "UNVERIFIED",
+      "approved": false
+    },
+    {
+      "id": "mobile-physical-smoke",
+      "status": "UNVERIFIED",
+      "approved": false
+    },
+    {
+      "id": "field-timestamps-and-stale-threshold-approval",
+      "status": "UNVERIFIED",
+      "approved": false
+    },
+    {
+      "id": "private-public-descendants-inventory",
+      "status": "UNVERIFIED",
+      "approved": false
+    },
+    {
+      "id": "windows-pc-and-hosting-approval",
+      "status": "UNVERIFIED",
+      "approved": false
+    },
+    {
+      "id": "whatsapp-session-and-consented-delivery",
+      "status": "UNVERIFIED",
+      "approved": false
+    },
+    {
+      "id": "recovery-rollback-operator-signoff",
+      "status": "UNVERIFIED",
+      "approved": false
+    },
+    {
+      "id": "mobile-repository-historical-archive-review",
+      "status": "UNVERIFIED",
+      "approved": false
+    }
+  ]
+}

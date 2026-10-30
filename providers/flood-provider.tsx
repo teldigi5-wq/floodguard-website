@@ -10,15 +10,12 @@ import {
 import { onValue, ref, type Unsubscribe } from "firebase/database";
 import { z } from "zod";
 import { database, LIVE_PATH } from "@/lib/firebase";
-import { ageSeconds, classifyTelemetryFreshness, parseFieldTimestamp } from "@/lib/telemetry-health.mjs";
+import { ageSeconds, classifyTelemetryFreshness, parseFieldTimestamp, createCriticalStreamHealthTracker } from "@/lib/telemetry-health.mjs";
+import { reconcileCalibratedWaterMeasurement, reconcileReportedGateStatus, reconcileReportedRainStatus, reconcileDisplayedFloodRisk } from "@/lib/telemetry-safety.mjs";
 
 const shortText = z.string().max(80);
 const optionalNumber = (min: number, max: number) =>
   z.number().finite().min(min).max(max).nullable().optional();
-
-const WATER_SENSOR_TO_BOTTOM_CM = 25;
-const WATER_WARNING_MIN_CM = 8.5;
-const WATER_DANGER_MIN_CM = 11;
 
 const waterSchema = z.object({
   distanceCm: optionalNumber(0, 400),
@@ -119,63 +116,13 @@ function normalizeDeviceState(value: unknown): unknown {
   return "UNKNOWN";
 }
 
-function normalizeWaterStatus(value: unknown): string {
-  const state = upper(value);
-  if (["SAFE", "WARNING", "DANGER"].includes(state ?? "")) return state!;
-  if (["SENSOR_ERROR", "ERROR", "OFFLINE", "INVALID"].includes(state ?? "")) return "SENSOR_ERROR";
-  return "UNKNOWN";
-}
-
 function normalizeWaterGroup(source: Record<string, unknown>) {
-  const distance = typeof source.distanceCm === "number" && Number.isFinite(source.distanceCm)
-    ? source.distanceCm : null;
-  const providedLevel = typeof source.levelCm === "number" && Number.isFinite(source.levelCm)
-    ? source.levelCm : null;
-
-  // Website-authoritative display rule: whenever the real HC-SR04 air-gap
-  // measurement exists, calculate level locally from that same value. This
-  // prevents a stale levelCm field from disagreeing with a fresh distanceCm.
-  const levelCm = distance !== null
-    ? Math.max(0, Math.min(WATER_SENSOR_TO_BOTTOM_CM, WATER_SENSOR_TO_BOTTOM_CM - distance))
-    : providedLevel;
-
-  const incomingStatus = normalizeWaterStatus(source.status);
-  if (incomingStatus === "SENSOR_ERROR" && distance === null) {
-    return { ...source, distanceCm: null, levelCm: null, status: "SENSOR_ERROR" };
-  }
-
-  // Derive the website status from the exact level shown on screen so the
-  // number, threshold card and status can never contradict each other.
-  const status = levelCm === null
-    ? incomingStatus
-    : levelCm >= WATER_DANGER_MIN_CM ? "DANGER"
-    : levelCm >= WATER_WARNING_MIN_CM ? "WARNING"
-    : "SAFE";
-
-  return { ...source, distanceCm: distance, levelCm, status };
+  // The pure safety contract validates the calibrated air gap before deriving
+  // a displayed level. Invalid values cannot become SAFE via clamping.
+  return { ...source, ...reconcileCalibratedWaterMeasurement(source) };
 }
 
-function normalizeRainStatus(value: unknown, dailyMm?: unknown): string {
-  const state = upper(value);
-  if (["NORMAL", "HEAVY_RAIN", "FLOOD_WARNING", "EXTREME", "CRITICAL"].includes(state ?? "")) {
-    return state!;
-  }
-  // Compatibility for the brief firmware version that used ONLINE as the
-  // rain category. Derive a category only from a real numeric measurement.
-  if (state === "ONLINE" && typeof dailyMm === "number" && Number.isFinite(dailyMm)) {
-    if (dailyMm >= 300) return "CRITICAL";
-    if (dailyMm >= 200) return "EXTREME";
-    if (dailyMm >= 150) return "FLOOD_WARNING";
-    if (dailyMm >= 100) return "HEAVY_RAIN";
-    return "NORMAL";
-  }
-  if (["NOT_INSTALLED", "NOT INSTALLED", "REMOVED", "DISABLED"].includes(state ?? "")) {
-    return "NOT_INSTALLED";
-  }
-  return "UNKNOWN";
-}
-
-function normalizeGateStatus(value: unknown): string {
+ function normalizeGateStatus(value: unknown): string {
   const state = upper(value);
   if (["CLOSED", "COUNTDOWN", "OPENING", "OPEN", "CLOSING"].includes(state ?? "")) return state!;
   if (state === "OPENING_WARNING") return "COUNTDOWN";
@@ -184,30 +131,21 @@ function normalizeGateStatus(value: unknown): string {
 
 function normalizeGateGroup(source: Record<string, unknown>) {
   const rawStatus = normalizeGateStatus(source.status);
-  const angle = typeof source.angle === "number" && Number.isFinite(source.angle) ? source.angle : null;
-  const countdown =
-    typeof source.countdownSeconds === "number" && Number.isFinite(source.countdownSeconds)
-      ? Math.max(0, source.countdownSeconds)
-      : null;
-
-  // Physical gate position/countdown wins over stale legacy status strings.
-  // This prevents old OPENING_WARNING/COUNTDOWN values from showing while the
-  // Arduino reports a closed 0-degree gate with no active countdown.
-  let status = rawStatus;
-  if ((countdown ?? 0) > 0) {
-    status = "COUNTDOWN";
-  } else if (angle !== null && angle <= 2) {
-    status = "CLOSED";
-  } else if (angle !== null && angle >= 80) {
-    status = "OPEN";
-  } else if (angle !== null && angle > 2 && angle < 80) {
-    // Current Arduino sends direct target angles, but tolerate intermediate values.
-    status = status === "CLOSING" ? "CLOSING" : "OPENING";
-  } else if (status === "COUNTDOWN" || status === "OPENING_WARNING") {
-    status = "CLOSED";
-  }
-
-  const reason = status === "CLOSED" ? "NONE" : source.reason;
+  // Preserve malformed raw values for the safety reconciler BEFORE sanitizing
+  // output for the validated public model. Coercing negatives to zero could
+  // otherwise fabricate a CLOSED state or a completed countdown.
+  const status = reconcileReportedGateStatus({
+    status: rawStatus,
+    angle: source.angle,
+    countdownSeconds: source.countdownSeconds,
+  });
+  const angle = typeof source.angle === "number" && Number.isInteger(source.angle)
+    && source.angle >= 0 && source.angle <= 90 ? source.angle : null;
+  const countdown = typeof source.countdownSeconds === "number"
+    && Number.isInteger(source.countdownSeconds)
+    && source.countdownSeconds >= 0 && source.countdownSeconds <= 10
+      ? source.countdownSeconds : null;
+  const reason = status === "CLOSED" ? "NONE" : status === "UNKNOWN" ? null : source.reason;
   return { ...source, status, angle, countdownSeconds: countdown, reason };
 }
 
@@ -227,7 +165,7 @@ function normalizeGroup(key: keyof Omit<LiveData, "esp8266">, value: unknown): u
   }
   if (key === "water") return normalizeWaterGroup(source);
   if (key === "rain") {
-    const status = normalizeRainStatus(source.status, source.dailyMm);
+    const status = reconcileReportedRainStatus({status:source.status,dailyMm:source.dailyMm});
     if (status === "UNKNOWN" || status === "NOT_INSTALLED") {
       return { ...source, status, currentMm: null, dailyMm: null, weightGrams: null };
     }
@@ -252,6 +190,16 @@ export function FloodProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubscribers: Unsubscribe[] = [];
+    const criticalStreams = createCriticalStreamHealthTracker();
+    const updateCriticalStatus = (key: string, healthy: boolean) => {
+      // Independent child listeners may succeed in an arbitrary order.
+      // Neither a healthy unrelated stream nor a partial recovery may
+      // erase a failed water/system stream and imply current safety.
+      if (key === "water" || key === "system") {
+        const allHealthy = criticalStreams.update(key, healthy);
+        setError(allHealthy ? null : "Critical water or system telemetry is unavailable or invalid.");
+      }
+    };
     let released = false;
 
     const release = () => {
@@ -295,7 +243,16 @@ export function FloodProvider({ children }: { children: ReactNode }) {
               const raw = snapshot.val();
               const parsed = publicSchemas[key].safeParse(normalizeGroup(key, raw));
               if (!parsed.success && raw !== null) {
-                console.warn(`FloodGuard ignored invalid ${key} payload`, parsed.error.issues);
+                console.warn(`FloodGuard rejected invalid ${key} payload`, parsed.error.issues);
+                // A malformed update must NOT retain an old CLEAR, SAFE,
+                // or CLOSED report while other branches keep updating.
+                setData((previous) => {
+                  if (previous === null || !Object.hasOwn(previous, key)) return previous;
+                  const next: LiveData = { ...previous };
+                  delete (next as Record<string, unknown>)[key];
+                  return Object.keys(next).length ? next : null;
+                });
+                updateCriticalStatus(key, false);
               } else {
                 setData((previous) => {
                   const next: LiveData = { ...previous };
@@ -306,14 +263,20 @@ export function FloodProvider({ children }: { children: ReactNode }) {
                   }
                   return Object.keys(next).length ? next : null;
                 });
-                if (parsed.success && raw !== null) setError(null);
+                updateCriticalStatus(key, parsed.success && raw !== null);
               }
               release();
             },
             () => {
-              if (key === "water" || key === "system") {
-                setError("Live monitoring data is currently unavailable.");
-              }
+              // Permission/network denial must not leave a cached alarm CLEAR
+              // (or prior water SAFE) presented beside newer group updates.
+              setData((previous) => {
+                if (previous === null || !Object.hasOwn(previous, key)) return previous;
+                const next: LiveData = { ...previous };
+                delete (next as Record<string, unknown>)[key];
+                return Object.keys(next).length ? next : null;
+              });
+              updateCriticalStatus(key, false);
               release();
             },
           ),
@@ -375,9 +338,22 @@ export function FloodProvider({ children }: { children: ReactNode }) {
     ageSeconds: age,
   });
 
-  const value = useMemo(
-    () => ({ data, freshness, age, lastUpdateMs: stamp, databaseConnected: connected, error }),
-    [data, freshness, age, stamp, connected, error],
-  );
+  // Merge source observations for display instead of trusting a standalone
+  // Firebase overallRisk=LOW. Never describe a stale snapshot as current.
+  const value = useMemo(() => {
+    const displayed: LiveData | null = data === null ? null : {
+      ...data,
+      system: {
+        ...(data.system ?? {}),
+        overallRisk: reconcileDisplayedFloodRisk({
+          waterStatus: data.water?.status,
+          rainStatus: data.rain?.status,
+          reportedRisk: data.system?.overallRisk,
+          freshness,
+        }),
+      },
+    };
+    return { data: displayed, freshness, age, lastUpdateMs: stamp, databaseConnected: connected, error };
+  }, [data, freshness, age, stamp, connected, error]);
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>;
 }

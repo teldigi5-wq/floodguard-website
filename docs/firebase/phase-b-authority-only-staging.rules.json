@@ -1,0 +1,135 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "floodguard": {
+      "live": {
+        ".read": false,
+        ".write": false,
+        "water": {
+          ".read": true,
+          "distanceCm": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 400)"
+          },
+          "levelCm": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 25)"
+          },
+          "status": {
+            ".validate": "newData.isString() && (newData.val() === 'SAFE' || newData.val() === 'WARNING' || newData.val() === 'DANGER' || newData.val() === 'SENSOR_ERROR')"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "rain": {
+          ".read": true,
+          "currentMm": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0)"
+          },
+          "dailyMm": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0)"
+          },
+          "waterDepthCm": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 4)"
+          },
+          "rawValue": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 1023)"
+          },
+          "weightGrams": {
+            ".validate": "!newData.exists() || newData.isNumber()"
+          }
+        },
+        "gate": {
+          ".read": true,
+          "status": {
+            ".validate": "newData.isString() && (newData.val() === 'CLOSED' || newData.val() === 'COUNTDOWN' || newData.val() === 'OPEN')"
+          },
+          "angle": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 90)"
+          },
+          "countdownSeconds": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 10)"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "alarm": {
+          ".read": true
+        },
+        "devices": {
+          ".read": true
+        },
+        "system": {
+          ".read": true
+        },
+        "esp8266": {
+          ".read": false,
+          "connection": {
+            ".read": true
+          },
+          "rssi": {
+            ".read": true
+          },
+          "status": {
+            ".read": true,
+            ".validate": "newData.isString() && (newData.val() === 'ONLINE' || newData.val() === 'OFFLINE' || newData.val() === 'UNKNOWN')"
+          },
+          "ip": {
+            ".read": false
+          },
+          "wifi": {
+            ".read": false
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      },
+      "test": {
+        ".read": false,
+        ".write": false
+      },
+      "bot": {
+        ".read": false,
+        ".write": false
+      },
+      "deviceAuthorization": {
+        ".read": false,
+        ".write": false
+      },
+      "staging": {
+        ".read": false,
+        ".write": false,
+        "ingestV1": {
+          ".read": false,
+          ".write": false,
+          "$deviceId": {
+            ".read": false,
+            ".write": "auth != null && auth.uid === 'ingest-authority-stage-a' && auth.token.fg_ingest_authority_v1 === true && root.child('floodguard/ingestAuthorityLab/ingest-authority-stage-a/enabled').val() === true && root.child('floodguard/ingestAuthorityLab/ingest-authority-stage-a/scope').val() === 'prototype-signed-staging-authority-v1' && root.child('floodguard/ingestAuthorityLab/ingest-authority-stage-a/deviceId').val() === $deviceId && root.child('floodguard/deviceAuthorization').child($deviceId).child('enabled').val() === true && root.child('floodguard/deviceAuthorization').child($deviceId).child('scope').val() === 'prototype-ingest-v1' && newData.exists() && (!data.exists() || newData.child('sequence').val() > data.child('sequence').val())",
+            ".validate": "newData.hasChildren(['sequence','distanceCm','levelCm','risk'])",
+            "sequence": {
+              ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 1 && newData.val() <= 2147483647"
+            },
+            "distanceCm": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 400"
+            },
+            "levelCm": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 25"
+            },
+            "risk": {
+              ".validate": "newData.isString() && (newData.val() === 'SAFE' || newData.val() === 'WARNING' || newData.val() === 'DANGER' || newData.val() === 'SENSOR_ERROR')"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        }
+      },
+      "ingestAuthorityLab": {
+        ".read": false,
+        ".write": false
+      }
+    }
+  }
+}

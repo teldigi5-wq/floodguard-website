@@ -1,0 +1,132 @@
+name: Firebase Phase B identity prototype only
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/firebase/phase-b-*'
+      - 'docs/firebase/authenticated-write-migration-plan.md'
+      - 'firebase.phase-b.json'
+      - 'firebase.phase-b-strict.json'
+      - 'tests/phase-b-*.mjs'
+      - 'tests/offline-ingestion-gateway.test.mjs'
+      - 'experiments/offline-ingestion-gateway.mjs'
+      - 'experiments/stage7-durable-ingress.mjs'
+      - 'tests/stage7-durable-ingress.test.mjs'
+      - 'experiments/signed-staging-emulator-writer.mjs'
+      - 'tests/signed-staging-emulator.mjs'
+      - 'tests/authority-only-signed-staging-emulator.mjs'
+      - 'tests/dual-authority-staging-emulator.mjs'
+      - 'experiments/signed-staging-approval-emulator.mjs'
+      - 'firebase.phase-b-dual-authority.json'
+      - 'firebase.phase-b-observer-recovery.json'
+      - 'firebase.phase-b-session-revocation.json'
+      - 'docs/firebase/phase-b-partial-restore-fence.rules.json'
+      - 'firebase.phase-b-partial-restore-fence.json'
+      - 'tests/partial-restore-fence-emulator.mjs'
+      - 'firebase.phase-b-auth-lifecycle.json'
+      - 'tests/auth-emulator-lifecycle.mjs'
+      - 'tests/offline-role-revocation-coordinator.mjs'
+      - 'experiments/offline-role-revocation-coordinator.mjs'
+      - 'experiments/offline-revocation-highwater.mjs'
+      - 'tests/offline-revocation-highwater.test.mjs'
+      - 'experiments/external-revocation-proof-client.mjs'
+      - 'tests/external-revocation-proof.test.mjs'
+      - 'tests/session-revocation-staging-emulator.mjs'
+      - 'experiments/read-only-staging-recovery-observer.mjs'
+      - 'tests/read-only-staging-recovery-observer-emulator.mjs'
+      - 'firebase.phase-b-authority-only.json'
+      - 'experiments/stage8-ack-reconciliation.mjs'
+      - 'tests/stage8-ack-reconciliation.test.mjs'
+      - 'experiments/stage9-downstream-outbox.mjs'
+      - 'tests/stage9-downstream-outbox.test.mjs'
+      - 'tests/stage9-local-tls.test.mjs'
+      - 'experiments/stage10-notification-rehearsal.mjs'
+      - 'tests/stage10-notification-rehearsal.test.mjs'
+      - 'experiments/strict-signed-projection-gate.mjs'
+      - 'tests/strict-signed-projection-gate.test.mjs'
+      - 'experiments/strict-emulator-atomic-projector.mjs'
+      - 'tests/strict-emulator-atomic-projector.mjs'
+      - 'docs/firebase/phase-b-narrow-publication-lab.rules.json'
+      - 'firebase.phase-b-narrow-lab.json'
+      - 'tests/narrow-publisher-rules-emulator.mjs'
+      - 'experiments/signed-narrow-publisher-emulator.mjs'
+      - 'experiments/synthetic-publication-attestation.mjs'
+      - 'tests/synthetic-publication-attestation.test.mjs'
+      - 'tests/narrow-signed-publisher-emulator.mjs'
+      - 'docs/firebase/phase-b-attestor-lab.rules.json'
+      - 'firebase.phase-b-attestor-lab.json'
+      - 'experiments/read-only-staging-attestor-emulator.mjs'
+      - 'tests/read-only-staging-attestor-emulator.mjs'
+      - 'docs/firebase/phase-b-versioned-confirmation-lab.rules.json'
+      - 'firebase.phase-b-versioned-confirmation-lab.json'
+      - 'experiments/versioned-confirmation-emulator.mjs'
+      - 'tests/versioned-confirmation-emulator.mjs'
+      - '.github/workflows/firebase-phase-b-prototype.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    name: Local emulator synthetic identity rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install test-only dependencies
+        run: |
+          npm ci
+          npm install --no-save --package-lock=false --ignore-scripts @firebase/rules-unit-testing@5.0.2 firebase-admin@14.5.0
+      - name: Verify offline static and application regression suite
+        run: npm test
+
+      - name: Verify simulated approved and denied RTDB writers
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-floodguard --config firebase.phase-b.json "FG_PHASE_B_TEST=1 node --test tests/phase-b-auth-emulator.mjs"
+
+      - name: Verify strict read-only public telemetry and private authenticated staging
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-floodguard-strict --config firebase.phase-b-strict.json "FG_PHASE_B_STRICT_TEST=1 node --test tests/phase-b-strict-emulator.mjs"
+
+      - name: Verify signature- and receipt-gated scoped staging client writes
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-floodguard-strict --config firebase.phase-b-strict.json "FG_SIGNED_STAGING_BRIDGE_TEST=1 node --test tests/signed-staging-emulator.mjs"
+
+      - name: Verify authority-only RTDB staging rules and signed evidence
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-authority-only-ingest --config firebase.phase-b-authority-only.json "FG_SIGNED_STAGING_BRIDGE_TEST=1 FG_TRUSTED_INGEST_AUTHORITY_TEST=1 node --test tests/authority-only-signed-staging-emulator.mjs"
+
+      - name: Verify separate evidence verifier approval and staging authority RTDB rules
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-dual-authority-ingest --config firebase.phase-b-dual-authority.json "FG_SIGNED_STAGING_BRIDGE_TEST=1 FG_DUAL_AUTHORITY_TEST=1 node --test tests/dual-authority-staging-emulator.mjs"
+
+      - name: Verify read-only independent signed staging reconciliation after uncertain ACK
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-recovery-observer-ingest --config firebase.phase-b-observer-recovery.json "FG_SIGNED_STAGING_BRIDGE_TEST=1 FG_DUAL_AUTHORITY_TEST=1 FG_STAGING_OBSERVER_TEST=1 node --test tests/read-only-staging-recovery-observer-emulator.mjs"
+
+      - name: Verify revocable verifier writer and observer sessions and stale-approval denial
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-fg-session-revocation --config firebase.phase-b-session-revocation.json "FG_SIGNED_STAGING_BRIDGE_TEST=1 FG_DUAL_AUTHORITY_TEST=1 FG_SESSION_REVOCATION_TEST=1 node --test tests/session-revocation-staging-emulator.mjs"
+
+      - name: Verify partial-backup restore fences block direct RTDB role access
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-partial-restore-fence --config firebase.phase-b-partial-restore-fence.json "FG_RESTORE_FENCE_TEST=1 node --test tests/partial-restore-fence-emulator.mjs"
+
+      - name: Verify Auth emulator issued tokens against RTDB revocation and scoped roles
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only auth,database --project demo-fg-auth-lifecycle --config firebase.phase-b-auth-lifecycle.json "FG_REAL_AUTH_LIFECYCLE_TEST=1 FG_REVOCATION_SAGA_TEST=1 GCLOUD_PROJECT=demo-fg-auth-lifecycle node --test tests/auth-emulator-lifecycle.mjs tests/offline-role-revocation-coordinator.mjs tests/offline-revocation-highwater.test.mjs tests/external-revocation-proof.test.mjs"
+
+      - name: Verify emulator-only signed-to-public atomic projector
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-strict-projector --config firebase.phase-b-strict.json "FG_STRICT_EMULATOR_PROJECTOR_TEST=1 node --test tests/strict-emulator-atomic-projector.mjs"
+
+      - name: Verify narrowly authorized authenticated RTDB publisher role
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-narrow-publisher --config firebase.phase-b-narrow-lab.json "FG_NARROW_PUBLISHER_EMULATOR_TEST=1 node --test tests/narrow-publisher-rules-emulator.mjs"
+
+      - name: Verify signed receipt to narrow authenticated publisher transaction
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-narrow-signed-bridge --config firebase.phase-b-narrow-lab.json "FG_NARROW_SIGNED_BRIDGE_TEST=1 node --test tests/narrow-signed-publisher-emulator.mjs"
+
+      - name: Verify read-only signed staging attestor and scoped publisher end-to-end
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-read-only-attestor --config firebase.phase-b-attestor-lab.json "FG_READ_ONLY_ATTESTOR_TEST=1 FG_NARROW_SIGNED_BRIDGE_TEST=1 node --test tests/read-only-staging-attestor-emulator.mjs"
+
+      - name: Verify versioned immutable confirmation and publication revocation gates
+        run: npx --yes firebase-tools@14.18.0 emulators:exec --only database --project demo-versioned-confirmation-lab --config firebase.phase-b-versioned-confirmation-lab.json "FG_VERSIONED_CONFIRMATION_TEST=1 FG_NARROW_SIGNED_BRIDGE_TEST=1 node --test tests/versioned-confirmation-emulator.mjs"

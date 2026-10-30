@@ -1,0 +1,625 @@
+{
+  "schema": "floodguard-stage18-transport-contract-v1",
+  "evidence": "SYNTHETIC_LOCAL_REPLAY_ONLY",
+  "reviewTimestampMs": 1791975600000,
+  "sourceHeads": {
+    "website": "bd39188ef0dbf77c5f872adf1a2d749c933d9129",
+    "bot": "484f0369ad9963ce43de0dfb9829f08118da7426",
+    "mobile": "9e9aa38b846034eed7f50ee3aa14097f38c9dc45"
+  },
+  "publicPaths": [
+    "water",
+    "rain",
+    "gate",
+    "alarm",
+    "devices",
+    "system",
+    "esp8266/connection",
+    "esp8266/rssi",
+    "esp8266/status"
+  ],
+  "defaultWindowSeconds": {
+    "website": 10,
+    "bot": 15,
+    "mobile": 30
+  },
+  "setup": [
+    {
+      "branch": "water",
+      "kind": "put",
+      "packet": {
+        "path": "/",
+        "data": {
+          "distanceCm": 20,
+          "levelCm": 5,
+          "status": "SAFE"
+        }
+      }
+    },
+    {
+      "branch": "rain",
+      "kind": "put",
+      "packet": {
+        "path": "/",
+        "data": {
+          "currentMm": 0,
+          "dailyMm": 0,
+          "status": "NORMAL"
+        }
+      }
+    },
+    {
+      "branch": "gate",
+      "kind": "put",
+      "packet": {
+        "path": "/",
+        "data": {
+          "status": "CLOSED",
+          "angle": 0,
+          "countdownSeconds": 0
+        }
+      }
+    },
+    {
+      "branch": "alarm",
+      "kind": "put",
+      "packet": {
+        "path": "/",
+        "data": {
+          "active": false,
+          "type": "NONE"
+        }
+      }
+    },
+    {
+      "branch": "devices",
+      "kind": "put",
+      "packet": {
+        "path": "/",
+        "data": {
+          "arduino": "ONLINE",
+          "rainGauge": "ONLINE",
+          "ultrasonic": "ONLINE"
+        }
+      }
+    },
+    {
+      "branch": "system",
+      "kind": "put",
+      "packet": {
+        "path": "/",
+        "data": {
+          "lastUpdate": 1791975595000,
+          "overallRisk": "LOW"
+        }
+      }
+    },
+    {
+      "branch": "esp8266/connection",
+      "kind": "put",
+      "packet": {
+        "path": "/",
+        "data": "CONNECTED"
+      }
+    },
+    {
+      "branch": "esp8266/rssi",
+      "kind": "put",
+      "packet": {
+        "path": "/",
+        "data": -60
+      }
+    },
+    {
+      "branch": "esp8266/status",
+      "kind": "put",
+      "packet": {
+        "path": "/",
+        "data": "ONLINE"
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "initial-safe-child-put",
+      "operations": [],
+      "connected": true,
+      "nowMs": 1791975600000,
+      "ageSeconds": 5,
+      "policy": {
+        "website": "live",
+        "bot": "within-window",
+        "mobile": "within-window"
+      },
+      "expectedPublic": {
+        "water": {
+          "distanceCm": 20,
+          "levelCm": 5,
+          "status": "SAFE"
+        },
+        "rain": {
+          "currentMm": 0,
+          "dailyMm": 0,
+          "status": "NORMAL"
+        },
+        "gate": {
+          "status": "CLOSED",
+          "angle": 0,
+          "countdownSeconds": 0
+        },
+        "alarm": {
+          "active": false,
+          "type": "NONE"
+        },
+        "devices": {
+          "arduino": "ONLINE",
+          "rainGauge": "ONLINE",
+          "ultrasonic": "ONLINE"
+        },
+        "system": {
+          "lastUpdate": 1791975595000,
+          "overallRisk": "LOW"
+        },
+        "esp8266": {
+          "connection": "CONNECTED",
+          "rssi": -60,
+          "status": "ONLINE"
+        }
+      }
+    },
+    {
+      "id": "partial-warning-to-danger",
+      "operations": [
+        {
+          "branch": "water",
+          "kind": "patch",
+          "packet": {
+            "path": "/",
+            "data": {
+              "distanceCm": 14,
+              "levelCm": 11,
+              "status": "DANGER"
+            }
+          }
+        },
+        {
+          "branch": "gate",
+          "kind": "patch",
+          "packet": {
+            "path": "/",
+            "data": {
+              "status": "COUNTDOWN",
+              "countdownSeconds": 10
+            }
+          }
+        },
+        {
+          "branch": "system",
+          "kind": "patch",
+          "packet": {
+            "path": "/",
+            "data": {
+              "lastUpdate": 1791975592000,
+              "overallRisk": "CRITICAL"
+            }
+          }
+        }
+      ],
+      "connected": true,
+      "nowMs": 1791975600000,
+      "ageSeconds": 8,
+      "policy": {
+        "website": "live",
+        "bot": "within-window",
+        "mobile": "within-window"
+      },
+      "expectedPublic": {
+        "water": {
+          "distanceCm": 14,
+          "levelCm": 11,
+          "status": "DANGER"
+        },
+        "rain": {
+          "currentMm": 0,
+          "dailyMm": 0,
+          "status": "NORMAL"
+        },
+        "gate": {
+          "status": "COUNTDOWN",
+          "angle": 0,
+          "countdownSeconds": 10
+        },
+        "alarm": {
+          "active": false,
+          "type": "NONE"
+        },
+        "devices": {
+          "arduino": "ONLINE",
+          "rainGauge": "ONLINE",
+          "ultrasonic": "ONLINE"
+        },
+        "system": {
+          "lastUpdate": 1791975592000,
+          "overallRisk": "CRITICAL"
+        },
+        "esp8266": {
+          "connection": "CONNECTED",
+          "rssi": -60,
+          "status": "ONLINE"
+        }
+      }
+    },
+    {
+      "id": "null-field-and-private-child-deletion",
+      "operations": [
+        {
+          "branch": "rain",
+          "kind": "patch",
+          "packet": {
+            "path": "/",
+            "data": {
+              "currentMm": null
+            }
+          }
+        },
+        {
+          "branch": "esp8266/rssi",
+          "kind": "put",
+          "packet": {
+            "path": "/",
+            "data": null
+          }
+        }
+      ],
+      "connected": true,
+      "nowMs": 1791975600000,
+      "ageSeconds": 5,
+      "policy": {
+        "website": "live",
+        "bot": "within-window",
+        "mobile": "within-window"
+      },
+      "expectedPublic": {
+        "water": {
+          "distanceCm": 20,
+          "levelCm": 5,
+          "status": "SAFE"
+        },
+        "rain": {
+          "dailyMm": 0,
+          "status": "NORMAL"
+        },
+        "gate": {
+          "status": "CLOSED",
+          "angle": 0,
+          "countdownSeconds": 0
+        },
+        "alarm": {
+          "active": false,
+          "type": "NONE"
+        },
+        "devices": {
+          "arduino": "ONLINE",
+          "rainGauge": "ONLINE",
+          "ultrasonic": "ONLINE"
+        },
+        "system": {
+          "lastUpdate": 1791975595000,
+          "overallRisk": "LOW"
+        },
+        "esp8266": {
+          "connection": "CONNECTED",
+          "status": "ONLINE"
+        }
+      }
+    },
+    {
+      "id": "stale-contradictory-partial-patch",
+      "operations": [
+        {
+          "branch": "water",
+          "kind": "patch",
+          "packet": {
+            "path": "/",
+            "data": {
+              "distanceCm": 0,
+              "levelCm": 5,
+              "status": "SAFE"
+            }
+          }
+        },
+        {
+          "branch": "gate",
+          "kind": "patch",
+          "packet": {
+            "path": "/",
+            "data": {
+              "status": "OPEN",
+              "angle": 0
+            }
+          }
+        },
+        {
+          "branch": "system",
+          "kind": "patch",
+          "packet": {
+            "path": "/",
+            "data": {
+              "lastUpdate": 1791975580000
+            }
+          }
+        }
+      ],
+      "connected": true,
+      "nowMs": 1791975600000,
+      "ageSeconds": 20,
+      "policy": {
+        "website": "stale",
+        "bot": "stale",
+        "mobile": "within-window"
+      },
+      "expectedPublic": {
+        "water": {
+          "distanceCm": 0,
+          "levelCm": 5,
+          "status": "SAFE"
+        },
+        "rain": {
+          "currentMm": 0,
+          "dailyMm": 0,
+          "status": "NORMAL"
+        },
+        "gate": {
+          "status": "OPEN",
+          "angle": 0,
+          "countdownSeconds": 0
+        },
+        "alarm": {
+          "active": false,
+          "type": "NONE"
+        },
+        "devices": {
+          "arduino": "ONLINE",
+          "rainGauge": "ONLINE",
+          "ultrasonic": "ONLINE"
+        },
+        "system": {
+          "lastUpdate": 1791975580000,
+          "overallRisk": "LOW"
+        },
+        "esp8266": {
+          "connection": "CONNECTED",
+          "rssi": -60,
+          "status": "ONLINE"
+        }
+      }
+    },
+    {
+      "id": "future-source-clock",
+      "operations": [
+        {
+          "branch": "system",
+          "kind": "patch",
+          "packet": {
+            "path": "/",
+            "data": {
+              "lastUpdate": 1791975660000
+            }
+          }
+        }
+      ],
+      "connected": true,
+      "nowMs": 1791975600000,
+      "ageSeconds": null,
+      "policy": {
+        "website": "stale",
+        "bot": "stale",
+        "mobile": "stale"
+      },
+      "expectedPublic": {
+        "water": {
+          "distanceCm": 20,
+          "levelCm": 5,
+          "status": "SAFE"
+        },
+        "rain": {
+          "currentMm": 0,
+          "dailyMm": 0,
+          "status": "NORMAL"
+        },
+        "gate": {
+          "status": "CLOSED",
+          "angle": 0,
+          "countdownSeconds": 0
+        },
+        "alarm": {
+          "active": false,
+          "type": "NONE"
+        },
+        "devices": {
+          "arduino": "ONLINE",
+          "rainGauge": "ONLINE",
+          "ultrasonic": "ONLINE"
+        },
+        "system": {
+          "lastUpdate": 1791975660000,
+          "overallRisk": "LOW"
+        },
+        "esp8266": {
+          "connection": "CONNECTED",
+          "rssi": -60,
+          "status": "ONLINE"
+        }
+      }
+    },
+    {
+      "id": "child-path-put-without-parent-write",
+      "operations": [
+        {
+          "branch": "gate",
+          "kind": "put",
+          "packet": {
+            "path": "/angle",
+            "data": 45
+          }
+        }
+      ],
+      "connected": true,
+      "nowMs": 1791975600000,
+      "ageSeconds": 5,
+      "policy": {
+        "website": "live",
+        "bot": "within-window",
+        "mobile": "within-window"
+      },
+      "expectedPublic": {
+        "water": {
+          "distanceCm": 20,
+          "levelCm": 5,
+          "status": "SAFE"
+        },
+        "rain": {
+          "currentMm": 0,
+          "dailyMm": 0,
+          "status": "NORMAL"
+        },
+        "gate": {
+          "status": "CLOSED",
+          "angle": 45,
+          "countdownSeconds": 0
+        },
+        "alarm": {
+          "active": false,
+          "type": "NONE"
+        },
+        "devices": {
+          "arduino": "ONLINE",
+          "rainGauge": "ONLINE",
+          "ultrasonic": "ONLINE"
+        },
+        "system": {
+          "lastUpdate": 1791975595000,
+          "overallRisk": "LOW"
+        },
+        "esp8266": {
+          "connection": "CONNECTED",
+          "rssi": -60,
+          "status": "ONLINE"
+        }
+      }
+    },
+    {
+      "id": "disconnect-does-not-refresh-old-field-clock",
+      "operations": [],
+      "connected": false,
+      "nowMs": 1791975640000,
+      "ageSeconds": 45,
+      "policy": {
+        "website": "stale",
+        "bot": "stale",
+        "mobile": "stale"
+      },
+      "expectedPublic": {
+        "water": {
+          "distanceCm": 20,
+          "levelCm": 5,
+          "status": "SAFE"
+        },
+        "rain": {
+          "currentMm": 0,
+          "dailyMm": 0,
+          "status": "NORMAL"
+        },
+        "gate": {
+          "status": "CLOSED",
+          "angle": 0,
+          "countdownSeconds": 0
+        },
+        "alarm": {
+          "active": false,
+          "type": "NONE"
+        },
+        "devices": {
+          "arduino": "ONLINE",
+          "rainGauge": "ONLINE",
+          "ultrasonic": "ONLINE"
+        },
+        "system": {
+          "lastUpdate": 1791975595000,
+          "overallRisk": "LOW"
+        },
+        "esp8266": {
+          "connection": "CONNECTED",
+          "rssi": -60,
+          "status": "ONLINE"
+        }
+      }
+    },
+    {
+      "id": "deleted-field-timestamp",
+      "operations": [
+        {
+          "branch": "system",
+          "kind": "patch",
+          "packet": {
+            "path": "/",
+            "data": {
+              "lastUpdate": null
+            }
+          }
+        }
+      ],
+      "connected": true,
+      "nowMs": 1791975600000,
+      "ageSeconds": null,
+      "policy": {
+        "website": "stale",
+        "bot": "stale",
+        "mobile": "stale"
+      },
+      "expectedPublic": {
+        "water": {
+          "distanceCm": 20,
+          "levelCm": 5,
+          "status": "SAFE"
+        },
+        "rain": {
+          "currentMm": 0,
+          "dailyMm": 0,
+          "status": "NORMAL"
+        },
+        "gate": {
+          "status": "CLOSED",
+          "angle": 0,
+          "countdownSeconds": 0
+        },
+        "alarm": {
+          "active": false,
+          "type": "NONE"
+        },
+        "devices": {
+          "arduino": "ONLINE",
+          "rainGauge": "ONLINE",
+          "ultrasonic": "ONLINE"
+        },
+        "system": {
+          "overallRisk": "LOW"
+        },
+        "esp8266": {
+          "connection": "CONNECTED",
+          "rssi": -60,
+          "status": "ONLINE"
+        }
+      }
+    }
+  ],
+  "deniedBranches": [
+    "/floodguard/live",
+    "esp8266",
+    "esp8266/ip",
+    "esp8266/wifi",
+    "water/private"
+  ],
+  "allConsumersExecuteSameRuntime": false,
+  "releaseDecision": "NO_GO"
+}

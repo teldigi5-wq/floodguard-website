@@ -1,0 +1,382 @@
+// Real loopback-only TLS request round trips; all keys, certs and frames synthetic.
+// NO Firebase/WhatsApp, actual firmware, public endpoint or physical gate.
+import {test,before,after} from 'node:test';
+import assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import https from 'node:https';
+import {spawnSync} from 'node:child_process';
+import {generateKeyPairSync,sign,randomBytes,createHash} from 'node:crypto';
+import {once} from 'node:events';
+import {createStage7OfflineLedger,canonicalOfflineEnvelope} from '../experiments/stage7-durable-ingress.mjs';
+import {createLoopbackSignedIngressHandler,LOOPBACK_INGEST_PATH,REPLAY_LEDGER_BOOTSTRAP_DEVICE,REPLAY_LEDGER_BOOTSTRAP_FINGERPRINT} from '../experiments/loopback-signed-https-ingress.mjs';
+import {createOperatorDeviceRegistryLab} from '../experiments/operator-device-registry-lab.mjs';
+
+let dir,server,port,ca;
+let ledger,registry,device,clock,ready=true;
+const uid='device-stage-a',now=1700000000500;
+const frame=seq=>({
+  version:'floodguard-offline-envelope-v1',deviceId:uid,epoch:1,
+  observedAtMs:now-500,
+  frame:{sequence:seq,distanceCm:15,levelCm:10,risk:'WARNING'}
+});
+const signature=env=>sign(null,Buffer.from(canonicalOfflineEnvelope(env)),device.privateKey).toString('base64url');
+function openssl(args){
+  const v=spawnSync('openssl',args,{cwd:dir,encoding:'utf8',timeout:15000,stdio:'pipe'});
+  assert.equal(v.status,0,'ephemeral OpenSSL fixture must be generated locally');
+}
+before(async()=>{
+  dir=fs.mkdtempSync(path.join(os.tmpdir(),'floodguard-tls-ingress-'));
+  openssl(['req','-x509','-newkey','rsa:2048','-nodes','-days','1',
+    '-keyout','fixture.key','-out','fixture.crt',
+    '-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost']);
+  ca=fs.readFileSync(path.join(dir,'fixture.crt'));
+  device=generateKeyPairSync('ed25519');
+  ledger=createStage7OfflineLedger({directory:dir,integrityKey:randomBytes(32)});
+  // Explicitly commissioned before enabling transport; the request handler
+  // cannot silently recreate this independent ledger marker after file loss.
+  const seeded=ledger.commit({
+    uid:REPLAY_LEDGER_BOOTSTRAP_DEVICE,epoch:1,sequence:1,
+    keyFingerprint:REPLAY_LEDGER_BOOTSTRAP_FINGERPRINT
+  });
+  assert.equal(seeded.accepted,true);
+  registry=new Map([[uid,{
+    enabled:true,scope:'prototype-ingest-v1',epoch:1,publicKey:device.publicKey
+  }]]);
+  clock=()=>now;
+  const handler=createLoopbackSignedIngressHandler({
+    identities:registry,ledger,clock,
+    ledgerAvailable:()=>ready
+  });
+  server=https.createServer({
+    key:fs.readFileSync(path.join(dir,'fixture.key')),cert:ca,
+    minVersion:'TLSv1.2'
+  },(req,res)=>void handler(req,res));
+  server.listen(0,'127.0.0.1');await once(server,'listening');
+  port=server.address().port;
+});
+after(async()=>{
+  if(server?.listening)await new Promise(resolve=>server.close(resolve));
+  if(dir)fs.rmSync(dir,{recursive:true,force:true});
+});
+function request({input,overrideSignature,method='POST',url=LOOPBACK_INGEST_PATH,
+  contentType='application/json',servername='localhost',trusted=true,
+  targetPort=port}={}){
+  const env=input??frame(1),body=JSON.stringify({
+    envelope:env,signature:overrideSignature??signature(env)
+  });
+  return new Promise((resolve,reject)=>{
+    const req=https.request({
+      hostname:'127.0.0.1',port:targetPort,path:url,method,servername,
+      ca:trusted?ca:undefined,rejectUnauthorized:true,agent:false,
+      timeout:3000,headers:{'content-type':contentType,'content-length':Buffer.byteLength(body)}
+    },res=>{
+      const chunks=[];
+      res.on('data',v=>chunks.push(v));
+      res.once('end',()=>{
+        try{resolve({status:res.statusCode,payload:JSON.parse(Buffer.concat(chunks).toString())});}
+        catch(err){reject(err);}
+      });
+    });
+    req.once('timeout',()=>req.destroy(new Error('test-timeout')));
+    req.once('error',reject);
+    req.end(body);
+  });
+}
+test('real trusted TLS handshake accepts a signed synthetic device frame into replay ledger',async()=>{
+  const received=await request();
+  assert.equal(received.status,201);
+  assert.deepEqual(received.payload,{accepted:true,status:'LOCAL_LEDGER_ACCEPTED_ONLY'});
+  assert.equal(ledger.last(uid).sequence,1);
+  assert.equal(fs.existsSync(path.join(dir,'stage7-synthetic-ledger.json')),true);
+});
+test('valid repeated delivery is blocked and preserves durable sequence',async()=>{
+  const rejected=await request();
+  assert.equal(rejected.status,409);
+  assert.equal(ledger.last(uid).sequence,1);
+  const updated=await request({input:frame(2)});
+  assert.equal(updated.status,201);
+  assert.equal(ledger.last(uid).sequence,2);
+});
+test('forgery, wrong identity and revoked identity fail before replay commit',async()=>{
+  const unsigned=await request({input:frame(3),overrideSignature:'A'.repeat(86)});
+  assert.equal(unsigned.status,403);
+  const wrong=frame(3);wrong.deviceId='device-stage-b';
+  const bad=await request({input:wrong,overrideSignature:signature(frame(3))});
+  assert.equal(bad.status,403);
+  registry.get(uid).enabled=false;
+  assert.equal((await request({input:frame(3)})).status,403);
+  registry.get(uid).enabled=true;
+  assert.equal(ledger.last(uid).sequence,2);
+});
+test('stale/future frames and unapproved firmware fields fail closed',async()=>{
+  const expired={...frame(3),observedAtMs:now-30001};
+  const future={...frame(3),observedAtMs:now+2001};
+  assert.equal((await request({input:expired})).status,422);
+  assert.equal((await request({input:future})).status,422);
+  const command=frame(3);command.frame.gateCommand='OPEN';
+  assert.equal((await request({input:command,overrideSignature:'A'.repeat(86)})).status,422);
+  assert.equal(ledger.last(uid).sequence,2);
+});
+test('missing durable replay readiness blocks any signed device message',async()=>{
+  ready=false;
+  assert.deepEqual(await request({input:frame(3)}),{
+    status:503,payload:{accepted:false,status:'replay-ledger-unavailable'}
+  });
+  ready=true;
+  assert.equal(ledger.last(uid).sequence,2);
+});
+test('TLS trust and hostname are verified rather than bypassed',async()=>{
+  await assert.rejects(request({trusted:false,input:frame(3)}),
+    /certificate|verify|self.signed|issuer/i);
+  await assert.rejects(request({servername:'attacker.invalid',input:frame(3)}),
+    /hostname|altname|certificate/i);
+  assert.equal(ledger.last(uid).sequence,2);
+});
+test('wrong route and content type do not accept signed data',async()=>{
+  assert.equal((await request({url:'/floodguard/live',input:frame(3)})).status,404);
+  assert.equal((await request({contentType:'text/plain',input:frame(3)})).status,415);
+  assert.equal(ledger.last(uid).sequence,2);
+});
+test('restart with same HMAC key is required for replay history, not an anonymous fallback',()=>{
+  const source=fs.readFileSync('experiments/loopback-signed-https-ingress.mjs','utf8');
+  assert.doesNotMatch(source,/firebase-admin|FirebaseDatabase|FIREBASE_DATABASE_URL|process\.env|sendMessage\s*\(/);
+  assert.doesNotMatch(source,/setInsecure|rejectUnauthorized\s*:\s*false/);
+  assert.match(source,/req\.socket\.encrypted!==true/);
+  assert.match(source,/ledgerAvailable\(\)/);
+  assert.match(source,/ledger\.commit\(/);
+  assert.equal(ledger.last(uid).sequence,2);
+});
+
+test('stalled authenticated loopback TLS upload is cut off without a ledger commit',async()=>{
+  // The synthetic listener never binds publicly; this exercises a real TLS
+  // socket whose JSON body starts but whose chunked request never finishes.
+  const before=ledger.last(uid).sequence;
+  const handler=createLoopbackSignedIngressHandler({
+    identities:registry,ledger,clock,ledgerAvailable:()=>ready,
+    bodyReadDeadlineMs:120
+  });
+  const stalledServer=https.createServer({
+    key:fs.readFileSync(path.join(dir,'fixture.key')),cert:ca,
+    minVersion:'TLSv1.2'
+  },(req,res)=>void handler(req,res));
+  try{
+    stalledServer.listen(0,'127.0.0.1');
+    await once(stalledServer,'listening');
+    const stalledPort=stalledServer.address().port;
+    const result=await new Promise(resolve=>{
+      const req=https.request({
+        hostname:'127.0.0.1',port:stalledPort,path:LOOPBACK_INGEST_PATH,
+        method:'POST',servername:'localhost',ca,
+        rejectUnauthorized:true,agent:false,
+        headers:{'content-type':'application/json'},
+        timeout:3000
+      },res=>{
+        res.resume();
+        res.once('end',()=>resolve({status:res.statusCode}));
+      });
+      req.once('error',error=>resolve({error:error.code||error.message}));
+      req.once('timeout',()=>req.destroy(new Error('client-deadline-exceeded')));
+      req.write('{"envelope":');
+      // Deliberately never call req.end(); the server must terminate the body.
+    });
+    assert.equal(result.error,'ECONNRESET',
+      'server must terminate the stalled TLS stream before the client timeout');
+    assert.equal(ledger.last(uid).sequence,before,
+      'a partial signed body must never advance replay history');
+  }finally{
+    if(stalledServer.listening)
+      await new Promise(resolve=>stalledServer.close(resolve));
+  }
+  assert.equal((await request({input:frame(before)})).status,409,
+    'the original handler remains responsive and preserves its replay boundary');
+});
+
+test('synthetic handler rejects unbounded body-read deadline settings',()=>{
+  for(const bodyReadDeadlineMs of [0,49,30001,Infinity,NaN,1.5,'5000']){
+    assert.throws(()=>createLoopbackSignedIngressHandler({
+      identities:registry,ledger,clock,ledgerAvailable:()=>ready,
+      bodyReadDeadlineMs
+    }),RangeError);
+  }
+});
+
+// Each case gets a separate sealed ledger, so a deliberately flawed handler
+// cannot corrupt other tests or depend on production credentials.
+async function withLateAuthorizationFixture({clock:fixtureClock,ledgerAvailable},run){
+  const scratch=fs.mkdtempSync(path.join(dir,'late-ingress-'));
+  const isolated=createStage7OfflineLedger({
+    directory:scratch,integrityKey:randomBytes(32)
+  });
+  assert.equal(isolated.commit({
+    uid:REPLAY_LEDGER_BOOTSTRAP_DEVICE,epoch:1,sequence:1,
+    keyFingerprint:REPLAY_LEDGER_BOOTSTRAP_FINGERPRINT
+  }).accepted,true);
+  const handler=createLoopbackSignedIngressHandler({
+    identities:registry,ledger:isolated,
+    clock:fixtureClock,ledgerAvailable
+  });
+  const isolatedServer=https.createServer({
+    key:fs.readFileSync(path.join(dir,'fixture.key')),cert:ca,
+    minVersion:'TLSv1.2'
+  },(req,res)=>void handler(req,res));
+  try{
+    isolatedServer.listen(0,'127.0.0.1');
+    await once(isolatedServer,'listening');
+    await run(isolatedServer.address().port,isolated);
+  }finally{
+    if(isolatedServer.listening)
+      await new Promise(resolve=>isolatedServer.close(resolve));
+    fs.rmSync(scratch,{recursive:true,force:true});
+  }
+}
+
+test('post-body timestamp freshness is checked at acceptance, not before upload',async()=>{
+  let calls=0;
+  await withLateAuthorizationFixture({
+    clock:()=>++calls===1?now:now+31000,
+    ledgerAvailable:()=>true
+  },async (testPort,testLedger)=>{
+    // The signed envelope was fresh at connection start but is stale by the
+    // time the fully received request may be committed.
+    const response=await request({targetPort:testPort,input:frame(1)});
+    assert.deepEqual(response,{
+      status:422,payload:{accepted:false,status:'field-clock-unverified'}
+    });
+    assert.ok(calls>=2,'acceptance must sample an updated field clock');
+    assert.equal(testLedger.last(uid),null,
+      'expired telemetry must never consume a durable sequence');
+  });
+});
+
+test('replay-ledger authorization is rechecked after the full request body',async()=>{
+  let readiness=0;
+  await withLateAuthorizationFixture({
+    clock:()=>now,
+    ledgerAvailable:()=>++readiness===1
+  },async (testPort,testLedger)=>{
+    const response=await request({targetPort:testPort,input:frame(1)});
+    assert.deepEqual(response,{
+      status:503,payload:{accepted:false,status:'replay-ledger-unavailable'}
+    });
+    assert.equal(readiness,2,'the ledger readiness check must be repeated');
+    assert.equal(testLedger.last(uid),null,
+      'revoked ledger readiness must prevent signed frame acceptance');
+  });
+});
+
+async function withSealedOperatorIngress(run){
+  const scratch=fs.mkdtempSync(path.join(dir,'operator-https-'));
+  const registryKey=randomBytes(32);
+  const makeRegistry=()=>createOperatorDeviceRegistryLab({
+    directory:scratch,integrityKey:registryKey
+  });
+  const operator=makeRegistry();
+  operator.commission();
+  operator.enroll(uid,device.publicKey);
+  const replay=createStage7OfflineLedger({
+    directory:scratch,integrityKey:randomBytes(32)
+  });
+  assert.equal(replay.commit({
+    uid:REPLAY_LEDGER_BOOTSTRAP_DEVICE,epoch:1,sequence:1,
+    keyFingerprint:REPLAY_LEDGER_BOOTSTRAP_FINGERPRINT
+  }).accepted,true);
+  const handler=createLoopbackSignedIngressHandler({
+    identities:operator,ledger:replay,ledgerAvailable:()=>true,clock:()=>now
+  });
+  const operatorServer=https.createServer({
+    key:fs.readFileSync(path.join(dir,'fixture.key')),cert:ca,minVersion:'TLSv1.2'
+  },(req,res)=>void handler(req,res));
+  try{
+    operatorServer.listen(0,'127.0.0.1');
+    await once(operatorServer,'listening');
+    await run({targetPort:operatorServer.address().port,operator,replay,makeRegistry,scratch});
+  }finally{
+    if(operatorServer.listening)
+      await new Promise(resolve=>operatorServer.close(resolve));
+    fs.rmSync(scratch,{recursive:true,force:true});
+  }
+}
+test('real TLS ingress uses commissioned operator identity; durable revocation blocks signed updates',async()=>{
+  await withSealedOperatorIngress(async({targetPort,operator,replay,makeRegistry})=>{
+    assert.deepEqual(await request({targetPort,input:frame(1)}),{
+      status:201,payload:{accepted:true,status:'LOCAL_LEDGER_ACCEPTED_ONLY'}
+    });
+    assert.equal(replay.last(uid).sequence,1);
+    assert.equal(operator.revoke(uid).revoked,true);
+    assert.equal(makeRegistry().get(uid).enabled,false);
+    assert.deepEqual(await request({targetPort,input:frame(2)}),{
+      status:403,payload:{accepted:false,status:'device-not-authorized'}
+    });
+    assert.equal(replay.last(uid).sequence,1,
+      'revoked source cannot consume a second replay sequence');
+  });
+});
+test('operator rebind preserves replay sequence: old TLS identity revoked and new epoch only advances',async()=>{
+  await withSealedOperatorIngress(async({targetPort,operator,replay,makeRegistry})=>{
+    const first=await request({targetPort,input:frame(1)});
+    assert.equal(first.status,201);
+    const nextKey=generateKeyPairSync('ed25519');
+    const digest=publicKey=>createHash('sha256')
+      .update(publicKey.export({type:'spki',format:'der'})).digest('hex');
+    const originalFp=digest(device.publicKey),replacementFp=digest(nextKey.publicKey);
+    operator.revoke(uid);
+    operator.stageRotation(uid,nextKey.publicKey);
+    const newEnvelope={...frame(2),epoch:2};
+    const newSignature=sign(null,Buffer.from(canonicalOfflineEnvelope(newEnvelope)),
+      nextKey.privateKey).toString('base64url');
+    const proposed={targetPort,input:newEnvelope,overrideSignature:newSignature};
+    assert.equal((await request(proposed)).status,403,
+      'new staged key remains disabled before replay-ledger rebind');
+    assert.throws(()=>makeRegistry().activateStaged(uid,2,{
+      replayLedger:replay,expectedSequence:1
+    }),/not independently confirmed/);
+    assert.deepEqual(replay.rebind({
+      uid,expected:{epoch:1,sequence:1,keyFingerprint:originalFp},
+      next:{epoch:2,keyFingerprint:replacementFp},operatorRegistry:makeRegistry()
+    }),{rebound:true,kind:'OFFLINE_OPERATOR_REBIND_ONLY',epoch:2,sequence:1});
+    assert.equal((await request(proposed)).status,403,
+      'new key remains disabled until independent operator activation');
+    makeRegistry().activateStaged(uid,2,{replayLedger:replay,expectedSequence:1});
+    assert.equal((await request({targetPort,input:frame(2)})).status,403,
+      'retired epoch-1 key can never resume writes');
+    assert.deepEqual(await request(proposed),{
+      status:201,payload:{accepted:true,status:'LOCAL_LEDGER_ACCEPTED_ONLY'}
+    });
+    assert.equal(replay.last(uid).sequence,2);
+    assert.equal(replay.last(uid).epoch,2);
+    assert.equal((await request({...proposed,input:{...frame(1),epoch:2},
+      overrideSignature:sign(null,Buffer.from(canonicalOfflineEnvelope({
+        ...frame(1),epoch:2
+      })),nextKey.privateKey).toString('base64url')
+    })).status,409,'new epoch cannot replay prior accepted sequence');
+  });
+});
+
+test('tampered persistent operator registry rejects TLS uploads without touching replay history',async()=>{
+  await withSealedOperatorIngress(async({targetPort,replay,scratch})=>{
+    const file=path.join(scratch,'operator-device-registry-lab.json');
+    const original=fs.readFileSync(file,'utf8');
+    assert.match(original,/"enabled":true/);
+    fs.writeFileSync(file,original.replace('"enabled":true','"enabled":false'));
+    assert.deepEqual(await request({targetPort,input:frame(1)}),{
+      status:503,payload:{accepted:false,status:'operator-registry-unavailable'}
+    });
+    assert.equal(replay.last(uid),null);
+  });
+});
+
+test('lost canonical ledger after successful ingest is blocked, never treated as first startup',async()=>{
+  assert.equal(ledger.last(uid).sequence,2);
+  fs.unlinkSync(path.join(dir,'stage7-synthetic-ledger.json'));
+  // A faulty always-true readiness callback does NOT bypass the independent
+  // precommissioned HMAC-sealed record requirement in the handler.
+  ready=true;
+  const reply=await request({input:frame(3)});
+  assert.deepEqual(reply,{
+    status:503,payload:{accepted:false,status:'replay-ledger-unavailable'}
+  });
+  assert.equal(fs.existsSync(path.join(dir,'stage7-synthetic-ledger.json')),false,
+    'unavailable history must never be recreated by a network request');
+});

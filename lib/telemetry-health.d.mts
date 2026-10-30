@@ -7,3 +7,9 @@ export declare function classifyTelemetryFreshness(state: {
   error: boolean;
   ageSeconds: number | null;
 }): "loading" | "live" | "stale" | "unavailable";
+
+export declare function createCriticalStreamHealthTracker(): Readonly<{
+  update(key: string, healthy: boolean): boolean;
+  readonly healthy: boolean;
+  readonly failures: readonly string[];
+}>;

@@ -1,0 +1,268 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "floodguard": {
+      "live": {
+        ".read": false,
+        ".write": false,
+        "water": {
+          ".read": true,
+          "distanceCm": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 400)"
+          },
+          "levelCm": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 25)"
+          },
+          "status": {
+            ".validate": "newData.isString() && (newData.val() === 'SAFE' || newData.val() === 'WARNING' || newData.val() === 'DANGER' || newData.val() === 'SENSOR_ERROR')"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "rain": {
+          ".read": true,
+          "currentMm": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0)"
+          },
+          "dailyMm": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0)"
+          },
+          "waterDepthCm": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 4)"
+          },
+          "rawValue": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 1023)"
+          },
+          "weightGrams": {
+            ".validate": "!newData.exists() || newData.isNumber()"
+          }
+        },
+        "gate": {
+          ".read": true,
+          "status": {
+            ".validate": "newData.isString() && (newData.val() === 'CLOSED' || newData.val() === 'COUNTDOWN' || newData.val() === 'OPEN')"
+          },
+          "angle": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 90)"
+          },
+          "countdownSeconds": {
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 10)"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "alarm": {
+          ".read": true
+        },
+        "devices": {
+          ".read": true
+        },
+        "system": {
+          ".read": true
+        },
+        "esp8266": {
+          ".read": false,
+          "connection": {
+            ".read": true
+          },
+          "rssi": {
+            ".read": true
+          },
+          "status": {
+            ".read": true,
+            ".validate": "newData.isString() && (newData.val() === 'ONLINE' || newData.val() === 'OFFLINE' || newData.val() === 'UNKNOWN')"
+          },
+          "ip": {
+            ".read": false
+          },
+          "wifi": {
+            ".read": false
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      },
+      "test": {
+        ".read": false,
+        ".write": false
+      },
+      "bot": {
+        ".read": false,
+        ".write": false
+      },
+      "deviceAuthorization": {
+        ".read": false,
+        ".write": false,
+        "$deviceId": {
+          ".read": "(auth != null && auth.uid === 'attestor-stage' && auth.token.fg_attest_ingest_v1 === true && root.child('floodguard/attestorLabAuthorization/attestor-stage/enabled').val() === true && root.child('floodguard/attestorLabAuthorization/attestor-stage/scope').val() === 'attestor-ingest-v1' && root.child('floodguard/attestorLabAuthorization/attestor-stage/deviceId').val() === $deviceId && root.child('floodguard/attestorLabAuthorization/attestor-stage/epoch').val() === 1) || (auth != null && auth.uid === 'confirmer-stage' && auth.token.fg_confirm_ingest_v1 === true && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/enabled').val() === true && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/scope').val() === 'confirmer-ingest-v1' && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/deviceId').val() === $deviceId && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/epoch').val() === 1)",
+          ".write": false
+        }
+      },
+      "staging": {
+        ".read": false,
+        ".write": false,
+        "ingestV1": {
+          ".read": false,
+          ".write": false,
+          "$deviceId": {
+            ".read": "(auth != null && auth.uid === 'attestor-stage' && auth.token.fg_attest_ingest_v1 === true && root.child('floodguard/attestorLabAuthorization/attestor-stage/enabled').val() === true && root.child('floodguard/attestorLabAuthorization/attestor-stage/scope').val() === 'attestor-ingest-v1' && root.child('floodguard/attestorLabAuthorization/attestor-stage/deviceId').val() === $deviceId && root.child('floodguard/attestorLabAuthorization/attestor-stage/epoch').val() === 1 && root.child('floodguard/deviceAuthorization').child($deviceId).child('enabled').val() === true && root.child('floodguard/deviceAuthorization').child($deviceId).child('scope').val() === 'prototype-ingest-v1') || (auth != null && auth.uid === 'confirmer-stage' && auth.token.fg_confirm_ingest_v1 === true && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/enabled').val() === true && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/scope').val() === 'confirmer-ingest-v1' && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/deviceId').val() === $deviceId && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/epoch').val() === 1 && root.child('floodguard/deviceAuthorization').child($deviceId).child('enabled').val() === true && root.child('floodguard/deviceAuthorization').child($deviceId).child('scope').val() === 'prototype-ingest-v1')",
+            ".write": "auth != null && auth.uid === $deviceId && auth.token.fg_ingest_v1 === true && root.child('floodguard/deviceAuthorization').child(auth.uid).child('enabled').val() === true && root.child('floodguard/deviceAuthorization').child(auth.uid).child('scope').val() === 'prototype-ingest-v1' && newData.exists() && (!data.exists() || newData.child('sequence').val() > data.child('sequence').val())",
+            ".validate": "newData.hasChildren(['sequence','distanceCm','levelCm','risk'])",
+            "sequence": {
+              ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 1 && newData.val() <= 2147483647"
+            },
+            "distanceCm": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 400"
+            },
+            "levelCm": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 25"
+            },
+            "risk": {
+              ".validate": "newData.isString() && (newData.val() === 'SAFE' || newData.val() === 'WARNING' || newData.val() === 'DANGER' || newData.val() === 'SENSOR_ERROR')"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        }
+      },
+      "publisherLabAuthorization": {
+        ".read": false,
+        ".write": false
+      },
+      "publicationLab": {
+        ".read": false,
+        ".write": false,
+        "water": {
+          ".read": "auth != null && auth.uid === 'publisher-water-stage' && auth.token.fg_publish_water_v1 === true && root.child('floodguard/publisherLabAuthorization/publisher-water-stage/enabled').val() === true && root.child('floodguard/publisherLabAuthorization/publisher-water-stage/scope').val() === 'publication-lab-water-v1'",
+          ".write": "auth != null && auth.uid === 'publisher-water-stage' && auth.token.fg_publish_water_v1 === true && root.child('floodguard/publisherLabAuthorization/publisher-water-stage/enabled').val() === true && root.child('floodguard/publisherLabAuthorization/publisher-water-stage/scope').val() === 'publication-lab-water-v1' && data.exists() && newData.exists() && newData.hasChildren(['current','checkpoint']) && data.child('checkpoint').exists() && newData.child('checkpoint/initialized').val() === true && newData.child('checkpoint/deviceId').val() === root.child('floodguard/publisherLabAuthorization/publisher-water-stage').child('deviceId').val() && newData.child('checkpoint/epoch').val() === root.child('floodguard/publisherLabAuthorization/publisher-water-stage').child('epoch').val() && newData.child('checkpoint/epoch').val() === data.child('checkpoint/epoch').val() && newData.child('checkpoint/sequence').isNumber() && newData.child('checkpoint/sequence').val() > data.child('checkpoint/sequence').val() && newData.child('current/observedAtMs').isNumber() && newData.child('current/observedAtMs').val() > data.child('current/observedAtMs').val() && newData.child('checkpoint/observedAtMs').val() === newData.child('current/observedAtMs').val() && newData.child('current/overallRisk').val() === 'UNKNOWN' && root.child('floodguard/deviceAuthorization').child(newData.child('checkpoint/deviceId').val()).child('enabled').val() === true && root.child('floodguard/deviceAuthorization').child(newData.child('checkpoint/deviceId').val()).child('scope').val() === 'prototype-ingest-v1' && root.child('floodguard/attestorLabAuthorization/attestor-stage/enabled').val() === true && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/enabled').val() === true",
+          ".validate": "newData.hasChildren(['current','checkpoint'])",
+          "current": {
+            ".read": true,
+            ".validate": "newData.hasChildren(['distanceCm','levelCm','status','observedAtMs','overallRisk'])",
+            "distanceCm": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 400"
+            },
+            "levelCm": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 25"
+            },
+            "status": {
+              ".validate": "newData.isString() && (newData.val() === 'SAFE' || newData.val() === 'WARNING' || newData.val() === 'DANGER' || newData.val() === 'SENSOR_ERROR')"
+            },
+            "observedAtMs": {
+              ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() > 0"
+            },
+            "overallRisk": {
+              ".validate": "newData.isString() && newData.val() === 'UNKNOWN'"
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+          "checkpoint": {
+            ".read": false,
+            ".validate": "newData.hasChildren(['initialized','deviceId','epoch','sequence','digest','observedAtMs'])",
+            "initialized": {
+              ".validate": "newData.val() === true"
+            },
+            "deviceId": {
+              ".validate": "newData.isString() && newData.val().matches(/^device-stage-[a-z0-9-]{1,32}$/)"
+            },
+            "epoch": {
+              ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 1 && newData.val() <= 10000"
+            },
+            "sequence": {
+              ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 1 && newData.val() <= 2147483647"
+            },
+            "digest": {
+              ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{64}$/)"
+            },
+            "observedAtMs": {
+              ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() > 0"
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      },
+      "attestorLabAuthorization": {
+        ".read": false,
+        ".write": false,
+        "attestor-stage": {
+          ".read": "auth != null && auth.uid === 'attestor-stage' && auth.token.fg_attest_ingest_v1 === true && root.child('floodguard/attestorLabAuthorization/attestor-stage/enabled').val() === true && root.child('floodguard/attestorLabAuthorization/attestor-stage/scope').val() === 'attestor-ingest-v1'"
+        }
+      },
+      "confirmerLabAuthorization": {
+        ".read": false,
+        ".write": false,
+        "confirmer-stage": {
+          ".read": "auth != null && auth.uid === 'confirmer-stage' && auth.token.fg_confirm_ingest_v1 === true && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/enabled').val() === true && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/scope').val() === 'confirmer-ingest-v1'"
+        }
+      },
+      "confirmedLab": {
+        ".read": false,
+        ".write": false,
+        "records": {
+          ".read": false,
+          ".write": false,
+          "$deviceId": {
+            ".read": false,
+            ".write": false,
+            "$sequence": {
+              ".read": "(auth != null && auth.uid === 'attestor-stage' && auth.token.fg_attest_ingest_v1 === true && root.child('floodguard/attestorLabAuthorization/attestor-stage/enabled').val() === true && root.child('floodguard/attestorLabAuthorization/attestor-stage/scope').val() === 'attestor-ingest-v1' && root.child('floodguard/attestorLabAuthorization/attestor-stage/deviceId').val() === $deviceId && root.child('floodguard/attestorLabAuthorization/attestor-stage/epoch').val() === 1 && root.child('floodguard/deviceAuthorization').child($deviceId).child('enabled').val() === true && root.child('floodguard/deviceAuthorization').child($deviceId).child('scope').val() === 'prototype-ingest-v1') || (auth != null && auth.uid === 'confirmer-stage' && auth.token.fg_confirm_ingest_v1 === true && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/enabled').val() === true && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/scope').val() === 'confirmer-ingest-v1' && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/deviceId').val() === $deviceId && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/epoch').val() === 1 && root.child('floodguard/deviceAuthorization').child($deviceId).child('enabled').val() === true && root.child('floodguard/deviceAuthorization').child($deviceId).child('scope').val() === 'prototype-ingest-v1')",
+              ".write": "auth != null && auth.uid === 'confirmer-stage' && auth.token.fg_confirm_ingest_v1 === true && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/enabled').val() === true && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/scope').val() === 'confirmer-ingest-v1' && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/deviceId').val() === $deviceId && root.child('floodguard/confirmerLabAuthorization/confirmer-stage/epoch').val() === 1 && root.child('floodguard/deviceAuthorization').child($deviceId).child('enabled').val() === true && root.child('floodguard/deviceAuthorization').child($deviceId).child('scope').val() === 'prototype-ingest-v1' && !data.exists() && newData.exists() && newData.child('epoch').val() === 1 && $sequence === newData.child('sequence').val()+'' && newData.child('frame/sequence').val() === newData.child('sequence').val() && root.child('floodguard/staging/ingestV1').child($deviceId).child('sequence').val() === newData.child('frame/sequence').val() && root.child('floodguard/staging/ingestV1').child($deviceId).child('distanceCm').val() === newData.child('frame/distanceCm').val() && root.child('floodguard/staging/ingestV1').child($deviceId).child('levelCm').val() === newData.child('frame/levelCm').val() && root.child('floodguard/staging/ingestV1').child($deviceId).child('risk').val() === newData.child('frame/risk').val()",
+              ".validate": "newData.hasChildren(['version','epoch','sequence','digest','acceptedAtMs','observedAtMs','frame'])",
+              "version": {
+                ".validate": "newData.isString() && newData.val() === 'floodguard-confirmed-record-v1'"
+              },
+              "epoch": {
+                ".validate": "newData.isNumber() && newData.val() === 1"
+              },
+              "sequence": {
+                ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 1 && newData.val() <= 2147483647"
+              },
+              "digest": {
+                ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{64}$/)"
+              },
+              "acceptedAtMs": {
+                ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() > 0"
+              },
+              "observedAtMs": {
+                ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() > 0 && newData.val() <= newData.parent().child('acceptedAtMs').val()"
+              },
+              "frame": {
+                ".validate": "newData.hasChildren(['sequence','distanceCm','levelCm','risk'])",
+                "sequence": {
+                  ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 1 && newData.val() <= 2147483647"
+                },
+                "distanceCm": {
+                  ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 400"
+                },
+                "levelCm": {
+                  ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 25"
+                },
+                "risk": {
+                  ".validate": "newData.isString() && (newData.val() === 'SAFE' || newData.val() === 'WARNING' || newData.val() === 'DANGER' || newData.val() === 'SENSOR_ERROR')"
+                },
+                "$other": {
+                  ".validate": false
+                }
+              },
+              "$other": {
+                ".validate": false
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
