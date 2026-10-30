@@ -451,3 +451,60 @@ test('emulator-only test module has no Firebase Admin SDK, secret loading or hos
   assert.doesNotMatch(source,/\b(?:database|target|db)\.(?:set|update)\s*\(/);
   assert.doesNotMatch(source,/\.ref\([^)]*\)\.(?:set|update)\s*\(/);
 });
+
+test('silent initial snapshot refuses publication, detaches listener and never transacts',async()=>{
+  const before=await root();
+  let subscribed=0,detached=0,transactions=0,lateValue;
+  const fakeDatabase={ref(name){
+    assert.equal(name,'/floodguard');
+    return {
+      on(event,handler){assert.equal(event,'value');subscribed++;lateValue=handler;},
+      off(event,handler){assert.equal(event,'value');assert.equal(handler,lateValue);detached++;},
+      transaction(){transactions++;throw new Error('UNEXPECTED_PUBLISH');}
+    };
+  }};
+  const denied=await publishStrictEmulatorFrame({
+    database:fakeDatabase,...input(),initialSnapshotTimeoutMs:20
+  });
+  assert.deepEqual(denied,{published:false,reason:'publisher-outcome-unknown'});
+  assert.equal(subscribed,1);
+  assert.equal(detached,1);
+  assert.equal(transactions,0);
+  // A delayed callback may arrive after timeout; it cannot restart a send.
+  lateValue({exists:()=>true});
+  assert.equal(transactions,0);
+  assert.deepEqual(await root(),before);
+});
+
+test('initial snapshot authorization error never transacts or leaks a listener',async()=>{
+  const before=await root();
+  let detached=0,transactions=0;
+  const fakeDatabase={ref(name){
+    assert.equal(name,'/floodguard');
+    return {
+      on(_event,_value,onError){onError(new Error('SYNTHETIC_PERMISSION_DENIED'));},
+      off(){detached++;},
+      transaction(){transactions++;throw new Error('UNEXPECTED_PUBLISH');}
+    };
+  }};
+  const denied=await publishStrictEmulatorFrame({
+    database:fakeDatabase,...input(),initialSnapshotTimeoutMs:20
+  });
+  assert.deepEqual(denied,{published:false,reason:'publisher-outcome-unknown'});
+  assert.equal(detached,1);
+  assert.equal(transactions,0);
+  assert.deepEqual(await root(),before);
+});
+
+test('unsafe timeout configuration refuses a projector request before any read',async()=>{
+  let used=false;
+  const fakeDatabase={ref(){used=true;throw new Error('UNEXPECTED_ROOT_ACCESS')}};
+  for(const timeout of [0,1,9,-1,30001,1.5,NaN,Infinity,'20',null]){
+    const denied=await publishStrictEmulatorFrame({
+      database:fakeDatabase,...input(),initialSnapshotTimeoutMs:timeout
+    });
+    assert.deepEqual(denied,{published:false,reason:'invalid-publisher-request'},
+      String(timeout));
+  }
+  assert.equal(used,false);
+});
