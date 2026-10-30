@@ -8,7 +8,7 @@ A trusted emulator-only observer reads an isolated root snapshot after `publishS
 
 1. Exact device-source authority (UID, epoch, enabled `water-primary` scope) and an operator-pinned Ed25519 receipt signer fingerprint.
 2. Enabled device identity with the permitted `prototype-ingest-v1` scope.
-3. Canonical, well-formed synthetic device frame with matching SHA-256 digest and valid signed Stage 8 receipt.
+3. Canonical, well-formed synthetic device frame with matching SHA-256 digest and valid signed Stage 8 receipt; signed server acceptance time must not precede the device observation time.
 4. Independent `DATABASE_CONFIRMED` record and byte-for-byte corresponding staged frame.
 5. Privately persisted projector checkpoint (device, epoch, sequence, digest) matching the signed and confirmed frame.
 6. Public `live/water` distance, level and status equal to the signed frame, and `system/lastUpdate` exactly equal to that frame's observation time; publication must still carry `overallRisk = UNKNOWN`.
