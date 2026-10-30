@@ -49,7 +49,7 @@ test('canonical bytes ignore property ordering, but unknown fields and commands 
     {...p,sourceAlias:'other'},
     {...p,epoch:0},
     {...p,sequence:0},
-    {...p,observedAtMs:now+200000},
+    {...p,observedAtMs:Date.UTC(1999,0,1)},
     {...p,receivedAtMs:p.observedAtMs-1},
     {...p,sample:{...p.sample,levelCm:8.4}},
     {...p,sample:{...p.sample,distanceCm:Infinity}},
