@@ -37,6 +37,55 @@ test('reject unknown and private keys, missing fields, malformed and oversized f
   ])assert.equal(validateSyntheticFrame(bad).ok,false);
   assert.equal(validateSyntheticFrame(frame(1,{risk:'SENSOR_ERROR'})).ok,true);
 });
+test('strict synthetic ingestion rejects impossible or contradictory physical tuples',()=>{
+  const rejects=[
+    [frame(1,{distanceCm:400,levelCm:0,risk:'SAFE'}),'invalid-distance'],
+    [frame(1,{distanceCm:26,levelCm:0,risk:'SAFE'}),'invalid-distance'],
+    [frame(1,{distanceCm:0,levelCm:25,risk:'DANGER'}),'invalid-distance'],
+    [frame(1,{distanceCm:20,levelCm:0,risk:'SAFE'}),'inconsistent-installation-depth'],
+    [frame(1,{distanceCm:20,levelCm:10,risk:'WARNING'}),'inconsistent-installation-depth'],
+    [frame(1,{distanceCm:14,levelCm:11,risk:'SAFE'}),'inconsistent-water-risk'],
+    [frame(1,{distanceCm:16.5,levelCm:8.5,risk:'SAFE'}),'inconsistent-water-risk'],
+    [frame(1,{distanceCm:25,levelCm:0,risk:'DANGER'}),'inconsistent-water-risk']
+  ];
+  for(const [candidate,reason] of rejects)
+    assert.equal(validateSyntheticFrame(candidate).reason,reason,
+      JSON.stringify(candidate));
+  for(const value of [
+    frame(1),
+    frame(2,{distanceCm:16.5,levelCm:8.5,risk:'WARNING'}),
+    frame(3,{distanceCm:14,levelCm:11,risk:'DANGER'}),
+    frame(4,{distanceCm:18.51,levelCm:6.49,risk:'SAFE'}),
+    frame(5,{distanceCm:25,levelCm:0,risk:'SENSOR_ERROR'})
+  ])assert.equal(validateSyntheticFrame(value).ok,true,JSON.stringify(value));
+});
+
+test('fake authenticated gateway and offline queue reject self-contradictory frames',()=>{
+  const x=make();
+  const credentials={token:x.token,transportProof:x.transportProof};
+  const bad=frame(1,{distanceCm:400,levelCm:0,risk:'SAFE'});
+  assert.equal(x.gateway.accept({...credentials,frame:bad}).accepted,false);
+  assert.equal(x.gateway.lastAcceptedSequence('device-stage-a'),0);
+  const queue=createSyntheticOfflineQueue();
+  assert.equal(queue.enqueue(bad).accepted,false);
+  assert.equal(queue.depth,0);
+  assert.equal(x.gateway.accept({...credentials,frame:frame(1)}).accepted,true);
+});
+
+test('phase-b prototype Firebase rules do not yet enforce calibrated tuple agreement',()=>{
+  const rules=JSON.parse(readFileSync(
+    'docs/firebase/phase-b-authenticated-prototype.rules.json','utf8'));
+  const lane=rules.rules.floodguard.staging.ingestV1.$deviceId;
+  assert.match(lane.distanceCm['.validate'],/400/);
+  assert.match(lane.levelCm['.validate'],/25/);
+  // The rule compares each child to a range, NOT distance+level consistency
+  // or risk with the 8.5/11cm thresholds. Keep this release gap explicit.
+  const expressions=[lane['.validate'],lane.distanceCm['.validate'],
+    lane.levelCm['.validate'],lane.risk['.validate']].join(' ');
+  assert.doesNotMatch(expressions,/25\s*-\s*newData\.child\('distanceCm'\)/);
+  assert.doesNotMatch(expressions,/8\.5|>=\s*11/);
+});
+
 test('legacy whole-live PUT and root PATCH cannot silently become authenticated staging writes',()=>{
   const put={
     water:{distanceCm:15.35,levelCm:9.65,status:'WARNING'},
