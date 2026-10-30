@@ -72,13 +72,18 @@ test('source freshness windows disagree at 20s while future clocks and disconnec
     assert.deepEqual(Object.values(r.freshnessWindows),['stale','stale','stale']);
   }
 });
-test('website source declarations are still aligned with model assumptions',()=>{
+test('website normalization keeps calibrated thresholds while Stage 14 fixtures remain historical',()=>{
+  // Stage 14 is an intentionally historical synthetic comparison, not a
+  // certification of the current native providers or live firmware.
   const web=fs.readFileSync('providers/flood-provider.tsx','utf8');
+  const safety=fs.readFileSync('lib/telemetry-safety.mjs','utf8');
   const lib=fs.readFileSync('lib/telemetry-health.mjs','utf8');
-  for(const snippet of ['WATER_SENSOR_TO_BOTTOM_CM = 25','WATER_WARNING_MIN_CM = 8.5',
-    'WATER_DANGER_MIN_CM = 11','normalizeWaterGroup(source)', 'normalizeGateGroup(source)',
-    'normalizeRisk(source.overallRisk)']){
+  for(const snippet of ['normalizeWaterGroup(source)', 'normalizeGateGroup(source)',
+    'normalizeRisk(source.overallRisk)', 'reconcileCalibratedWaterMeasurement(source)']){
     assert.ok(web.includes(snippet),snippet);
+  }
+  for(const snippet of ['const heightCm = 25;', 'levelCm >= 11', 'levelCm >= 8.5']){
+    assert.ok(safety.includes(snippet),snippet);
   }
   assert.match(lib,/FRESH_WINDOW_SECONDS = 10/);
   assert.equal(readLocalStage11().status,'NO_GO');
