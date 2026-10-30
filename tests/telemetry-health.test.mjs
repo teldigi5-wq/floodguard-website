@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ageSeconds, classifyTelemetryFreshness, parseFieldTimestamp, createCriticalStreamHealthTracker } from "../lib/telemetry-health.mjs";
+import { ageSeconds, classifyTelemetryFreshness, parseFieldTimestamp, createCriticalStreamHealthTracker, classifySourceBoundFreshness } from "../lib/telemetry-health.mjs";
 import { readFileSync } from "node:fs";
 
 const now = Date.UTC(2026, 9, 13, 4, 50, 0);
@@ -96,4 +96,72 @@ test("live provider uses independent critical child failure tracking", () => {
   assert.match(provider, /updateCriticalStatus\(key, false\)/);
   assert.match(provider, /updateCriticalStatus\(key, parsed\.success && raw !== null\)/);
   assert.doesNotMatch(provider, /if \(parsed\.success && raw !== null\) setError\(null\)/);
+});
+
+test('source-bound water freshness accepts a coherent recent attested sample shape', () => {
+  const frame = {
+    stream: 'water', sourceId: 'ultrasonic-1', epoch: 4,
+    sequence: 41, observedAt: now - 4_000, receivedAt: now - 3_000
+  };
+  const evaluate = (observation, extra = {}) => classifySourceBoundFreshness({
+    loading: false, hasData: true, connected: true, error: false,
+    stream: 'water', observation, nowMs: now, ...extra
+  });
+  assert.equal(evaluate(frame), 'live');
+  assert.equal(evaluate(frame, {prior: {
+    sourceId: 'ultrasonic-1', epoch: 4, sequence: 40
+  }}), 'live');
+  assert.equal(evaluate(frame, {connected: false}), 'stale');
+  assert.equal(evaluate(frame, {loading: true}), 'loading');
+  assert.equal(evaluate(frame, {hasData: false}), 'unavailable');
+});
+test('new system heartbeat cannot freshen an old water or rain observation', () => {
+  for (const stream of ['water', 'rain']) {
+    const reading = {
+      stream, sourceId: stream + '-sensor', epoch: 1, sequence: 7,
+      observedAt: now - 60_000, receivedAt: now - 1_000
+    };
+    const newerUnrelatedSystemLastUpdate = now - 500;
+    assert.ok(newerUnrelatedSystemLastUpdate > reading.observedAt);
+    assert.equal(classifySourceBoundFreshness({
+      stream, observation: reading, hasData: true,
+      connected: true, nowMs: now
+    }), 'stale');
+  }
+});
+test('unknown, mismatched, malformed, future or replayed source metadata fails closed', () => {
+  const good = {
+    stream: 'water', sourceId: 'water-1', epoch: 3,
+    sequence: 102, observedAt: now - 3_000, receivedAt: now - 2_000
+  };
+  const evaluate = (observation, extra = {}) => classifySourceBoundFreshness({
+    stream: 'water', observation, hasData: true,
+    connected: true, nowMs: now, ...extra
+  });
+  for (const observation of [
+    null,
+    {...good, stream: 'rain'}, {...good, sourceId: ''},
+    {...good, epoch: -1}, {...good, sequence: 0},
+    {...good, observedAt: undefined},
+    {...good, receivedAt: undefined},
+    {...good, observedAt: now + 60_000},
+    {...good, receivedAt: now + 60_000},
+    {...good, observedAt: now - 12_000, receivedAt: now - 1000},
+    {...good, observedAt: now - 2000, receivedAt: now - 9000}
+  ]) assert.equal(evaluate(observation), 'stale', JSON.stringify(observation));
+  assert.equal(evaluate(good, {prior: {
+    sourceId: 'water-1', epoch: 3, sequence: 102
+  }}), 'stale');
+  assert.equal(evaluate(good, {prior: {
+    sourceId: 'water-1', epoch: 4, sequence: 101
+  }}), 'stale');
+  assert.equal(evaluate(good, {prior: {
+    sourceId: 'other-sensor', epoch: 3, sequence: 101
+  }}), 'stale');
+});
+test('source freshness prototype is not wired to unauthenticated live provider', () => {
+  const provider = readFileSync('providers/flood-provider.tsx', 'utf8');
+  const helper = readFileSync('lib/telemetry-health.mjs', 'utf8');
+  assert.match(helper, /classifySourceBoundFreshness/);
+  assert.doesNotMatch(provider, /classifySourceBoundFreshness/);
 });
