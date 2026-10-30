@@ -112,10 +112,10 @@ test('live provider uses the safety helper for sensor and gate normalization',()
   const source=readFileSync('providers/flood-provider.tsx','utf8');
   assert.match(source,/reconcileCalibratedWaterMeasurement\(source\)/);
   assert.doesNotMatch(source,/Math\.max\(0, Math\.min\(WATER_SENSOR_TO_BOTTOM_CM/);
-  assert.match(source,/reconcileReportedGateStatus\\(\\{/);
-  assert.match(source,/angle: source\\.angle/);
-  assert.match(source,/countdownSeconds: source\\.countdownSeconds/);
-  assert.doesNotMatch(source,/Math\\.max\\(0, source\\.countdownSeconds\\)/);
+  assert.ok(source.includes('reconcileReportedGateStatus({'));
+  assert.ok(source.includes('angle: source.angle'));
+  assert.ok(source.includes('countdownSeconds: source.countdownSeconds'));
+  assert.ok(!source.includes('Math.max(0, source.countdownSeconds)'));
   assert.doesNotMatch(source,/status = "CLOSED";/);
 });
 test('the helper cannot access production services or actuate hardware',()=>{
