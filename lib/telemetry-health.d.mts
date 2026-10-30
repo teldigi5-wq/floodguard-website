@@ -13,3 +13,28 @@ export declare function createCriticalStreamHealthTracker(): Readonly<{
   readonly healthy: boolean;
   readonly failures: readonly string[];
 }>;
+
+/** R2 lab only. Expects attested per-stream metadata, not system heartbeat. */
+export declare function classifySourceBoundFreshness(state?: {
+  loading?: boolean;
+  hasData?: boolean;
+  connected?: boolean | null;
+  error?: boolean;
+  stream?: "water" | "rain";
+  observation?: {
+    stream?: string;
+    sourceId?: string;
+    epoch?: number;
+    sequence?: number;
+    observedAt?: unknown;
+    receivedAt?: unknown;
+  } | null;
+  prior?: {
+    sourceId: string;
+    epoch: number;
+    sequence: number;
+    observedAt: unknown;
+    receivedAt: unknown;
+  } | null;
+  nowMs?: number;
+}): "loading" | "live" | "stale" | "unavailable";
