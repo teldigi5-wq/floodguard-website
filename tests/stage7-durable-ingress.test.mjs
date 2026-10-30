@@ -80,7 +80,11 @@ test('signed envelope rejects unknown/missing keys, private metadata, invalid se
 }));
 test('changing signed payload or ID after signing never changes ledger',()=>withSetup(x=>{
   const e=x.envelope(1),sig=x.signature(e);
-  e.frame.risk='DANGER';
+  // Keep tampered telemetry physically consistent so this scenario tests
+  // signature verification, not the earlier calibrated-schema rejection.
+  e.frame.distanceCm=16.5;
+  e.frame.levelCm=8.5;
+  e.frame.risk='WARNING';
   assert.equal(x.first.accept({envelope:e,signature:sig,channelProof:x.marker}).reason,'invalid-signature');
   assert.equal(x.ledger().last(device),null);
 }));
