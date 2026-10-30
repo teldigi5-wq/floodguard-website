@@ -30,6 +30,7 @@ const number=(v,min,max)=>Number.isSafeInteger(v)&&v>=min&&v<=max;
 const isKey=k=>k instanceof KeyObject&&k.type==='public' &&
   k.asymmetricKeyType==='ed25519';
 const deny=reason=>Object.freeze({published:false,reason});
+const planDeny=reason=>Object.freeze({allowed:false,reason});
 const fingerprint=k=>createHash('sha256')
   .update(k.export({type:'spki',format:'der'})).digest('hex');
 const sha256=str=>createHash('sha256').update(str,'utf8').digest('hex');
@@ -76,27 +77,27 @@ export function planR2AttestedLabPublication({
           ? 'r2-water-publish-v1':'r2-rain-publish-v1') ||
         registryBinding.reportSignerFingerprint!==fingerprint(trustedReportKey) ||
         registryBinding.receiptSignerFingerprint!==fingerprint(trustedReceiptKey))
-      return deny('operator-trust-unverified');
+      return planDeny('operator-trust-unverified');
 
     const current=verifyR2PublicEvidence({
       stream,record,trustedPublicKey:trustedReportKey,
       connected:true,nowMs
     });
     if (current.accepted!==true)
-      return deny('signed-report-'+current.reason);
+      return planDeny('signed-report-'+current.reason);
 
     const payload=record.payload;
     if (!exact(receipt,RECEIPT_FIELDS) ||
         typeof receiptSignature!=='string' ||
         !signaturePattern.test(receiptSignature))
-      return deny('receipt-invalid');
+      return planDeny('receipt-invalid');
 
     const canonical=canonicalR2PublisherReceipt(receipt);
     const signatureBytes=Buffer.from(receiptSignature,'base64url');
     if (signatureBytes.length!==64 ||
         !verify(null,Buffer.from(canonical,'utf8'),
           trustedReceiptKey,signatureBytes))
-      return deny('receipt-signature-unverified');
+      return planDeny('receipt-signature-unverified');
     const reportDigest=sha256(canonicalR2PublicEvidence(payload));
     if (receipt.stream!==stream ||
         receipt.sourceAlias!==payload.sourceAlias ||
@@ -105,7 +106,7 @@ export function planR2AttestedLabPublication({
         receipt.payloadDigest!==reportDigest ||
         receipt.acceptedAtMs!==payload.receivedAtMs ||
         payload.epoch!==registryBinding.epoch)
-      return deny('receipt-binding-mismatch');
+      return planDeny('receipt-binding-mismatch');
 
     // No untrusted path concatenation; only two fixed and reviewed locations.
     const path=stream==='water'
@@ -115,7 +116,7 @@ export function planR2AttestedLabPublication({
       allowed:true,kind:'SYNTHETIC_ATTESTED_PLAN_NOT_APPLIED',path
     });
   }catch{
-    return deny('invalid-publication-input');
+    return planDeny('invalid-publication-input');
   }
 }
 
@@ -152,7 +153,7 @@ export async function publishR2AttestedLabReport({
     stream,record,receipt,receiptSignature,trustedReportKey,trustedReceiptKey,
     registryBinding,nowMs
   });
-  if (plan.allowed!==true)return plan;
+  if (plan.allowed!==true)return deny(plan.reason);
   try {
     const ref=database.ref(plan.path);
     // Existing operator-seeded state is mandatory. If corrupted or replaced
