@@ -18,5 +18,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   if (!isPatchedNode24(process.versions.node)) {
     console.error('Security gate: Node.js 24.22.1 or newer Node 24 is required for this build.');
     process.exitCode = 1;
+  } else {
+    // Safe build provenance: version only, never environment or secrets.
+    console.log('Security gate: verified build Node.js ' + process.versions.node);
   }
 }
