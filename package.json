@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": "^22.23.4 || ^24.22.1 || ^26.12.1"
+    "node": "^24.22.1"
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "build:amplify": "next build",
+    "build": "node scripts/check-node-runtime.mjs && next build",
+    "build:amplify": "node scripts/check-node-runtime.mjs && next build",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.mjs"
