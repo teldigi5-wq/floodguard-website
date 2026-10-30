@@ -131,15 +131,20 @@ function normalizeWaterGroup(source: Record<string, unknown>) {
 
 function normalizeGateGroup(source: Record<string, unknown>) {
   const rawStatus = normalizeGateStatus(source.status);
-  const angle = typeof source.angle === "number" && Number.isFinite(source.angle) ? source.angle : null;
-  const countdown =
-    typeof source.countdownSeconds === "number" && Number.isFinite(source.countdownSeconds)
-      ? Math.max(0, source.countdownSeconds)
-      : null;
-
-  // Separate device reports are not proof of physical position. A conflict
-  // is UNKNOWN, not a confident CLOSED or OPEN announcement.
-  const status = reconcileReportedGateStatus({status:rawStatus,angle,countdownSeconds:countdown});
+  // Preserve malformed raw values for the safety reconciler BEFORE sanitizing
+  // output for the validated public model. Coercing negatives to zero could
+  // otherwise fabricate a CLOSED state or a completed countdown.
+  const status = reconcileReportedGateStatus({
+    status: rawStatus,
+    angle: source.angle,
+    countdownSeconds: source.countdownSeconds,
+  });
+  const angle = typeof source.angle === "number" && Number.isInteger(source.angle)
+    && source.angle >= 0 && source.angle <= 90 ? source.angle : null;
+  const countdown = typeof source.countdownSeconds === "number"
+    && Number.isInteger(source.countdownSeconds)
+    && source.countdownSeconds >= 0 && source.countdownSeconds <= 10
+      ? source.countdownSeconds : null;
   const reason = status === "CLOSED" ? "NONE" : status === "UNKNOWN" ? null : source.reason;
   return { ...source, status, angle, countdownSeconds: countdown, reason };
 }
