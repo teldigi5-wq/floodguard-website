@@ -29,6 +29,12 @@ export declare function classifySourceBoundFreshness(state?: {
     observedAt?: unknown;
     receivedAt?: unknown;
   } | null;
-  prior?: { sourceId: string; epoch: number; sequence: number } | null;
+  prior?: {
+    sourceId: string;
+    epoch: number;
+    sequence: number;
+    observedAt: unknown;
+    receivedAt: unknown;
+  } | null;
   nowMs?: number;
 }): "loading" | "live" | "stale" | "unavailable";
