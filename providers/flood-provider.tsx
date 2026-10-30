@@ -11,15 +11,11 @@ import { onValue, ref, type Unsubscribe } from "firebase/database";
 import { z } from "zod";
 import { database, LIVE_PATH } from "@/lib/firebase";
 import { ageSeconds, classifyTelemetryFreshness, parseFieldTimestamp } from "@/lib/telemetry-health.mjs";
-import { isExplicitWaterFault, reconcileReportedGateStatus, reconcileWaterStatusWithoutMeasurement, reconcileReportedRainStatus, reconcileDisplayedFloodRisk } from "@/lib/telemetry-safety.mjs";
+import { reconcileCalibratedWaterMeasurement, reconcileReportedGateStatus, reconcileReportedRainStatus, reconcileDisplayedFloodRisk } from "@/lib/telemetry-safety.mjs";
 
 const shortText = z.string().max(80);
 const optionalNumber = (min: number, max: number) =>
   z.number().finite().min(min).max(max).nullable().optional();
-
-const WATER_SENSOR_TO_BOTTOM_CM = 25;
-const WATER_WARNING_MIN_CM = 8.5;
-const WATER_DANGER_MIN_CM = 11;
 
 const waterSchema = z.object({
   distanceCm: optionalNumber(0, 400),
@@ -120,41 +116,10 @@ function normalizeDeviceState(value: unknown): unknown {
   return "UNKNOWN";
 }
 
-function normalizeWaterStatus(value: unknown): string {
-  const state = upper(value);
-  if (["SAFE", "WARNING", "DANGER"].includes(state ?? "")) return state!;
-  if (["SENSOR_ERROR", "ERROR", "OFFLINE", "INVALID"].includes(state ?? "")) return "SENSOR_ERROR";
-  return "UNKNOWN";
-}
-
 function normalizeWaterGroup(source: Record<string, unknown>) {
-  const distance = typeof source.distanceCm === "number" && Number.isFinite(source.distanceCm)
-    ? source.distanceCm : null;
-  const providedLevel = typeof source.levelCm === "number" && Number.isFinite(source.levelCm)
-    ? source.levelCm : null;
-
-  // Website-authoritative display rule: whenever the real HC-SR04 air-gap
-  // measurement exists, calculate level locally from that same value. This
-  // prevents a stale levelCm field from disagreeing with a fresh distanceCm.
-  const levelCm = distance !== null
-    ? Math.max(0, Math.min(WATER_SENSOR_TO_BOTTOM_CM, WATER_SENSOR_TO_BOTTOM_CM - distance))
-    : providedLevel;
-
-  const incomingStatus = normalizeWaterStatus(source.status);
-  // A firmware SENSOR_ERROR is never cleared by a stale or placeholder number.
-  if (isExplicitWaterFault(source.status)) {
-    return { ...source, distanceCm: null, levelCm: null, status: "SENSOR_ERROR" };
-  }
-
-  // Derive the website status from the exact level shown on screen so the
-  // number, threshold card and status can never contradict each other.
-  const status = levelCm === null
-    ? reconcileWaterStatusWithoutMeasurement(incomingStatus)
-    : levelCm >= WATER_DANGER_MIN_CM ? "DANGER"
-    : levelCm >= WATER_WARNING_MIN_CM ? "WARNING"
-    : "SAFE";
-
-  return { ...source, distanceCm: distance, levelCm, status };
+  // The pure safety contract validates the calibrated air gap before deriving
+  // a displayed level. Invalid values cannot become SAFE via clamping.
+  return { ...source, ...reconcileCalibratedWaterMeasurement(source) };
 }
 
  function normalizeGateStatus(value: unknown): string {
