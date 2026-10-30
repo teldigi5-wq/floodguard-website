@@ -60,8 +60,14 @@ test('matching signed receipt and confirmed database create only five child-path
 });
 test('a forged device payload cannot reuse a valid signed receipt',()=>{
   const x=fixture();
-  deny({...x,envelope:{...x.envelope,frame:frame(1,{risk:'SAFE'})}},'receipt-unverified');
-  deny({...x,envelope:{...x.envelope,frame:frame(1,{distanceCm:24})}},'receipt-unverified');
+  // Both forgeries remain plausible under the calibrated 25 cm contract;
+  // their signed receipts, not basic telemetry schema, must reject them.
+  deny({...x,envelope:{...x.envelope,frame:frame(1,{
+    distanceCm:17.5,levelCm:7.5,risk:'SAFE'
+  })}},'receipt-unverified');
+  deny({...x,envelope:{...x.envelope,frame:frame(1,{
+    distanceCm:24,levelCm:1,risk:'SAFE'
+  })}},'receipt-unverified');
   deny({...x,envelope:{...x.envelope,frame:frame(2)}},'receipt-unverified');
 });
 test('incorrect signature or signer key blocks all proposed public changes',()=>{
