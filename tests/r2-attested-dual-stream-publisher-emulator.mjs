@@ -297,7 +297,7 @@ test('same sequence with new signed public payload requires operator review',asy
   const original=await signedOperatorAnchor('water');
   const previous=await readAdmin(path('water'));
   const changed=signedReport({...previous.payload,sample:{
-    distanceCm:16.5,levelCm:8.5,reportedStatus:'WARNING'
+    distanceCm:17.5,levelCm:7.5,reportedStatus:'SAFE'
   }});
   // Simulated privileged corruption of last accepted value without sequence
   // increase; ordinary clients cannot modify this in configured RTDB rules.
