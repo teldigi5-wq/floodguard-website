@@ -26,14 +26,27 @@ export function validateSyntheticFrame(frame){
     return {ok:false,reason:'schema-or-size'};
   if(!Number.isSafeInteger(frame.sequence)||frame.sequence<1||frame.sequence>2147483647)
     return {ok:false,reason:'invalid-sequence'};
+  // This strict synthetic contract models the declared *installation*,
+  // not the HC-SR04 transducer's larger nominal measurement envelope.
+  // An exact zero air gap remains ambiguous until firmware is inspected;
+  // do not accept it as authenticated evidence of either SAFE or DANGER.
   if(typeof frame.distanceCm!=='number'||!Number.isFinite(frame.distanceCm)
-    ||frame.distanceCm<0||frame.distanceCm>400)
+    ||frame.distanceCm<=0||frame.distanceCm>25)
     return {ok:false,reason:'invalid-distance'};
   if(typeof frame.levelCm!=='number'||!Number.isFinite(frame.levelCm)
     ||frame.levelCm<0||frame.levelCm>25)
     return {ok:false,reason:'invalid-level'};
   if(typeof frame.risk!=='string'||!RISKS.has(frame.risk))
     return {ok:false,reason:'invalid-risk'};
+  // A signed but contradictory tuple is still bad telemetry: a valid
+  // identity does not certify a self-consistent physical sensor reading.
+  // 0.05 cm allows firmware decimal rounding, not physical calibration drift.
+  if(Math.abs(frame.levelCm-(25-frame.distanceCm))>0.05)
+    return {ok:false,reason:'inconsistent-installation-depth'};
+  const assessed=frame.levelCm>=11?'DANGER'
+    :frame.levelCm>=8.5?'WARNING':'SAFE';
+  if(frame.risk!=='SENSOR_ERROR'&&frame.risk!==assessed)
+    return {ok:false,reason:'inconsistent-water-risk'};
   return {ok:true,frame:Object.freeze(Object.fromEntries(FIELDS.map(k=>[k,frame[k]])))};
 }
 // Legacy shape inspection ONLY. In particular, never translate an anonymous
