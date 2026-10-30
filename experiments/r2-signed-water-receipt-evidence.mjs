@@ -77,6 +77,12 @@ export function inspectSyntheticWaterReceipt({
     }))
       return deny('receipt-signature-unverified');
 
+    // A signed server receipt cannot causally predate the observed frame.
+    // The generic display helper allows small transport clock skew, but
+    // privileged publisher evidence already requires stricter ordering.
+    if (receipt.acceptedAtMs < envelope.observedAtMs)
+      return deny('receipt-time-order-invalid');
+
     if (!exact(confirmed, CONFIRMATION_FIELDS) ||
         confirmed.deviceId !== deviceId ||
         confirmed.epoch !== envelope.epoch ||
