@@ -8,7 +8,7 @@ const read = async (f) => readFile(resolve(root, f), "utf8");
 
 test("Vercel build uses Next.js, not the old Cloudflare preview runtime", async () => {
   const pkg = JSON.parse(await read("package.json"));
-  assert.equal(pkg.scripts.build, "next build");
+  assert.equal(pkg.scripts.build, "node scripts/check-node-runtime.mjs && next build");
   assert.equal(pkg.scripts.dev, "next dev");
   assert.equal(pkg.name, "floodguard-website");
 });
