@@ -9,6 +9,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import {canonicalOfflineEnvelope} from '../experiments/stage7-durable-ingress.mjs';
 import {publishStrictEmulatorFrame} from '../experiments/strict-emulator-atomic-projector.mjs';
+import {inspectSyntheticWaterReceipt} from '../experiments/r2-signed-water-receipt-evidence.mjs';
 
 if(process.env.FG_STRICT_EMULATOR_PROJECTOR_TEST!=='1'||
   process.env.FIREBASE_DATABASE_EMULATOR_HOST!=='127.0.0.1:9000')
@@ -507,4 +508,150 @@ test('unsafe timeout configuration refuses a projector request before any read',
       String(timeout));
   }
   assert.equal(used,false);
+});
+
+
+test('R2 trusted observer reconciles a signed receipt with the atomic public water frame',async()=>{
+  const proof=input();
+  assert.equal((await project(proof)).published,true);
+  const snapshot=await root();
+  const initial=structuredClone(snapshot);
+  const verdict=inspectSyntheticWaterReceipt({
+    snapshot,...proof,connected:true
+  });
+  assert.deepEqual(verdict,{
+    accepted:true,freshness:'live',
+    kind:'OFFLINE_SIGNED_WATER_EVIDENCE_NOT_PRODUCTION'
+  });
+  assert.deepEqual(snapshot,initial,'read-only inspector cannot mutate its input');
+  assert.deepEqual(await root(),initial,'inspector cannot change emulator state');
+  assert.equal(inspectSyntheticWaterReceipt({
+    snapshot,...proof,connected:false
+  }).accepted,false);
+});
+
+test('R2 lab freshness expires despite a previously valid signed receipt',async()=>{
+  const proof=input();
+  assert.equal((await project(proof)).published,true);
+  const snapshot=await root();
+  const verdict=inspectSyntheticWaterReceipt({
+    snapshot,...proof,connected:true,nowMs:now+12000
+  });
+  assert.deepEqual(verdict,{
+    accepted:false,freshness:'stale',reason:'signed-observation-not-current'
+  });
+});
+
+test('R2 newer system heartbeat must not freshen a previously signed water sample',async()=>{
+  const proof=input();
+  assert.equal((await project(proof)).published,true);
+  const snapshot=await root();
+  const altered=structuredClone(snapshot);
+  altered.live.system.lastUpdate=now-100;
+  assert.deepEqual(inspectSyntheticWaterReceipt({
+    snapshot:altered,...proof,connected:true
+  }),{
+    accepted:false,freshness:'stale',reason:'public-observation-mismatch'
+  });
+  // This check does not overwrite the water sample or mask its unknown age.
+  assert.deepEqual(await root(),snapshot);
+});
+
+test('R2 copied or forged attestation cannot outlive a newer public checkpoint',async()=>{
+  const old=input(1);
+  assert.equal((await project(old)).published,true);
+  const newProof=input(2);
+  await seedObservation(newProof);
+  assert.equal((await project(newProof)).published,true);
+  const snapshot=await root();
+  assert.deepEqual(inspectSyntheticWaterReceipt({
+    snapshot,...old,connected:true
+  }),{
+    accepted:false,freshness:'stale',reason:'source-confirmation-unverified'
+  });
+  assert.equal(inspectSyntheticWaterReceipt({
+    snapshot,...newProof,connected:true
+  }).accepted,true);
+
+  const mutated={...newProof,envelope:{
+    ...newProof.envelope,
+    frame:{...newProof.envelope.frame,distanceCm:15.5,levelCm:9.5}
+  }};
+  assert.equal(inspectSyntheticWaterReceipt({
+    snapshot,...mutated,connected:true
+  }).reason,'receipt-signature-unverified');
+});
+
+test('R2 private authority, issuer, confirmation and checkpoint must all match',async()=>{
+  const proof=input();
+  assert.equal((await project(proof)).published,true);
+  const baseline=await root();
+  const changes=[
+    ['source-authority-unverified',root=>{
+      root.projectionControl.waterAuthority.enabled=false;
+    }],
+    ['source-authority-unverified',root=>{
+      root.deviceAuthorization[uid].scope='test-only-other';
+    }],
+    ['source-confirmation-unverified',root=>{
+      root.confirmedIngest[uid].digest='0'.repeat(64);
+    }],
+    ['source-confirmation-unverified',root=>{
+      root.staging.ingestV1[uid].levelCm=1;
+    }],
+    ['publication-checkpoint-mismatch',root=>{
+      root.projectionControl.devices[uid].sequence=999;
+    }],
+    ['public-observation-mismatch',root=>{
+      root.live.water.status='SAFE';
+    }],
+    ['public-observation-mismatch',root=>{
+      root.live.system.overallRisk='LOW';
+    }]
+  ];
+  for(const [expected,change] of changes) {
+    const copy=structuredClone(baseline);
+    change(copy);
+    assert.equal(inspectSyntheticWaterReceipt({
+      snapshot:copy,...proof,connected:true
+    }).reason,expected);
+  }
+  const attacker=generateKeyPairSync('ed25519');
+  assert.equal(inspectSyntheticWaterReceipt({
+    snapshot:baseline,...proof,connected:true,
+    trustedReceiptKey:attacker.publicKey
+  }).reason,'source-authority-unverified');
+  assert.deepEqual(await root(),baseline);
+});
+
+test('R2 proof adapter remains strictly offline, read only and never a browser API',()=>{
+  const source=readFileSync(
+    'experiments/r2-signed-water-receipt-evidence.mjs','utf8'
+  );
+  assert.doesNotMatch(source,/firebase-admin|serviceAccount|sendMessage\s*\(/);
+  assert.doesNotMatch(source,/\b(?:fetch|XMLHttpRequest|WebSocket)\s*\(|\.ref\s*\(|\.transaction\s*\(/);
+  assert.doesNotMatch(source,/process\.env|node:http|node:https|writeFileSync/);
+  const provider=readFileSync('providers/flood-provider.tsx','utf8');
+  assert.doesNotMatch(provider,/r2-signed-water-receipt-evidence/);
+});
+
+
+test('R2 signed server acceptance time cannot precede water observation',async()=>{
+  const proof=input();
+  assert.equal((await project(proof)).published,true);
+  const snapshot=await root();
+  const receipt={...proof.receipt,acceptedAtMs:proof.envelope.observedAtMs-500};
+  const signature=sign(null,Buffer.from(JSON.stringify(receipt)),server.privateKey)
+    .toString('base64url');
+  // Hypothetical read-only corruption: consistent cryptographic material,
+  // but causal clock ordering is impossible. Do NOT change emulator state.
+  const fake=structuredClone(snapshot);
+  fake.confirmedIngest[uid].acceptedAtMs=receipt.acceptedAtMs;
+  const verdict=inspectSyntheticWaterReceipt({
+    snapshot:fake,...proof,receipt,signature,connected:true
+  });
+  assert.deepEqual(verdict,{
+    accepted:false,freshness:'stale',reason:'receipt-time-order-invalid'
+  });
+  assert.deepEqual(await root(),snapshot);
 });
