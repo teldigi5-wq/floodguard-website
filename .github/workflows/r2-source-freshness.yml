@@ -1,0 +1,47 @@
+name: R2 Source-Bound Freshness Acceptance
+
+on:
+  push:
+    branches:
+      - test/r2-source-bound-freshness-contract-20261030
+    paths:
+      - 'lib/telemetry-health.mjs'
+      - 'lib/telemetry-health.d.mts'
+      - 'tests/telemetry-health.test.mjs'
+      - 'docs/firebase/R2_SOURCE_BOUND_FRESHNESS_CONTRACT_20261030.md'
+      - '.github/workflows/r2-source-freshness.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r2-source-freshness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact PR candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Setup patched Node.js 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22.23.4'
+          cache: npm
+      - name: Install dependencies reproducibly
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify source-bound sensor-freshness regressions
+        run: node --test tests/telemetry-health.test.mjs
+      - name: Run complete offline application test suite
+        run: npm test
+      - name: Check TypeScript contracts
+        run: npm run typecheck
+      - name: Check lint
+        run: npm run lint
+      - name: Verify Next.js build
+        run: npm run build
