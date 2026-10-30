@@ -19,13 +19,16 @@ const deny=reason=>Object.freeze({published:false,reason});
 // with explicitly disabled security rules for this one supervised operation.
 // Production root references and admin service-account keys are forbidden.
 export async function publishStrictEmulatorFrame({
-  database,envelope,receipt,signature,trustedReceiptKey,nowMs
+  database,envelope,receipt,signature,trustedReceiptKey,nowMs,
+  initialSnapshotTimeoutMs=5000
 }={}) {
   if(process.env.FG_STRICT_EMULATOR_PROJECTOR_TEST!=='1'||
     process.env.FIREBASE_DATABASE_EMULATOR_HOST!==EMULATOR)
     return deny('strict-emulator-only');
   if(!database||typeof database.ref!=='function'||
-     !envelope||typeof envelope.deviceId!=='string'||!UID.test(envelope.deviceId))
+     !envelope||typeof envelope.deviceId!=='string'||!UID.test(envelope.deviceId)||
+     !Number.isSafeInteger(initialSnapshotTimeoutMs)||
+     initialSnapshotTimeoutMs<10||initialSnapshotTimeoutMs>30000)
     return deny('invalid-publisher-request');
 
   const uid=envelope.deviceId;
@@ -50,12 +53,28 @@ export async function publishStrictEmulatorFrame({
     // one-shot read detaches and can release that cache before transaction().
     const target=database.ref('/floodguard');
     const initial=await new Promise((resolve,reject)=>{
-      let received=false;
-      const onValue=snapshot=>{
-        if(!received){received=true;resolve(snapshot);}
+      let finished=false,timer;
+      const finish=(error,snapshot)=>{
+        if(finished)return;
+        finished=true;
+        clearTimeout(timer);
+        // Retain the listener after success until the transaction commits,
+        // since the Firebase SDK may otherwise release its initial cache.
+        // On timeout/denial, detach immediately and never start a transaction.
+        if(error){
+          try{if(detach)detach();}catch{/* Stop closed. */}
+          detach=undefined;
+          reject(error);
+        }else resolve(snapshot);
       };
+      const onValue=snapshot=>finish(null,snapshot);
       detach=()=>target.off('value',onValue);
-      target.on('value',onValue,reject);
+      timer=setTimeout(()=>finish(new Error('initial-snapshot-timeout')),
+        initialSnapshotTimeoutMs);
+      try{target.on('value',onValue,error=>finish(
+        error||new Error('initial-snapshot-unavailable')
+      ));}
+      catch(error){finish(error);}
     });
     if(!initial.exists())return deny('root-state-unavailable');
     // Single fixed literal path: staging, operator confirmation, checkpoint and
