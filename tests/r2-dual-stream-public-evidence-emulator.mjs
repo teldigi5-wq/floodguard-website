@@ -137,7 +137,10 @@ test('revocation, sequence replay, rollback and unauthorized source rotation fai
   for(const stream of ['water','rain']) {
     const db=publisher(stream),path=evidence+'/'+stream;
     await assertFails(db.ref(path).set(signed(payload(stream,1))));
-    await assertFails(db.ref(path).set(signed(payload(stream,0))));
+    const malformed=signed(payload(stream,2));
+    await assertFails(db.ref(path).set({
+      ...malformed,payload:{...malformed.payload,sequence:0}
+    }));
     await assertFails(db.ref(path).set(signed(payload(stream,2,now-6000))));
     await assertFails(db.ref(path).set(signed({...payload(stream),epoch:2})));
     await assertFails(db.ref(path).remove());
