@@ -35,7 +35,7 @@ jobs:
           node-version: '22.23.4'
           cache: npm
       - name: Setup Java for Firebase Emulator only
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0 pinned
         with:
           distribution: temurin
           java-version: '17'

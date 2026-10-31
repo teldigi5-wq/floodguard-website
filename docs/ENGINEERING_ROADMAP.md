@@ -88,3 +88,36 @@ R3-D1 reference (draft only): `docs/firebase/R3_V2_SERVER_ADMISSION_TIME_LAB_202
 R3-D2a reference (draft only): `docs/firebase/R3_V2_INDEPENDENT_WITNESS_PROTOCOL_LAB_20261031.md`. Implementation commit `4788ea2953a6189ffb16a3f8072cb0e6a928a5ef` passed Actions run #41195399569 (12/12 focused witness tests, 4/4 RTDB emulator tests, 388 pass/6 skipped offline, 0 type/lint errors). Updated-head validation is required after this documentation and lint-only change. The witness is synthetic in-memory test state: CI cannot prove external durability, nonrollback security or production trust.
 
 R3-D2b-local reference (draft only): `docs/firebase/R3_V2_FSYNC_DISK_WITNESS_LAB_20261031.md`. This is only local fsync-backed signed history. Implementation commit `95592b7855d98eeff2cadbd8c6e1595163c841cd` passed Actions run #41196325912: 13/13 local witness tests, 4/4 Firebase emulator tests and 401 pass / 6 skip offline, with zero type/lint errors (two unused-variable warnings introduced by this lab were subsequently corrected). Latest docs/lint-only head requires revalidation. Independent nonrollback storage, production operator credentials and cross-host fencing are still not implemented.
+
+## R3 full-stack security review checkpoint — 31 October 2026
+
+**Draft security and integration review; PR-triggered Java v6 review checks PASSED on implementation head, documentation-only final head pending.** Protected main and production deployments remain untouched. At the reviewed #30 SHA, GitHub reported 355 commits ahead / 1 commit behind main with 206 changed files across the combined draft stack. The merge boundary is **NOT READY**.
+
+- Security fix prepared in the review branch: restore protected-main pinned, least-privilege CI and CodeQL definitions; pin previously mutable action refs in Phase A/B and R2/R3 workflows; retain checkout credential protections. The deprecated v4 Java setup is now pinned, but a tested upgrade is outstanding.
+- Review gate prepared: `tests/migration-stack-security-gate.test.mjs` plus branch-only `.github/workflows/r3-consolidated-security-review.yml`, covering workflow supply-chain invariants, offline regression, selected real RTDB emulators, typechecking, lint and Next.js build.
+- All earlier R3 witness tests remain laboratory-only. The local signed fsync journal is **not** independent nonrollback storage, and the sensor/report/issuer trust system is not deployed or verified against real hardware.
+- **Still blocked:** merge-stack security review, actual live Firebase privacy rules, external signer and monotonic witness custody, V2 operator recovery, distributed fencing, real browsers, Flutter/WhatsApp, physical safety testing and release approval.
+
+Detailed audit: `docs/firebase/R3_CONSOLIDATED_STACK_SECURITY_REVIEW_20261031.md`.
+
+**R3 stacked draft release / R8 production decision: NO-GO.**
+
+Initial consolidated review head `7a5fe58cab10db1bd408ceb5ada65676ccc0d3ea` passed [Actions run #41198020160](https://github.com/teldigi5-wq/floodguard-website/actions/runs/41198020160): workflow security 4/4; offline suite 405 pass, 6 skipped; R2 RTDB 8/8, R3 atomic RTDB 6/6, V2 disk witness RTDB 4/4; TypeScript PASS; lint 0 errors and 10 warnings; Next.js build PASS. Subsequent doc-only commit must be verified separately.
+
+## R3 consolidation gate follow-up — PR checks and maintained Java action (31 October 2026)
+
+- Consolidated review now triggers on pull requests targeting `main`, `test/r2-*`, or `test/r3-*`, as well as pushes to its review branch; workflow path filters cannot bypass it.
+- All emulator workflows now use verified upstream SHA-pinned **`actions/setup-java@v6.1.0`** instead of deprecated v4.9.1. A GitHub Actions run on the latest commit must verify Node 24 action-runtime compatibility.
+- An automated regression test asserts R2/R3 PR-trigger coverage, required R2/R3 emulators, application build, and no review path exclusions.
+- GitHub repository rulesets query returned `[]`; `main` branch-protection read returned `403 Resource not accessible by integration`. Therefore **required review checks / protection / bypass policy cannot yet be verified**, and a PR check alone does not enforce merges.
+- Consolidated release remains **NO-GO** regardless of CI until an authorized maintainer confirms actual branch protection settings, updates the merge-base, and reviews the end-to-end trust, hardware and operational blockers.
+
+Review evidence and exact sources: `docs/firebase/R3_CONSOLIDATED_STACK_SECURITY_REVIEW_20261031.md`.
+
+PR/push review proof on implementation head `6ba95ea03dbac2a4d3b54f3f0a0ebe31fce1ca73`: [pull_request run #41201298038](https://github.com/teldigi5-wq/floodguard-website/actions/runs/41201298038) and [push run #41201294385](https://github.com/teldigi5-wq/floodguard-website/actions/runs/41201294385) both COMPLETED SUCCESS. 5/5 security review assertions; 406 pass/6 skipped in 412 offline tests; real R2 RTDB 8/8; R3 atomic 6/6; V2 disk witness 4/4; typecheck PASS; ESLint 0 errors/10 existing warnings; Next.js build PASS (14/14 generated static pages). Post-documentation exact-head CI must be rechecked.
+
+## Legacy dashboard clearance policy tightening — R3 review-only
+
+During the consolidated PR review, independent Firebase water, rain, alarm and system listeners were found to share a `system.lastUpdate`-based "live" label. This cannot prove each specific water/rain/alarm event was current or authentic. The isolated R2/R3 source-bound signature verification is **not mounted** in the production-facing provider.
+
+**Draft fix:** legacy UI no longer emits `LOW` or `CLEAR` based only on a fresh system timestamp. Risk becomes `UNKNOWN` for insufficiently sourced LOW observations; an unverified Boolean alarm false becomes `INACTIVE REPORTED`. Higher hazards remain visible. The pure helper requires a future independently trusted `verifiedClearance:true` input, which the legacy provider does not set. Tests enforce this boundary. No production merge/deploy; actual independent source-proof work remains a blocker.

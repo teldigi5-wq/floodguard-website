@@ -1,0 +1,65 @@
+name: FloodGuard R2-R3 Consolidated Security Review Gate
+on:
+  push:
+    branches:
+      - test/r3-consolidated-workflow-security-gate-20261031
+  pull_request:
+    branches:
+      - main
+      - 'test/r2-*'
+      - 'test/r3-*'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: fg-review-gate-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  review:
+    name: Immutable Actions, release safety, full offline regression and key RTDB integrations
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout without persistent credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7 pinned
+        with:
+          persist-credentials: false
+      - name: Install fixed Node baseline
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7 pinned
+        with:
+          node-version: '22.23.4'
+          cache: npm
+      - name: Set up localhost Firebase Emulator
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0 pinned
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Reproduce lockfile dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Add only emulator test helper
+        run: npm install --no-save --package-lock=false --ignore-scripts @firebase/rules-unit-testing@5.0.2
+      - name: Ensure no workflow-security baseline regressions
+        run: node --test tests/migration-stack-security-gate.test.mjs
+      - name: All source-level and offline tests (includes security gate)
+        run: npm test
+      - name: R2 signed two-stream publication and authorization against real RTDB emulator
+        run: |
+          npx --yes firebase-tools@14.18.0 emulators:exec --only database \
+            --project demo-fg-r2-dual-stream --config firebase.r2-dual-stream-lab.json \
+            "FG_R2_DUAL_STREAM_EMULATOR_TEST=1 node --test tests/r2-dual-stream-public-evidence-emulator.mjs"
+      - name: R3 atomic issuer proof, actual RTDB isolation and forged credentials
+        run: |
+          npx --yes firebase-tools@14.18.0 emulators:exec --only database \
+            --project demo-fg-r3-atomic --config firebase.r3-atomic-dual-lab.json \
+            "FG_R3_ATOMIC_DUAL_EMULATOR_TEST=1 node --test tests/r3-atomic-dual-attestation-emulator.mjs"
+      - name: V2 signed source, gateway admission, separate disk witness and restore tests
+        run: |
+          npx --yes firebase-tools@14.18.0 emulators:exec --only database \
+            --project demo-fg-r3-v2-disk-witness --config firebase.r3-v2-admission-lab.json \
+            "FG_R3_DISK_WITNESS_LAB_TEST=1 FG_R3_V2_ADMISSION_LAB_TEST=1 FG_R3_WITNESS_RECONCILIATION_LAB_TEST=1 node --test tests/r3-v2-fsync-disk-witness-emulator.mjs"
+      - name: TypeScript and ESLint gate
+        run: |
+          npm run typecheck
+          npm run lint
+      - name: Build website in CI without real Firebase secrets
+        run: npm run build
