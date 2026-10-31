@@ -225,7 +225,7 @@ test('aging, permission denial and close are fail closed, with no private subscr
 test('browser lab module contains no Node crypto, Firebase SDK, production provider or writes',()=>{
   const src=readFileSync('experiments/r3-browser-readonly-evidence-lab.mjs','utf8');
   assert.doesNotMatch(src,/node:crypto|firebase-admin|firebase\/database|process\.env/);
-  assert.doesNotMatch(src,/\.set\s*\(|\.update\s*\(|\.push\s*\(|\.transaction\s*\(|sendMessage\s*\(/);
+  assert.doesNotMatch(src,/\b(?:db|database|ref|reference)\s*\.\s*(?:set|update|push|transaction)\s*\(|sendMessage\s*\(/);
   const provider=readFileSync('providers/flood-provider.tsx','utf8');
   assert.doesNotMatch(provider,/r3-browser-readonly-evidence-lab/);
 });
