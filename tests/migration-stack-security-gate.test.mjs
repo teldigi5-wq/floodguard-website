@@ -63,6 +63,6 @@ test('synthetic R2/R3 signing and witness laboratories are not imported by publi
 test('production Firebase rules remain an explicit separate approval gate',()=>{
   const roadmap=read('docs/ENGINEERING_ROADMAP.md');
   assert.match(roadmap,/R3-D2b[\s\S]*NOT IMPLEMENTED/);
-  assert.match(roadmap,/production NO-GO|production release NO-GO|overall production NO-GO/i);
+  assert.match(roadmap,/\| R8 \|[^\n]*\|[^\n]*NO-GO/i);
   assert.ok(files.some(x=>x.includes('r3-v2-fsync-witness')));
 });
