@@ -6,9 +6,12 @@ import {reconcileDisplayedAlarmState} from '../lib/telemetry-safety.mjs';
 const state=(active,freshness)=>
   reconcileDisplayedAlarmState({active,freshness});
 
-test('CLEAR requires explicit boolean false with live telemetry freshness',()=>{
-  assert.equal(state(false,'live'),'CLEAR');
+test('a live system heartbeat cannot verify individual alarm clearance',()=>{
+  assert.equal(state(false,'live'),'INACTIVE REPORTED');
   assert.equal(state(true,'live'),'ACTIVE');
+  assert.equal(reconcileDisplayedAlarmState({
+    active:false,freshness:'live',verifiedClearance:true
+  }),'CLEAR');
 });
 
 test('null, absent and malformed alarm values cannot be interpreted as CLEAR',()=>{
@@ -79,4 +82,22 @@ test('alarm interpretation remains a pure read-only transformation',()=>{
   const source=readFileSync('lib/telemetry-safety.mjs','utf8');
   assert.match(source,/export function reconcileDisplayedAlarmState/);
   assert.doesNotMatch(source,/firebase-admin|sendMessage\s*\(|gateCommand|node:https|node:http/);
+});
+
+test('CLEAR is impossible without explicitly verified alarm-source clearance',()=>{
+  for(const active of [false,null,undefined,'false']){
+    const result=reconcileDisplayedAlarmState({active,freshness:'live'});
+    assert.notEqual(result,'CLEAR');
+  }
+  for(const freshness of ['stale','loading','unavailable',null]){
+    assert.notEqual(reconcileDisplayedAlarmState({
+      active:false,freshness,verifiedClearance:true
+    }),'CLEAR','freshness must also be live');
+  }
+  const provider=readFileSync('providers/flood-provider.tsx','utf8');
+  assert.doesNotMatch(provider,/verifiedClearance:\s*true/,
+    'Unattested legacy Firebase listeners cannot create source proof');
+  const dashboard=readFileSync('app/dashboard/page.tsx','utf8');
+  assert.match(dashboard,/alarmState==="CLEAR"\?0:null/,
+    'An unverified inactive report must not drive a zero alarm gauge');
 });
