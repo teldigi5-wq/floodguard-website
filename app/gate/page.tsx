@@ -25,7 +25,7 @@ const DamScene = dynamic(() => import("@/components/dam-scene"), {
     <div className="scene scene-load final-gate-scene-loading">
       <div className="scene-load-card">
         <i />
-        <strong>Preparing the live gate twin</strong>
+        <strong>Preparing the illustrative gate twin</strong>
         <span>The page remains available while 3D assets initialise.</span>
       </div>
     </div>
@@ -36,7 +36,7 @@ const reasons: Record<string, string> = {
   DAM_WARNING: "Reservoir distance crossed the warning threshold.",
   DAM_DANGER: "Reservoir distance entered the danger range.",
   WATER_DANGER: "The HC-SR04 air gap reached the danger zone.",
-  NONE: "Current water conditions do not require a gate-opening action.",
+  NONE: "No controller reason recorded; current conditions are not independently verified.",
 };
 
 export default function GatePage() {
@@ -44,49 +44,45 @@ export default function GatePage() {
   const gate = data?.gate;
   const water = data?.water;
 
-  const angle =
-    typeof gate?.angle === "number" ? Math.max(0, Math.min(90, gate.angle)) : null;
+  // The provider already reconciles reported status, angle and countdown.
+  // Never override a rejected/conflicting state with angle-only inference.
+  const gateState = (gate?.status ?? "UNKNOWN").toUpperCase();
+  const angle = gateState !== "UNKNOWN" && typeof gate?.angle === "number"
+    && Number.isInteger(gate.angle) && gate.angle >= 0 && gate.angle <= 90
+      ? gate.angle : null;
   const countdown =
     typeof gate?.countdownSeconds === "number"
       ? Math.max(0, Math.round(gate.countdownSeconds))
       : 0;
   // A retained countdown must not be presented as an active timer.
-  const activeCountdown = freshness === "live" && countdown > 0;
+  const recordedCountdown = gateState === "COUNTDOWN" && countdown > 0;
   const lift = angle === null ? null : Math.round((angle / 90) * 100);
 
-  // Display state is reconciled from the physical command position and countdown.
-  // This prevents stale text fields from contradicting the Arduino/ESP gate angle.
-  let gateState = (gate?.status ?? "UNKNOWN").toUpperCase();
-  if (countdown > 0) gateState = "COUNTDOWN";
-  else if (angle !== null && angle <= 2) gateState = "CLOSED";
-  else if (angle !== null && angle >= 80) gateState = "OPEN";
-  else if (angle !== null && angle > 2 && angle < 80) gateState = "MOVING";
-
-  // Never animate active discharge based only on historical gate positions.
-  const releaseActive = freshness === "live" && gateState === "OPEN" && (lift ?? 0) >= 80;
+  // An RTDB system heartbeat is not proof of current gate position or flow.
+  // The scene can illustrate reported values, never actual discharge.
   const waterState = (water?.status ?? "UNKNOWN").toUpperCase();
   const danger = waterState === "DANGER";
   const stateCopy =
     gateState === "COUNTDOWN"
-      ? "Pre-open safety countdown"
+      ? "Reported pre-open countdown · not a live timer"
       : gateState === "OPEN"
-        ? "Center spillway open"
+        ? "Reported OPEN · physical position unverified"
         : gateState === "MOVING"
-          ? "Center spillway moving"
+          ? "Reported MOVING · physical position unverified"
           : gateState === "CLOSED"
-            ? "Center spillway sealed"
+            ? "Reported CLOSED · physical position unverified"
             : "Gate state unavailable";
 
   return (
     <main className="page final-gate-page">
       <section className="final-gate-hero">
         <div className="final-gate-copy">
-          <p className="eyebrow"><Radio /> Live gate digital twin</p>
-          <h1>One physical gate.<br /><span>One trusted live state.</span></h1>
+          <p className="eyebrow"><Radio /> Illustrative gate telemetry</p>
+          <h1>One prototype gate.<br /><span>Reported state, not physical proof.</span></h1>
           <p>
-            The center spillway depicts the last SG90 gate position reported through Firebase.
-            When readings are stale, this is historical, not the current physical gate.
-            Arduino remains the control authority.
+            This visualization illustrates unverified SG90 controller reports stored in Firebase.
+            A recent system timestamp cannot verify the gate position or water discharge.
+            Arduino remains the local control authority.
           </p>
           <div className="final-gate-state-row">
             <span className={`final-gate-pill ${gateState.toLowerCase()}`}>
@@ -99,7 +95,7 @@ export default function GatePage() {
 
         <div className="final-gate-live-card">
           <div>
-            <small>Field freshness</small>
+            <small>System timestamp freshness</small>
             <strong>{freshness.toUpperCase()}</strong>
           </div>
           <div>
@@ -119,26 +115,26 @@ export default function GatePage() {
 
       <StatePanel />
 
-      {activeCountdown && (
+      {recordedCountdown && (
         <section className="final-countdown" role="status" aria-live="polite">
           <div className="final-countdown-orbit"><Clock3 /></div>
           <div>
-            <small>Automatic opening sequence</small>
+            <small>Recorded opening sequence · not verified live</small>
             <strong>{countdown}</strong>
-            <span>seconds remaining</span>
+            <span>seconds in last recorded countdown</span>
           </div>
-          <p>Gate remains physically closed until the local Arduino countdown finishes.</p>
+          <p>The reported countdown is not proof of a running timer or a physically closed gate.</p>
         </section>
       )}
 
-      <section className={`final-gate-stage ${danger ? "danger" : ""} ${releaseActive ? "releasing" : "holding"}`}>
+      <section className={`final-gate-stage ${danger ? "danger" : ""} holding`}>
         <div className="final-stage-heading">
           <div>
             <p className="eyebrow"><Sparkles /> 3D spillway & reservoir</p>
-            <h2>{freshness==="live"?stateCopy:"Last recorded: "+stateCopy}</h2>
+            <h2>{freshness==="live"?"Recent report: "+stateCopy:"Last recorded: "+stateCopy}</h2>
           </div>
           <div className="final-stage-key">
-            <span><i className="key-center" /> Center bay = physical SG90 gate</span>
+            <span><i className="key-center" /> Center bay = illustrative SG90 gate</span>
             <span><i /> Outer bays = visual dam structure</span>
           </div>
         </div>
@@ -159,14 +155,14 @@ export default function GatePage() {
 
           <aside className="final-telemetry-panel">
             <header>
-              <div><Radio /><span><small>Firebase realtime</small><strong>Live telemetry</strong></span></div>
+              <div><Radio /><span><small>Firebase stored reports</small><strong>Source not independently verified</strong></span></div>
               <span className={`status-pulse ${freshness}`} />
             </header>
 
             <div className="final-telemetry-grid">
               <article>
                 <Gauge /><small>Servo angle</small><strong>{angle === null ? "—" : `${Math.round(angle)}°`}</strong>
-                <p>0° closed · 90° fully open</p>
+                <p>0°/90° are controller angle conventions, not physical proof</p>
               </article>
               <article>
                 <CircleGauge /><small>Gate lift</small><strong>{lift === null ? "—" : `${lift}%`}</strong>
@@ -174,15 +170,15 @@ export default function GatePage() {
               </article>
               <article>
                 <Droplets /><small>Water level</small><strong>{fmt(water?.levelCm, "cm", 1)}</strong>
-                <p>Actual reservoir level is calculated from the HC-SR04 air gap using the 25.0 cm sensor-to-bottom calibration.</p>
+                <p>Illustrative level derived from the reported HC-SR04 air gap and the assumed 25.0 cm mounting height.</p>
               </article>
               <article>
-                <Waves /><small>Hydraulic visual</small><strong>{freshness!=="live"?"PAUSED":releaseActive?"RELEASING":"HELD"}</strong>
-                <p>{freshness!=="live"?"Historical readings do not trigger discharge animations.":releaseActive?"Visual discharge follows the reported open gate.":"No discharge animation while sealed."}</p>
+                <Waves /><small>Hydraulic visual</small><strong>ILLUSTRATIVE</strong>
+                <p>Animated flow represents the last reported servo angle; real discharge is unverified.</p>
               </article>
               <article>
-                <Clock3 /><small>Countdown</small><strong>{freshness==="live"?(countdown>0?`${countdown}s`:"0s"):countdown>0?`Recorded ${countdown}s`:"Not live"}</strong>
-                <p>{freshness==="live"?"Only active before a confirmed opening.":"This is not a running physical countdown."}</p>
+                <Clock3 /><small>Countdown</small><strong>{recordedCountdown?`Recorded ${countdown}s`:"Unverified"}</strong>
+                <p>This is not a running physical countdown.</p>
               </article>
               <article>
                 <Wifi /><small>Network</small><strong>{label(data?.esp8266?.status ?? data?.esp8266?.connection)}</strong>
@@ -195,7 +191,7 @@ export default function GatePage() {
               <div>
                 <small>Why is the gate in this state?</small>
                 <strong>{label(gate?.reason ?? "NONE")}</strong>
-                <p>{reasons[(gate?.reason ?? "NONE").toUpperCase()] ?? "The field controller published the current gate condition."}</p>
+                <p>{reasons[(gate?.reason ?? "NONE").toUpperCase()] ?? "The source reported this reason; current conditions are unverified."}</p>
               </div>
             </div>
           </aside>
@@ -215,9 +211,9 @@ export default function GatePage() {
       </section>
 
       <section className="metric-grid final-gate-metrics">
-        <Metric icon={<Gauge />} title="Gate state" value={label(gateState)} note={angle === null ? "Angle unavailable" : `${Math.round(angle)}° physical command`} />
+        <Metric icon={<Gauge />} title="Gate state" value={label(gateState)} note={angle === null ? "Angle unavailable" : `${Math.round(angle)}° reported servo angle · unverified`} />
         <Metric icon={<Droplets />} title="Water state" value={label(waterState)} note={fmt(water?.levelCm, "cm", 1)} />
-        <Metric icon={<BellRing />} title="Gate warning" value={freshness!=="live"?"HISTORICAL":activeCountdown?"ACTIVE":"CLEAR"} note={freshness!=="live"?"Current alarm sequence unverified":activeCountdown?`${countdown}s remaining`:"No pre-open countdown"} />
+        <Metric icon={<BellRing />} title="Gate warning" value={recordedCountdown?"REPORTED COUNTDOWN":"UNVERIFIED"} note="No independent timer or gate-position proof" />
         <Metric icon={<ShieldCheck />} title="Control authority" value="ARDUINO" note="Website remains monitoring-only" />
       </section>
     </main>
