@@ -66,3 +66,23 @@ test('production Firebase rules remain an explicit separate approval gate',()=>{
   assert.match(roadmap,/\| R8 \|[^\n]*\|[^\n]*NO-GO/i);
   assert.ok(files.some(x=>x.includes('r3-v2-fsync-witness')));
 });
+
+test('consolidated review runs on main and R2/R3 pull requests, without skip paths',()=>{
+  const review=read(join(workflows,'r3-consolidated-security-review.yml'));
+  assert.match(review,/^on:\s*\n/m);
+  assert.match(review,/^  pull_request:\s*$/m,'Missing PR-triggered review checks');
+  assert.match(review,/^      - main\s*$/m,'Main-target PRs must be reviewed');
+  assert.match(review,/^      - 'test\/r2-\*'\s*$/m,'R2 stacked PRs must be reviewed');
+  assert.match(review,/^      - 'test\/r3-\*'\s*$/m,'R3 stacked PRs must be reviewed');
+  assert.doesNotMatch(review,/^\s*(?:paths|paths-ignore):\s*$/m,
+    'Do not silently bypass consolidated review for documentation/CI changes');
+  for(const required of [
+    'node --test tests/migration-stack-security-gate.test.mjs',
+    'npm test',
+    'tests/r2-dual-stream-public-evidence-emulator.mjs',
+    'tests/r3-atomic-dual-attestation-emulator.mjs',
+    'tests/r3-v2-fsync-disk-witness-emulator.mjs',
+    'npm run typecheck','npm run lint','npm run build'
+  ])assert.ok(review.includes(required),'Missing consolidated check '+required);
+  assert.doesNotMatch(review,/\bpull_request_target\s*:/);
+});
