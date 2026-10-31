@@ -6,6 +6,9 @@ on:
       - test/r2-signed-operator-catchup-20261031
     paths:
       - 'experiments/r2-operator-catchup-lab.mjs'
+      - 'experiments/r2-local-anchor-journal-lab.mjs'
+      - 'tests/r2-local-anchor-journal-lab.test.mjs'
+      - 'docs/firebase/R2_LOCAL_OPERATOR_ANCHOR_JOURNAL_LAB_20261031.md'
       - 'tests/r2-operator-catchup-lab.test.mjs'
       - 'tests/r2-attested-dual-stream-publisher-emulator.mjs'
       - 'docs/firebase/R2_OPERATOR_CATCHUP_APPROVAL_LAB_20261031.md'
@@ -48,6 +51,8 @@ jobs:
           node --test tests/r2-operator-catchup-lab.test.mjs
           node --test tests/r2-recovery-anchor-lab.test.mjs
           node --test tests/r2-attested-dual-stream-publisher.test.mjs
+      - name: Verify independent fsync anchor journal restart and rollback limits
+        run: node --test tests/r2-local-anchor-journal-lab.test.mjs
       - name: Run complete offline regression suite
         run: npm test
       - name: Verify uncertain acknowledgement and restoration in local RTDB Emulator
