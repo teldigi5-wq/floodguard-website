@@ -49,3 +49,33 @@ This is an engineering plan, not a list of already delivered product claims.
 FloodGuard remains an **educational prototype**: no claim of certified prediction, automatic emergency dispatch, public-safety reliability, or real-world dam operating authority.
 
 We prioritize correctness and transparency over visual effects that imply unsupported sensor precision or live activity.
+
+## Secure telemetry migration track · R0–R8 (updated 31 Oct 2026)
+
+This staged research track is **additional** to the earlier website stages above. These statuses distinguish committed/tested laboratory work from actual deployment:
+
+| Stage | Scope | Status |
+| --- | --- | --- |
+| R0 | Recover and inspect real website/bot/mobile baseline and protected main | Read-only baseline verified; no production promotion |
+| R1 | Offline signed ingestion, local replay/receipt persistence and failure rehearsal | Synthetic tests; operational durability and antirollback unverified |
+| R2 | Independent water/rain signatures, server receipts, monotonic restricted emulator publication, external operator checkpoints and signed catch-up | **LAB VERIFIED IN DRAFT STACK; PARTIAL** — no independent nonrollback authority or real trust service |
+| R3-A | Browser WebCrypto signed-report reader and restricted public RTDB subscription | **LAB VERIFIED, draft PR #25, not mounted** |
+| R3-B | Atomic combined report and independently signed issuer receipt verified by browser and RTDB rules | **LAB VERIFIED, draft PR #26, not mounted** |
+| R3-C | Operator-pinned, server-side gated ingestion with independently controlled issuer signer | **DEVELOPMENT / CI PENDING in this draft**; isolated emulator only; real service absent |
+| R3-D | Server-owned acceptance time, durable recovery/fencing, browser matrix, trusted read-only preview then controlled website cutover | **NOT IMPLEMENTED** |
+| R4 | Native Flutter verification and consistent stale/unknown UI | Pending and gated |
+| R5 | WhatsApp bot signed-alert integration and delivery QA | Pending and gated |
+| R6 | Realistic cross-client, network-failure and restore E2E | Pending and gated |
+| R7 | Supervised real sensors, calibration and physical gate acceptance | Pending; safety approval required |
+| R8 | Security signoff, rollback rehearsal and controlled production release | **NO-GO** |
+
+### Active security and release gates
+
+- Draft pull requests are stacked and **not merged**; protected `main` is not a substitute for a trusted sensor-ingestion system.
+- Source and issuer signing keys must be independently enrolled, rotated, revoked and held by distinct trusted identities. RTDB Rules cannot verify Ed25519.
+- The current signed report includes `receivedAtMs` supplied in the source-signed payload; a real server-owned receipt-time protocol is still required.
+- Local fsync/HMAC-sealed checkpoints do **not** prevent restoration of an older valid snapshot. A separate monotonic, rollback-resistant authority and recovery protocol remain unresolved.
+- No lab's successful WebCrypto, Firebase Emulator or regression CI may be described as real hardware, actual browser/mobile acceptance, production deployment, verified alarms or physically proven gate state.
+- Before any merging or deployment: review the entire stacked diff, resolve dependency/security warnings, run exact-head CI, verify read-only preview with actual browsers and obtain explicit release authorization.
+
+Reference: `docs/firebase/R3_OPERATOR_PINNED_GATEWAY_LAB_20261031.md`. The original website roadmap above remains the historical baseline; this section tracks the newer evidence-first telemetry migration.
