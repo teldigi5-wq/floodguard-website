@@ -91,7 +91,7 @@ R3-D2b-local reference (draft only): `docs/firebase/R3_V2_FSYNC_DISK_WITNESS_LAB
 
 ## R3 full-stack security review checkpoint — 31 October 2026
 
-**Draft security and integration review; prior exact-head CI passed; follow-up PR/Java-v6 review checks pending final validation.** Protected main and production deployments remain untouched. At the reviewed #30 SHA, GitHub reported 355 commits ahead / 1 commit behind main with 206 changed files across the combined draft stack. The merge boundary is **NOT READY**.
+**Draft security and integration review; PR-triggered Java v6 review checks PASSED on implementation head, documentation-only final head pending.** Protected main and production deployments remain untouched. At the reviewed #30 SHA, GitHub reported 355 commits ahead / 1 commit behind main with 206 changed files across the combined draft stack. The merge boundary is **NOT READY**.
 
 - Security fix prepared in the review branch: restore protected-main pinned, least-privilege CI and CodeQL definitions; pin previously mutable action refs in Phase A/B and R2/R3 workflows; retain checkout credential protections. The deprecated v4 Java setup is now pinned, but a tested upgrade is outstanding.
 - Review gate prepared: `tests/migration-stack-security-gate.test.mjs` plus branch-only `.github/workflows/r3-consolidated-security-review.yml`, covering workflow supply-chain invariants, offline regression, selected real RTDB emulators, typechecking, lint and Next.js build.
@@ -113,3 +113,5 @@ Initial consolidated review head `7a5fe58cab10db1bd408ceb5ada65676ccc0d3ea` pass
 - Consolidated release remains **NO-GO** regardless of CI until an authorized maintainer confirms actual branch protection settings, updates the merge-base, and reviews the end-to-end trust, hardware and operational blockers.
 
 Review evidence and exact sources: `docs/firebase/R3_CONSOLIDATED_STACK_SECURITY_REVIEW_20261031.md`.
+
+PR/push review proof on implementation head `6ba95ea03dbac2a4d3b54f3f0a0ebe31fce1ca73`: [pull_request run #41201298038](https://github.com/teldigi5-wq/floodguard-website/actions/runs/41201298038) and [push run #41201294385](https://github.com/teldigi5-wq/floodguard-website/actions/runs/41201294385) both COMPLETED SUCCESS. 5/5 security review assertions; 406 pass/6 skipped in 412 offline tests; real R2 RTDB 8/8; R3 atomic 6/6; V2 disk witness 4/4; typecheck PASS; ESLint 0 errors/10 existing warnings; Next.js build PASS (14/14 generated static pages). Post-documentation exact-head CI must be rechecked.
