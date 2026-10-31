@@ -1,0 +1,58 @@
+name: R3 V2 Local Fsync Witness Lab
+on:
+  push:
+    branches:
+      - test/r3-v2-fsync-witness-store-20261031
+    paths:
+      - 'experiments/r3-v2-fsync-disk-witness-lab.mjs'
+      - 'tests/r3-v2-fsync-disk-witness-lab.test.mjs'
+      - 'tests/r3-v2-fsync-disk-witness-emulator.mjs'
+      - 'tests/r3-v2-disk-witness-child.mjs'
+      - 'docs/firebase/R3_V2_FSYNC_DISK_WITNESS_LAB_20261031.md'
+      - 'docs/ENGINEERING_ROADMAP.md'
+      - '.github/workflows/r3-v2-fsync-witness.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: r3-v2-fsync-witness-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    name: Validate fsync witness restart, CAS, tampering and RTDB integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Use patched Node 22 baseline
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22.23.4'
+          cache: npm
+      - name: Prepare local Firebase Emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install locked dependencies without scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install isolated rules testing helper
+        run: npm install --no-save --package-lock=false --ignore-scripts @firebase/rules-unit-testing@5.0.2
+      - name: Verify disk journal corruption and cross-process restart
+        run: |
+          node --test tests/r3-v2-fsync-disk-witness-lab.test.mjs
+          node --test tests/r3-v2-independent-witness-reconciliation-lab.test.mjs
+      - name: Run all offline application regressions
+        run: npm test
+      - name: Verify disk witness with actual loopback RTDB
+        run: |
+          npx --yes firebase-tools@14.18.0 emulators:exec --only database \
+            --project demo-fg-r3-v2-disk-witness --config firebase.r3-v2-admission-lab.json \
+            "FG_R3_DISK_WITNESS_LAB_TEST=1 FG_R3_V2_ADMISSION_LAB_TEST=1 FG_R3_WITNESS_RECONCILIATION_LAB_TEST=1 node --test tests/r3-v2-fsync-disk-witness-emulator.mjs"
+      - name: TypeScript and ESLint
+        run: |
+          npm run typecheck
+          npm run lint
