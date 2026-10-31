@@ -1,0 +1,96 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "floodguard": {
+      "publicTelemetryLabV1": {
+        "water": {
+          "distanceCm": {
+            ".read": true
+          },
+          "levelCm": {
+            ".read": true
+          },
+          "status": {
+            ".read": true
+          }
+        },
+        "rain": {
+          "currentMm": {
+            ".read": true
+          },
+          "dailyMm": {
+            ".read": true
+          },
+          "status": {
+            ".read": true
+          }
+        },
+        "gate": {
+          "status": {
+            ".read": true
+          },
+          "angle": {
+            ".read": true
+          },
+          "countdownSeconds": {
+            ".read": true
+          },
+          "reason": {
+            ".read": true
+          }
+        },
+        "alarm": {
+          "active": {
+            ".read": true
+          },
+          "type": {
+            ".read": true
+          }
+        },
+        "devices": {
+          "arduino": {
+            ".read": true
+          },
+          "gsm": {
+            ".read": true
+          },
+          "microSD": {
+            ".read": true
+          },
+          "rainGauge": {
+            ".read": true
+          },
+          "rtc": {
+            ".read": true
+          },
+          "servo": {
+            ".read": true
+          },
+          "ultrasonic": {
+            ".read": true
+          }
+        },
+        "system": {
+          "lastUpdate": {
+            ".read": true
+          },
+          "overallRisk": {
+            ".read": true
+          }
+        },
+        "esp8266": {
+          "connection": {
+            ".read": true
+          },
+          "rssi": {
+            ".read": true
+          },
+          "status": {
+            ".read": true
+          }
+        }
+      }
+    }
+  }
+}
