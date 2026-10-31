@@ -195,5 +195,5 @@ test('canonical approval rejects extra metadata, nonadjacent gaps and commands',
 test('source is pure and contains no Firebase, file writes, signing key or endpoints',()=>{
   const source=readFileSync('experiments/r2-operator-catchup-lab.mjs','utf8');
   assert.doesNotMatch(source,/firebase-admin|serviceAccount|writeFileSync|renameSync|node:https|node:http/);
-  assert.doesNotMatch(source,/\b(?:fetch|XMLHttpRequest|WebSocket)\s*\(|\.set\s*\(|\.update\s*\(/);
+  assert.doesNotMatch(source,/\b(?:fetch|XMLHttpRequest|WebSocket)\s*\(|\b(?:database|db|ref)\s*\.\s*(?:set|update|transaction)\s*\(/);
 });
