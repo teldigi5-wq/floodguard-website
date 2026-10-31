@@ -69,8 +69,11 @@ test("historical hardware states must not appear live", async () => {
   const gate = await read("app/gate/page.tsx");
   assert.ok(devices.includes("LAST REPORTED:"), "Historic device state label is required");
   assert.ok(rain.includes("current state unverified"), "Rain sensor online claims require fresh telemetry");
-  assert.ok(gate.includes("activeCountdown"), "Historical countdowns must never animate as active timers");
-  assert.ok(gate.includes('freshness === "live" && gateState'), "Discharge visualization must require fresh telemetry");
+  assert.ok(gate.includes("recordedCountdown"), "Controller countdown must be labeled recorded");
+  assert.ok(gate.includes("not a running physical countdown"), "No live countdown claim is allowed");
+  assert.ok(!gate.includes("activeCountdown"), "Unverified reports cannot drive an active physical timer");
+  assert.ok(!gate.includes("releaseActive"), "Shared system freshness cannot prove physical discharge");
+  assert.ok(gate.includes("ILLUSTRATIVE"), "Procedural discharge must be marked as a simulation");
 });
 
 test("template RTDB rules cannot grant private ESP access through readable ancestors", async () => {
