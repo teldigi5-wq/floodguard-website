@@ -1,0 +1,241 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "floodguard": {
+      "attestedEvidenceLabV2": {
+        ".read": false,
+        ".write": false,
+        "water": {
+          ".read": true,
+          ".write": "auth != null && auth.uid === 'r3-v2-water-writer' && auth.token.fg_r3_v2_water_write === true && root.child('floodguard/v2AdmissionAuthorization/r3-v2-water-writer/enabled').val() === true && root.child('floodguard/v2AdmissionAuthorization/r3-v2-water-writer/scope').val() === 'r3-v2-water-admit-v1' && data.exists() && newData.exists() && newData.child('report/payload/epoch').val() === data.child('report/payload/epoch').val() && newData.child('report/payload/sequence').isNumber() && newData.child('report/payload/sequence').val() > data.child('report/payload/sequence').val() && newData.child('report/payload/observedAtMs').val() >= data.child('report/payload/observedAtMs').val() && newData.child('admission/receipt/admittedAtMs').isNumber() && newData.child('admission/receipt/admittedAtMs').val() > data.child('admission/receipt/admittedAtMs').val()",
+          ".validate": "newData.hasChildren(['report','admission']) && newData.child('report/payload/stream').val() === newData.child('admission/receipt/stream').val() && newData.child('report/payload/sourceAlias').val() === newData.child('admission/receipt/sourceAlias').val() && newData.child('report/payload/epoch').val() === newData.child('admission/receipt/epoch').val() && newData.child('report/payload/sequence').val() === newData.child('admission/receipt/sequence').val() && newData.child('report/payload/observedAtMs').val() <= newData.child('admission/receipt/admittedAtMs').val() + 2000 && newData.child('admission/receipt/admittedAtMs').val() <= newData.child('report/payload/observedAtMs').val() + 10000",
+          "report": {
+            ".validate": "newData.hasChildren(['payload','signature'])",
+            "payload": {
+              ".validate": "newData.hasChildren(['version','stream','sourceAlias','epoch','sequence','observedAtMs','sample'])",
+              "version": {
+                ".validate": "newData.isString() && newData.val() === 'floodguard-r3-observation-v2-lab'"
+              },
+              "stream": {
+                ".validate": "newData.isString() && newData.val() === 'water'"
+              },
+              "sourceAlias": {
+                ".validate": "newData.isString() && newData.val() === 'water-primary'"
+              },
+              "epoch": {
+                ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 1 && newData.val() <= 10000"
+              },
+              "sequence": {
+                ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 1 && newData.val() <= 2147483647"
+              },
+              "observedAtMs": {
+                ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 946684800000"
+              },
+              "sample": {
+                ".validate": "newData.hasChildren(['distanceCm','levelCm','reportedStatus']) && newData.child('distanceCm').val() + newData.child('levelCm').val() >= 24.999 && newData.child('distanceCm').val() + newData.child('levelCm').val() <= 25.001",
+                "distanceCm": {
+                  ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 25"
+                },
+                "levelCm": {
+                  ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 25"
+                },
+                "reportedStatus": {
+                  ".validate": "newData.isString() && (newData.val() === 'SAFE' || newData.val() === 'WARNING' || newData.val() === 'DANGER' || newData.val() === 'SENSOR_ERROR')"
+                },
+                "$other": {
+                  ".validate": false
+                }
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
+            "signature": {
+              ".validate": "newData.isString() && newData.val().matches(/^[A-Za-z0-9_-]{86}$/)"
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+          "admission": {
+            ".validate": "newData.hasChildren(['receipt','signature'])",
+            "receipt": {
+              ".validate": "newData.hasChildren(['version','stream','sourceAlias','epoch','sequence','reportDigest','admittedAtMs'])",
+              "version": {
+                ".validate": "newData.isString() && newData.val() === 'floodguard-r3-server-admission-v2-lab'"
+              },
+              "stream": {
+                ".validate": "newData.isString() && newData.val() === 'water'"
+              },
+              "sourceAlias": {
+                ".validate": "newData.isString() && newData.val() === 'water-primary'"
+              },
+              "epoch": {
+                ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 1 && newData.val() <= 10000"
+              },
+              "sequence": {
+                ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 1 && newData.val() <= 2147483647"
+              },
+              "reportDigest": {
+                ".validate": "newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/)"
+              },
+              "admittedAtMs": {
+                ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 946684800000"
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
+            "signature": {
+              ".validate": "newData.isString() && newData.val().matches(/^[A-Za-z0-9_-]{86}$/)"
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "rain": {
+          ".read": true,
+          ".write": "auth != null && auth.uid === 'r3-v2-rain-writer' && auth.token.fg_r3_v2_rain_write === true && root.child('floodguard/v2AdmissionAuthorization/r3-v2-rain-writer/enabled').val() === true && root.child('floodguard/v2AdmissionAuthorization/r3-v2-rain-writer/scope').val() === 'r3-v2-rain-admit-v1' && data.exists() && newData.exists() && newData.child('report/payload/epoch').val() === data.child('report/payload/epoch').val() && newData.child('report/payload/sequence').isNumber() && newData.child('report/payload/sequence').val() > data.child('report/payload/sequence').val() && newData.child('report/payload/observedAtMs').val() >= data.child('report/payload/observedAtMs').val() && newData.child('admission/receipt/admittedAtMs').isNumber() && newData.child('admission/receipt/admittedAtMs').val() > data.child('admission/receipt/admittedAtMs').val()",
+          ".validate": "newData.hasChildren(['report','admission']) && newData.child('report/payload/stream').val() === newData.child('admission/receipt/stream').val() && newData.child('report/payload/sourceAlias').val() === newData.child('admission/receipt/sourceAlias').val() && newData.child('report/payload/epoch').val() === newData.child('admission/receipt/epoch').val() && newData.child('report/payload/sequence').val() === newData.child('admission/receipt/sequence').val() && newData.child('report/payload/observedAtMs').val() <= newData.child('admission/receipt/admittedAtMs').val() + 2000 && newData.child('admission/receipt/admittedAtMs').val() <= newData.child('report/payload/observedAtMs').val() + 10000",
+          "report": {
+            ".validate": "newData.hasChildren(['payload','signature'])",
+            "payload": {
+              ".validate": "newData.hasChildren(['version','stream','sourceAlias','epoch','sequence','observedAtMs','sample'])",
+              "version": {
+                ".validate": "newData.isString() && newData.val() === 'floodguard-r3-observation-v2-lab'"
+              },
+              "stream": {
+                ".validate": "newData.isString() && newData.val() === 'rain'"
+              },
+              "sourceAlias": {
+                ".validate": "newData.isString() && newData.val() === 'rain-primary'"
+              },
+              "epoch": {
+                ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 1 && newData.val() <= 10000"
+              },
+              "sequence": {
+                ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 1 && newData.val() <= 2147483647"
+              },
+              "observedAtMs": {
+                ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 946684800000"
+              },
+              "sample": {
+                ".validate": "newData.hasChildren(['currentMm','dailyMm','reportedStatus'])",
+                "currentMm": {
+                  ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000"
+                },
+                "dailyMm": {
+                  ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000"
+                },
+                "reportedStatus": {
+                  ".validate": "newData.isString() && (newData.val() === 'NORMAL' || newData.val() === 'HEAVY_RAIN' || newData.val() === 'FLOOD_WARNING' || newData.val() === 'EXTREME' || newData.val() === 'CRITICAL' || newData.val() === 'SENSOR_ERROR' || newData.val() === 'UNKNOWN')"
+                },
+                "$other": {
+                  ".validate": false
+                }
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
+            "signature": {
+              ".validate": "newData.isString() && newData.val().matches(/^[A-Za-z0-9_-]{86}$/)"
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+          "admission": {
+            ".validate": "newData.hasChildren(['receipt','signature'])",
+            "receipt": {
+              ".validate": "newData.hasChildren(['version','stream','sourceAlias','epoch','sequence','reportDigest','admittedAtMs'])",
+              "version": {
+                ".validate": "newData.isString() && newData.val() === 'floodguard-r3-server-admission-v2-lab'"
+              },
+              "stream": {
+                ".validate": "newData.isString() && newData.val() === 'rain'"
+              },
+              "sourceAlias": {
+                ".validate": "newData.isString() && newData.val() === 'rain-primary'"
+              },
+              "epoch": {
+                ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 1 && newData.val() <= 10000"
+              },
+              "sequence": {
+                ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 1 && newData.val() <= 2147483647"
+              },
+              "reportDigest": {
+                ".validate": "newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/)"
+              },
+              "admittedAtMs": {
+                ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() >= 946684800000"
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
+            "signature": {
+              ".validate": "newData.isString() && newData.val().matches(/^[A-Za-z0-9_-]{86}$/)"
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "$other": {
+          ".read": false,
+          ".write": false,
+          ".validate": false
+        }
+      },
+      "v2AdmissionAuthorization": {
+        ".read": false,
+        ".write": false
+      },
+      "confirmedIngest": {
+        ".read": false,
+        ".write": false
+      },
+      "staging": {
+        ".read": false,
+        ".write": false
+      },
+      "projectionControl": {
+        ".read": false,
+        ".write": false
+      },
+      "live": {
+        ".read": false,
+        ".write": false
+      },
+      "bot": {
+        ".read": false,
+        ".write": false
+      },
+      "evidenceLabV1": {
+        ".read": false,
+        ".write": false
+      },
+      "evidenceLabAuthorization": {
+        ".read": false,
+        ".write": false
+      },
+      "attestedEvidenceLabV1": {
+        ".read": false,
+        ".write": false
+      },
+      "attestedEvidenceLabAuthorization": {
+        ".read": false,
+        ".write": false
+      }
+    }
+  }
+}
