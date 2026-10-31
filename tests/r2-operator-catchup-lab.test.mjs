@@ -67,7 +67,8 @@ function fixture(s='water',seq=2) {
     trustedReceiptKey:keys.receipt.publicKey,
     trustedAnchorKey:keys.anchor.publicKey,
     trustedApprovalKey:keys.approval.publicKey};
-  return {...x,signedApproval:approve(s,x)};
+  // A sequence gap must be rejected before an operator approval is drafted.
+  return {...x,signedApproval:seq===2?approve(s,x):null};
 }
 const review=x=>reviewR2OperatorCatchup(x);
 
