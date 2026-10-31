@@ -1,0 +1,57 @@
+name: R3 V2 Independent Witness Reconciliation Lab
+on:
+  push:
+    branches:
+      - test/r3-v2-independent-witness-reconciliation-20261031
+    paths:
+      - 'experiments/r3-v2-independent-witness-reconciliation-lab.mjs'
+      - 'tests/r3-v2-independent-witness-reconciliation-lab.test.mjs'
+      - 'tests/r3-v2-independent-witness-emulator.mjs'
+      - 'docs/firebase/R3_V2_INDEPENDENT_WITNESS_PROTOCOL_LAB_20261031.md'
+      - 'docs/ENGINEERING_ROADMAP.md'
+      - '.github/workflows/r3-v2-independent-witness.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: r3-v2-independent-witness-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    name: Signed witness CAS, crash/rollback and actual RTDB emulator
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Use patched Node 22 baseline
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22.23.4'
+          cache: npm
+      - name: Prepare loopback Firebase RTDB emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install locked project dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install test-only Firebase rules helper
+        run: npm install --no-save --package-lock=false --ignore-scripts @firebase/rules-unit-testing@5.0.2
+      - name: Verify independent witness signing and rollback refusal
+        run: |
+          node --test tests/r3-v2-independent-witness-reconciliation-lab.test.mjs
+          node --test tests/r3-v2-server-admission-lab.test.mjs
+      - name: Run complete offline regressions
+        run: npm test
+      - name: Verify signed witness protocol against actual RTDB emulator
+        run: |
+          npx --yes firebase-tools@14.18.0 emulators:exec --only database \
+            --project demo-fg-r3-v2-witness --config firebase.r3-v2-admission-lab.json \
+            "FG_R3_V2_ADMISSION_LAB_TEST=1 FG_R3_WITNESS_RECONCILIATION_LAB_TEST=1 node --test tests/r3-v2-independent-witness-emulator.mjs"
+      - name: Verify TypeScript and ESLint
+        run: |
+          npm run typecheck
+          npm run lint
