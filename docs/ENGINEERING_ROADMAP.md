@@ -62,7 +62,8 @@ This staged research track is **additional** to the earlier website stages above
 | R3-A | Browser WebCrypto signed-report reader and restricted public RTDB subscription | **LAB VERIFIED, draft PR #25, not mounted** |
 | R3-B | Atomic combined report and independently signed issuer receipt verified by browser and RTDB rules | **LAB VERIFIED, draft PR #26, not mounted** |
 | R3-C | Operator-pinned, server-side gated ingestion with independently controlled issuer signer | **LAB VERIFIED in draft PR #27**: 11/11 unit, 9/9 RTDB emulator; service deployment absent |
-| R3-D | Server-owned acceptance time, durable recovery/fencing, browser matrix, trusted read-only preview then controlled website cutover | **NOT IMPLEMENTED** |
+| R3-D1 | Gateway-owned V2 admission timestamp and separately signed source observation, with browser verifier and restricted isolated RTDB namespace | **LAB IMPLEMENTED IN THIS DRAFT — CI PENDING**; no real issuer or durable commit |
+| R3-D2 | Independent durable recovery/fencing, real browser matrix, trusted preview and controlled website cutover | **NOT IMPLEMENTED** |
 | R4 | Native Flutter verification and consistent stale/unknown UI | Pending and gated |
 | R5 | WhatsApp bot signed-alert integration and delivery QA | Pending and gated |
 | R6 | Realistic cross-client, network-failure and restore E2E | Pending and gated |
@@ -73,9 +74,11 @@ This staged research track is **additional** to the earlier website stages above
 
 - Draft pull requests are stacked and **not merged**; protected `main` is not a substitute for a trusted sensor-ingestion system.
 - Source and issuer signing keys must be independently enrolled, rotated, revoked and held by distinct trusted identities. RTDB Rules cannot verify Ed25519.
-- The current signed report includes `receivedAtMs` supplied in the source-signed payload; a real server-owned receipt-time protocol is still required.
+- The V1 signed report still includes source-supplied `receivedAtMs`. The isolated V2 lab removes it and uses a gateway clock-owned signed `admittedAtMs` (gateway admission, NOT RTDB commit); production rollout and real signer custody are still required.
 - Local fsync/HMAC-sealed checkpoints do **not** prevent restoration of an older valid snapshot. A separate monotonic, rollback-resistant authority and recovery protocol remain unresolved.
 - No lab's successful WebCrypto, Firebase Emulator or regression CI may be described as real hardware, actual browser/mobile acceptance, production deployment, verified alarms or physically proven gate state.
 - Before any merging or deployment: review the entire stacked diff, resolve dependency/security warnings, run exact-head CI, verify read-only preview with actual browsers and obtain explicit release authorization.
 
-Verification: GitHub Actions run #41193680165 PASSED on implementation head `863ae4c31861d05f98ac7a48efc4b2f0ea57e3e9` (before this roadmap-only update), including 372 offline tests (366 pass, 6 skip), typecheck, and ESLint 0 errors/9 warnings. Acceptance on the updated head must be rechecked.\n\nReference: `docs/firebase/R3_OPERATOR_PINNED_GATEWAY_LAB_20261031.md`. The original website roadmap above remains the historical baseline; this section tracks the newer evidence-first telemetry migration.
+Verification: GitHub Actions run #41193680165 PASSED on implementation head `863ae4c31861d05f98ac7a48efc4b2f0ea57e3e9` (before this roadmap-only update), including 372 offline tests (366 pass, 6 skip), typecheck, and ESLint 0 errors/9 warnings. Acceptance on the updated head was subsequently rechecked in successful run #41193827264.\n\nReference: `docs/firebase/R3_OPERATOR_PINNED_GATEWAY_LAB_20261031.md`. The original website roadmap above remains the historical baseline; this section tracks the newer evidence-first telemetry migration.
+
+R3-D1 reference (draft only): `docs/firebase/R3_V2_SERVER_ADMISSION_TIME_LAB_20261031.md`. No production cutover or physical safety claim.
