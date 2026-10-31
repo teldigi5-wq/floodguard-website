@@ -3,6 +3,11 @@ on:
   push:
     branches:
       - test/r3-consolidated-workflow-security-gate-20261031
+  pull_request:
+    branches:
+      - main
+      - 'test/r2-*'
+      - 'test/r3-*'
   workflow_dispatch: {}
 permissions:
   contents: read
