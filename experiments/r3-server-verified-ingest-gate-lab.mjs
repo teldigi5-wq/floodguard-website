@@ -96,7 +96,10 @@ export function createR3ServerVerifiedIngestLab({
     throw new TypeError('All source and issuer public keys must be distinct');
 
   let closed=false;
-  async function publish({stream,record}={}) {
+  async function publish(input={}) {
+    if(!exact(input,['stream','record']))
+      return deny('untrusted-request-shape');
+    const {stream,record}=input;
     if(closed)return deny('gateway-closed');
     if(process.env.FG_R3_TRUSTED_INGEST_LAB_TEST!=='1'||
        process.env.FIREBASE_DATABASE_EMULATOR_HOST!=='127.0.0.1:9000')
@@ -124,6 +127,27 @@ export function createR3ServerVerifiedIngestLab({
     if(Math.abs(p.receivedAtMs-nowMs)>2000)
       return deny('reported-receipt-time-not-operator-confirmed');
 
+    // Read/verify the previous independently signed issuer envelope BEFORE
+    // requesting a new issuer signature. A bad existing checkpoint must not
+    // consume signing capability or automatically recover.
+    let ref,current;
+    try{
+      const db=databaseForStream(stream);
+      if(!db||typeof db.ref!=='function')
+        return deny('scoped-writer-unavailable');
+      ref=db.ref(PATHS[stream]);
+      current=(await ref.get()).val();
+    }catch{return deny('published-checkpoint-read-unavailable');}
+    if(!verifiedHistoricalEnvelope(current,stream,
+      trusted.reportPublicKey,trusted.issuerPublicKey))
+      return deny('published-checkpoint-unverified');
+    const old=current.report.payload;
+    if(old.sourceAlias!==p.sourceAlias||old.epoch!==p.epoch||
+       p.sequence<=old.sequence||
+       p.observedAtMs<old.observedAtMs||
+       p.receivedAtMs<old.receivedAtMs)
+      return deny('publication-replay-or-rollback');
+
     const receipt=Object.freeze({
       version:R2_ISSUER_RECEIPT_VERSION,stream,
       sourceAlias:p.sourceAlias,epoch:p.epoch,sequence:p.sequence,
@@ -145,22 +169,7 @@ export function createR3ServerVerifiedIngestLab({
       report:record,
       acceptance:{receipt,signature:receiptSignature}
     };
-    let db;
     try{
-      db=databaseForStream(stream);
-      if(!db||typeof db.ref!=='function')
-        return deny('scoped-writer-unavailable');
-      const ref=db.ref(PATHS[stream]);
-      const current=(await ref.get()).val();
-      if(!verifiedHistoricalEnvelope(current,stream,
-        trusted.reportPublicKey,trusted.issuerPublicKey))
-        return deny('published-checkpoint-unverified');
-      const old=current.report.payload;
-      if(old.sourceAlias!==p.sourceAlias||old.epoch!==p.epoch||
-         p.sequence<=old.sequence||
-         p.observedAtMs<old.observedAtMs||
-         p.receivedAtMs<old.receivedAtMs)
-        return deny('publication-replay-or-rollback');
       // Atomic single-leaf replacement; RTDB rules re-check monotonicity,
       // but cannot verify cryptography. Privileged restores may race.
       if(closed)return deny('gateway-closed');
