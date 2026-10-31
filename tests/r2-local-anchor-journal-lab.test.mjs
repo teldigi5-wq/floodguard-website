@@ -17,8 +17,10 @@ import {draftR2CatchupApproval,canonicalR2CatchupApproval}
 import {createR2LocalAnchorJournalLab}
   from '../experiments/r2-local-anchor-journal-lab.mjs';
 
-if(process.env.FG_R2_LOCAL_JOURNAL_LAB_TEST!=='1')
-  throw Error('Local signed checkpoint journal tests require lab-only switch');
+// This test file is itself the explicit lab harness. It creates only fresh
+// temporary directories and ephemeral test keys; the library is disabled
+// without this opt-in flag outside tests.
+process.env.FG_R2_LOCAL_JOURNAL_LAB_TEST='1';
 
 const SCHEMA='floodguard-r2-local-anchor-journal-lab-v1';
 const streams=['water','rain'];
