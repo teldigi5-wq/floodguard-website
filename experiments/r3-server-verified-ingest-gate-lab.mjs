@@ -5,7 +5,7 @@
 // The actual receipt signer is an independently injected test-only capability.
 // Production requires credential custody, device enrollment, replay-resistant
 // authority, time ownership and audited deployment; this is NOT that service.
-import {createHash,KeyObject,createPublicKey,verify}
+import {createHash,KeyObject,verify}
   from 'node:crypto';
 import {canonicalR2PublicEvidence,verifyR2PublicEvidence}
   from './r2-dual-stream-public-evidence.mjs';
