@@ -1,0 +1,57 @@
+name: R3 Operator-Pinned Ingestion Gate Laboratory
+on:
+  push:
+    branches:
+      - test/r3-server-verified-ingest-gate-lab-20261031
+    paths:
+      - 'experiments/r3-server-verified-ingest-gate-lab.mjs'
+      - 'tests/r3-server-verified-ingest-gate-lab.test.mjs'
+      - 'tests/r3-server-verified-ingest-gate-emulator.mjs'
+      - 'docs/firebase/R3_OPERATOR_PINNED_GATEWAY_LAB_20261031.md'
+      - 'docs/ENGINEERING_ROADMAP.md'
+      - '.github/workflows/r3-server-verified-ingest-gate.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: r3-verified-ingest-gate-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    name: Strict operator-pinned issuer, emulator permission and regression gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Use pinned Node 22 runtime
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22.23.4'
+          cache: npm
+      - name: Prepare Java for isolated RTDB emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Add rules unit testing harness without lock mutation
+        run: npm install --no-save --package-lock=false --ignore-scripts @firebase/rules-unit-testing@5.0.2
+      - name: Run standalone trusted-ingest negative and regression tests
+        run: |
+          node --test tests/r3-server-verified-ingest-gate-lab.test.mjs
+          node --test tests/r3-atomic-dual-attestation-reader-lab.test.mjs
+      - name: Verify all existing offline application regressions
+        run: npm test
+      - name: Verify gateway against real local RTDB rules
+        run: |
+          npx --yes firebase-tools@14.18.0 emulators:exec --only database \
+            --project demo-fg-r3-gated-ingest --config firebase.r3-atomic-dual-lab.json \
+            "FG_R3_TRUSTED_INGEST_LAB_TEST=1 node --test tests/r3-server-verified-ingest-gate-emulator.mjs"
+      - name: Verify TypeScript and ESLint
+        run: |
+          npm run typecheck
+          npm run lint
