@@ -403,11 +403,16 @@ test('operator cannot use catch-up to heal a restored database behind newer anch
   const stream='rain',recordOld=await readPublic(stream);
   const original=await input(stream,2);
   assert.equal((await publishR2AttestedLabReport(original)).published,true);
+  const newerRecord=await readPublic(stream);
+  const priorAnchor=await signedOperatorAnchor(stream,recordOld);
+  const approvalForActualAdvance=operatorApprovalInput(
+    stream,original,priorAnchor,newerRecord
+  );
   const newerAnchor=await signedOperatorAnchor(stream);
   await admin(db=>db.ref(path(stream)).set(recordOld));
   const restored=await readPublic(stream);
-  const fakeApproval=operatorApprovalInput(stream,original,newerAnchor,restored);
-  assert.equal(reviewCatchup(stream,original,newerAnchor,restored,fakeApproval).reason,
+  assert.equal(reviewCatchup(stream,original,newerAnchor,restored,
+    approvalForActualAdvance).reason,
     'checkpoint-not-ahead-or-unverified');
   assert.deepEqual(await readPublic(stream),recordOld);
 });
