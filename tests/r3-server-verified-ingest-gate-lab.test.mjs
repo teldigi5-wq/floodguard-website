@@ -148,10 +148,11 @@ test('request cannot override the issuer identity, a database or destination',as
     issuerPrivateKey:untrusted.privateKey,registry:{water:{enabled:true}},
     receiptSignature:'A'.repeat(86),path:'/floodguard/live/gate',
     database:{ref:()=>{throw Error('must never be called');}}};
-  assert.equal((await x.gate.publish(attempt)).published,true);
-  assert.deepEqual(x.paths,['/floodguard/attestedEvidenceLabV1/water']);
-  assert.equal(Object.hasOwn(x.state.water,'path'),false);
-  assert.equal(Object.hasOwn(x.state.water,'registry'),false);
+  assert.deepEqual(await x.gate.publish(attempt),{
+    published:false,reason:'untrusted-request-shape'
+  });
+  assert.deepEqual(x.paths,[]);
+  assert.equal(x.state.water.report.payload.sequence,1);
 });
 
 test('operator registry rejects duplicate roles, missing streams and disabled identity',()=>{
