@@ -13,11 +13,11 @@
 
 **Main security CI drift.** Although protected main already contained pinned immutable action commit references, read-only token permissions, credential-safe checkout, CI timeouts and a pinned CodeQL action, the stacked migration branch still carried an older `.github/workflows/ci.yml` and `codeql.yml` using mutable `@v4` tags, and earlier Firebase phase workflows lacked credential-safe checkout. R2/R3 test workflows also depended on mutable `actions/setup-java@v4`.
 
-This review branch restores **the exact current main content** of CI and CodeQL, pins Phase A/B checkout and Node actions, adds `persist-credentials: false` to those checkout steps, and pins setup-java to its verified upstream immutable **v4.9.1 commit `cf277c60eb25467037889841efdb72551f06f6c3`** across all remaining emulator workflows. Pinning v4.9.1 does not remove its upstream deprecation; a controlled major-version upgrade with separate tests remains recommended. Do not bypass or weaken protected main's release checks.
+This review branch restores **the exact current main content** of CI and CodeQL, pins Phase A/B checkout and Node actions, adds `persist-credentials: false` to those checkout steps, and now upgrades setup-java to upstream-verified immutable **v6.1.0 commit `b843ebf9b913146b38da2eaa7aeddf76074ae1ad`** across the emulator workflows. Upstream release was published 14 October 2026 and uses Node 24 action runtime; its compatibility must be verified in CI. Do not bypass or weaken protected main's release checks.
 
 `tests/migration-stack-security-gate.test.mjs` enforces 40-hex immutable action pins across `.github/workflows`, explicitly permission-minimal top-level tokens, `persist-credentials:false` where checkout is used, rejection of `pull_request_target`, integrity of the main CI/build/CodeQL gate, no import of experimental R2/R3 signing or witness modules by production UI source, and retention of roadmap R8 NO-GO.
 
-`.github/workflows/r3-consolidated-security-review.yml` adds a **branch-only** integrated acceptance gate for the review branch. It runs all offline tests, selected actual Firebase RTDB emulator suites for the independent R2 signed evidence, R3 atomic dual-signature evidence and R3 V2 disk-witness recovery, TypeScript, lint and Next build. It is a stronger stack-level regression check, **not** real hardware or production QA.
+`.github/workflows/r3-consolidated-security-review.yml` adds a integrated acceptance gate for R2/R3-targeted **pull requests** and pushes to the review branch. It runs all offline tests, selected actual Firebase RTDB emulator suites for the independent R2 signed evidence, R3 atomic dual-signature evidence and R3 V2 disk-witness recovery, TypeScript, lint and Next build. It is a stronger stack-level regression check, **not** real hardware or production QA.
 
 ## Unresolved merge and production blockers
 
@@ -30,7 +30,7 @@ This review branch restores **the exact current main content** of CI and CodeQL,
 7. **CI coverage gaps.** Most R2/R3 workflows trigger only on their original feature branch, not automatically across the entire stacked merge. This review adds a consolidated gate **for its own branch**, but branch-protection rules, pull-request target coverage, required checks and deployment protections still require review before merging.
 8. **Supply-chain reproducibility.** Some workflow commands install an explicit Firebase CLI version through `npx --yes`, rather than a lockfile-bound local dependency. Version pinning is helpful but not a complete transitive supply-chain lock. Review dependencies and CodeQL findings separately.
 9. **No secret scan certification.** No code in this review needs production secrets or external service credentials; do not interpret static token/test scanning as a proven full-history secret audit. Historical leak searches and key rotation remain manual gates.
-10. **Action major upgrade.** Pinned `actions/setup-java@v4.9.1` is immutable but deprecated. Upgrade to a verified SHA-pinned, supported major version in an isolated follow-up after the current tests and runner compatibility are confirmed.
+10. **Action major upgrade in progress.** Java setup was advanced from pinned deprecated v4.9.1 to pinned supported v6.1.0. Confirmation requires exact-head CI on the new runner action, not a source-only assertion.
 
 ## Promotion policy
 
@@ -39,3 +39,14 @@ This review branch restores **the exact current main content** of CI and CodeQL,
 Evidence for any changed code must be attached to the **exact latest commit**; a successful run for a superseded SHA is not release evidence. The consolidated initial-head CI passed with all selected checks; the exact evidence is recorded below, and the latest documentation-only head requires its own run.
 
 Initial consolidated review head `7a5fe58cab10db1bd408ceb5ada65676ccc0d3ea` passed [Actions run #41198020160](https://github.com/teldigi5-wq/floodguard-website/actions/runs/41198020160): workflow security 4/4; offline suite 405 pass, 6 skipped; R2 RTDB 8/8, R3 atomic RTDB 6/6, V2 disk witness RTDB 4/4; TypeScript PASS; lint 0 errors and 10 warnings; Next.js build PASS. Subsequent doc-only commit must be verified separately.
+
+## PR-trigger coverage and branch protection verification
+
+- In this review branch, the consolidated workflow now includes `pull_request` events for targets `main`, `test/r2-*`, and `test/r3-*`, without path exclusions. This adds checks to the relevant PR merge candidate rather than relying only on feature-branch push runs.
+- On 31 October 2026, GitHub's **repository rulesets endpoint returned an empty collection** for this repository through the connected GitHub account. A separate request to `branches/main/protection` returned **HTTP 403, Resource not accessible by integration**. This does **not** prove `main` lacks branch protection: protection settings could exist but be inaccessible to the app.
+- **Required status-check enforcement is NOT VERIFIED.** PR-triggering a workflow only creates a check; it does not make that check a required merge gate. An authorized maintainer must inspect Settings → Branches / Rules → Rulesets for the exact repository, confirm required pull request review + current GitHub Actions checks, require the branch up-to-date, restrict bypasses and prevent force push/deletion.
+- This branch remains 355 commits ahead/1 behind the reviewed main checkpoint; restoring workflow file contents does not guarantee a clean git merge-base or safe rollout.
+- The upstream `actions/setup-java` **v6.1.0** release ref was resolved to immutable SHA `b843ebf9b913146b38da2eaa7aeddf76074ae1ad`; the current CI proof must verify it against the runner.
+- Neither PR-triggered CI nor SHA pins substitute for independent secret history analysis, production Firebase authorization, real device attestations or a rollback-resistant witness.
+
+**Change status for this review increment: code prepared, latest exact-head CI required before completion.**
