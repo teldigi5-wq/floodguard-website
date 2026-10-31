@@ -158,7 +158,7 @@ test('forged replacement anchor, receipt, approval and cross-stream attempt fail
     const result=x.open().advance(bad);
     assert.equal(result.advanced,false);
   }
-  assert.deepEqual(x.open().snapshot().rain.anchor,x.bootstrap.rain.signedAnchor);
+  assert.deepEqual(x.open().snapshot().rain,x.bootstrap.rain.signedAnchor);
   assert.equal(x.open().snapshot().generation,0);
 }));
 
@@ -178,6 +178,12 @@ test('missing, corrupt, unsafe or wrong-HMAC journal never becomes new state',()
   fs.chmodSync(file,0o600);
   fs.rmSync(file);
   assert.throws(()=>x.open().snapshot(),/ENOENT/);
+}));
+
+test('dangling symlink cannot be mistaken for an uninitialized journal',()=>withSetup(x=>{
+  fs.symlinkSync(path.join(x.directory,'missing-target'),location(x.directory));
+  assert.throws(()=>x.open().initialize(x.bootstrap),/Unsafe existing local journal path/);
+  assert.equal(fs.lstatSync(location(x.directory)).isSymbolicLink(),true);
 }));
 
 test('stale crash lock is never deleted automatically',()=>withSetup(x=>{
