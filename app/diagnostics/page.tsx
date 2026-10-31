@@ -15,7 +15,7 @@ export default function Diagnostics() {
     { title:"Gate state", path:"gate", available:data?.gate !== undefined,
       value:label(data?.gate?.status) },
     { title:"Alarm report", path:"alarm", available:data?.alarm !== undefined,
-      value:data?.alarm?.active === true?"Reported active":data?.alarm?.active === false?"Reported clear":"Unavailable" },
+      value:data?.alarm?.active === true?"Reported active":data?.alarm?.active === false?"Reported inactive (unverified)":"Unavailable" },
     { title:"Devices", path:"devices", available:data?.devices !== undefined,
       value:data?.devices?"Status records present":"Unavailable" },
     { title:"Controller update", path:"system", available:data?.system !== undefined,
