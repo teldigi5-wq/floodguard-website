@@ -1,0 +1,53 @@
+name: Firebase public read-boundary audit (isolated)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/verify-firebase-read-boundaries.mjs'
+      - 'tests/firebase-read-boundaries.test.mjs'
+      - 'tests/firebase-read-boundaries-emulator.mjs'
+      - 'firebase.read-boundary-lab.json'
+      - 'firebase.rules.json'
+      - '.github/workflows/firebase-read-boundary-audit.yml'
+  push:
+    branches:
+      - test/firebase-public-read-boundary-audit-20261031
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  read-boundaries:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout safely
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Use Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Use Java 17 for local Firebase emulator
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install reproducibly without scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install isolated emulator rules testing dependency
+        run: npm install --no-save --package-lock=false --ignore-scripts @firebase/rules-unit-testing@5.0.2
+      - name: Offline GET-only and malicious URL regression tests
+        run: node --test tests/firebase-read-boundaries.test.mjs
+      - name: Run actual RTDB template authorization tests on loopback only
+        run: |
+          npx --yes firebase-tools@14.18.0 emulators:exec --only database \
+            --project demo-fg-read-boundary-audit --config firebase.read-boundary-lab.json \
+            "FG_READ_BOUNDARY_LAB=1 node --test tests/firebase-read-boundaries-emulator.mjs"
+      - name: Guard website's existing offline and build checks
+        run: |
+          npm test
+          npm run lint
+          npm run typecheck
+          npm run build
