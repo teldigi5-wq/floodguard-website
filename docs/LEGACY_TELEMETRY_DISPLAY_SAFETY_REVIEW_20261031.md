@@ -22,3 +22,15 @@ The branch must pass **`main`'s native `pull_request` CI**: locked install, full
 This change deliberately does not implement device enrollment, signed ingestion, independent per-source freshness, durable antirollback, production Firebase privacy verification or cross-application alert guarantees. Those remain separate release blockers in draft PR #31 and the larger migration stack.
 
 **Release decision: DRAFT REVIEW ONLY — production NO-GO.**
+
+## Cross-page safety-claims review (31 October 2026)
+
+A follow-up inspection found the separate gate page **recomputed OPEN and CLOSED from the servo angle** even though the provider's reconciler had already rejected contradictory gate status/angle reports. The page also described the prototype as a trusted live physical gate, asserted a physically closed gate during its countdown and described a synthetic 3D water animation as live release. The reusable 3D model derived hydraulic flow entirely from the last reported angle, not measured discharge.
+
+This main-based draft now uses the provider-reconciled gate status as the gate-page authority: a rejected `UNKNOWN` state cannot be overridden by the angle. It labels countdown values as **recorded, not running**, renders gate position as **reported, not physically verified**, and marks the 3D flow model and gate lift as **illustrative**. The simulated hydraulic animation is intentionally retained for demonstration but is never evidence of actual flow; no gate commands or Firebase writes are introduced.
+
+Shared heartbeat language is also qualified: the navbar status badge, dashboard, diagnostics, home hero and footer distinguish a recent **system timestamp** from authenticated, independently fresh field-sensor data. An unverified Boolean alarm `false` is described as a reported inactive flag rather than a verified `CLEAR`.
+
+Automated guard: `tests/gate-illustration-claims.test.mjs` checks the key pure gate-contract disagreements and critical cross-page display wording/absence of angle-derived override. These are source-contract regressions, **not browser visual/E2E or hardware tests**. Actual browser layout and 3D motion still require device QA.
+
+**No change to physical hardware, firmware, real Firebase security rules, mobile, WhatsApp, production hosting, or the main branch. Production remains NO-GO.**
