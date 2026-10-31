@@ -43,7 +43,10 @@ before(async()=>{
 after(async()=>{if(env)await env.cleanup();});
 beforeEach(async()=>{
   await env.clearDatabase();
-  const raw=frame(),projection=projectPublicTelemetryLabV1(raw);
+  const raw=frame();
+  // Firebase SDK's data serializer requires own hasOwnProperty. Convert
+  // our deliberately null-prototype whitelist to ordinary JSON scalars.
+  const projection=JSON.parse(JSON.stringify(projectPublicTelemetryLabV1(raw)));
   await privileged(db=>db.ref(root).set({
     publicTelemetryLabV1:projection,
     privateIngest:{receipt:'PRIVATE'},
