@@ -1,0 +1,61 @@
+name: R2 Signed Operator Catch-up Laboratory
+
+on:
+  push:
+    branches:
+      - test/r2-signed-operator-catchup-20261031
+    paths:
+      - 'experiments/r2-operator-catchup-lab.mjs'
+      - 'tests/r2-operator-catchup-lab.test.mjs'
+      - 'tests/r2-attested-dual-stream-publisher-emulator.mjs'
+      - 'docs/firebase/R2_OPERATOR_CATCHUP_APPROVAL_LAB_20261031.md'
+      - '.github/workflows/r2-operator-catchup.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r2-operator-catchup-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Signed catch-up decision and local Firebase recovery tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Use patched Node 22 runtime
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22.23.4'
+          cache: npm
+      - name: Prepare Java for local Firebase Emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install reproducible application dependencies without install scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Add emulator-only rules testing dependency
+        run: npm install --no-save --package-lock=false --ignore-scripts @firebase/rules-unit-testing@5.0.2
+      - name: Verify catch-up approval, anchors, and signed server receipts
+        run: |
+          node --test tests/r2-operator-catchup-lab.test.mjs
+          node --test tests/r2-recovery-anchor-lab.test.mjs
+          node --test tests/r2-attested-dual-stream-publisher.test.mjs
+      - name: Run complete offline regression suite
+        run: npm test
+      - name: Verify uncertain acknowledgement and restoration in local RTDB Emulator
+        run: |
+          npx --yes firebase-tools@14.18.0 emulators:exec --only database \
+            --project demo-fg-r2-attested --config firebase.r2-dual-stream-lab.json \
+            "FG_R2_ATTESTED_PUBLISHER_LAB_TEST=1 FG_R2_RECOVERY_ANCHOR_LAB_TEST=1 node --test tests/r2-attested-dual-stream-publisher-emulator.mjs"
+      - name: Check TypeScript and ESLint
+        run: |
+          npm run typecheck
+          npm run lint
