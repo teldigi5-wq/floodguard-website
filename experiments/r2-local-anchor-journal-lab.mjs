@@ -92,7 +92,7 @@ export function createR2LocalAnchorJournalLab({
       (fs.constants.O_NOFOLLOW||0));
     try{
       const stat=fs.fstatSync(fd);
-      if(!stat.isFile()||stat.size>MAX_BYTES||
+      if(!stat.isFile()||stat.nlink!==1||stat.size>MAX_BYTES||
          (stat.mode&0o077)!==0)throw Error('Unsafe local journal file');
       const document=JSON.parse(fs.readFileSync(fd,'utf8'));
       if(!exact(document,['state','mac'])||
@@ -135,7 +135,12 @@ export function createR2LocalAnchorJournalLab({
     // streams at once and refuses to silently reset an existing file.
     initialize({water,rain}={}){
       return locked(()=>{
-        if(fs.existsSync(file))throw Error('Local journal already initialized');
+        const prior=fs.lstatSync(file,{throwIfNoEntry:false});
+        if(prior){
+          if(prior.isSymbolicLink()||!prior.isFile())
+            throw Error('Unsafe existing local journal path');
+          throw Error('Local journal already initialized');
+        }
         for(const [stream,item] of Object.entries({water,rain})){
           if(!exact(item,['signedAnchor','publicRecord']))
             throw new TypeError('Signed source bootstrap proof required');
