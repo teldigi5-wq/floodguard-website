@@ -59,9 +59,9 @@ function envelope(stream,seq=1) {
 }
 function fixture({issuer,writer,clock,registry}={}) {
   const state={water:envelope('water'),rain:envelope('rain')},paths=[];
-  const issueSignedReceipt=issuer??async(s,text)=>
-    signText(text,keys[s].issuer);
-  const databaseForStream=writer??s=>({
+  const issueSignedReceipt=issuer??(async(s,text)=>
+    signText(text,keys[s].issuer));
+  const databaseForStream=writer??(s=>({
     ref:p=>{
       paths.push(p);
       if(p!=='/floodguard/attestedEvidenceLabV1/'+s)
@@ -71,7 +71,7 @@ function fixture({issuer,writer,clock,registry}={}) {
         set:async value=>{state[s]=value;}
       };
     }
-  });
+  }));
   const gate=createR3ServerVerifiedIngestLab({
     registry:registry??initialRegistry(),issueSignedReceipt,
     databaseForStream,clock:clock??(()=>now)
