@@ -64,6 +64,7 @@ This staged research track is **additional** to the earlier website stages above
 | R3-C | Operator-pinned, server-side gated ingestion with independently controlled issuer signer | **LAB VERIFIED in draft PR #27**: 11/11 unit, 9/9 RTDB emulator; service deployment absent |
 | R3-D1 | Gateway-owned V2 admission timestamp and separately signed source observation, with browser verifier and restricted isolated RTDB namespace | **LAB VERIFIED in draft PR #28**: 10/10 unit, 6/6 actual RTDB emulator; no real issuer or durable commit |
 | R3-D2a | Independent signed witness-alignment contract, one-step CAS and crash/rollback rehearsal | **LAB VERIFIED in draft PR #29** — in-memory witness ONLY, actual external nonrollback durability absent |
+| R3-D2b-local | Private fsync-backed, signed, append-only witness journal and restart/fault/reconciliation rehearsal | **IMPLEMENTED IN DRAFT, CI PENDING** — local disk only; privileged valid-journal rollback remains possible |
 | R3-D2b | Externally durable nonrollback witness, authenticated operator recovery, distributed fencing, real browsers, preview/cutover | **NOT IMPLEMENTED** |
 | R4 | Native Flutter verification and consistent stale/unknown UI | Pending and gated |
 | R5 | WhatsApp bot signed-alert integration and delivery QA | Pending and gated |
@@ -85,3 +86,5 @@ Verification: GitHub Actions run #41193680165 PASSED on implementation head `863
 R3-D1 reference (draft only): `docs/firebase/R3_V2_SERVER_ADMISSION_TIME_LAB_20261031.md`. Implementation head `c8509a9e4368d0fe143ea2ad6422a93b7ac5ca33` passed GitHub Actions run #41194508075: V2 10/10, RTDB emulator 6/6, offline regressions 376 pass / 6 skip, 0 TS/lint errors. Revalidate this updated roadmap commit before claiming final exact-head success. No production cutover or physical safety claim.
 
 R3-D2a reference (draft only): `docs/firebase/R3_V2_INDEPENDENT_WITNESS_PROTOCOL_LAB_20261031.md`. Implementation commit `4788ea2953a6189ffb16a3f8072cb0e6a928a5ef` passed Actions run #41195399569 (12/12 focused witness tests, 4/4 RTDB emulator tests, 388 pass/6 skipped offline, 0 type/lint errors). Updated-head validation is required after this documentation and lint-only change. The witness is synthetic in-memory test state: CI cannot prove external durability, nonrollback security or production trust.
+
+R3-D2b-local reference (draft only): `docs/firebase/R3_V2_FSYNC_DISK_WITNESS_LAB_20261031.md`. This is only local fsync-backed signed history. Independent nonrollback storage, production operator credentials and cross-host fencing are still not implemented. CI verification is pending.
