@@ -1,0 +1,58 @@
+name: R3 Browser Read-only Signed Evidence Lab
+
+on:
+  push:
+    branches:
+      - test/r3-browser-readonly-verified-feed-lab-20261031
+    paths:
+      - 'experiments/r3-browser-readonly-evidence-lab.mjs'
+      - 'tests/r3-browser-readonly-evidence-lab.test.mjs'
+      - 'tests/r3-browser-readonly-evidence-emulator.mjs'
+      - 'docs/firebase/R3_BROWSER_READONLY_SIGNED_EVIDENCE_LAB_20261031.md'
+      - '.github/workflows/r3-browser-readonly-evidence.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r3-browser-readonly-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: WebCrypto proofs and actual read-only RTDB emulator subscriptions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Use Node 22 security patch baseline
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22.23.4'
+          cache: npm
+      - name: Prepare Java for local RTDB emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install locked dependencies without scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install test-only rules evaluation dependency
+        run: npm install --no-save --package-lock=false --ignore-scripts @firebase/rules-unit-testing@5.0.2
+      - name: Verify browser WebCrypto signature contract and observer race tests
+        run: node --test tests/r3-browser-readonly-evidence-lab.test.mjs
+      - name: Run complete offline application regressions
+        run: npm test
+      - name: Verify Firebase actual anonymous leaf subscriptions and write denials
+        run: |
+          npx --yes firebase-tools@14.18.0 emulators:exec --only database \
+            --project demo-fg-r3-readonly --config firebase.r2-dual-stream-lab.json \
+            "FG_R3_READONLY_EMULATOR_TEST=1 node --test tests/r3-browser-readonly-evidence-emulator.mjs"
+      - name: Verify TypeScript and ESLint
+        run: |
+          npm run typecheck
+          npm run lint
