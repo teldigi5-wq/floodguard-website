@@ -23,14 +23,14 @@ test('unknown and sensor-fault states never become LOW based on a separate risk 
   assert.equal(risk('SAFE','UNKNOWN'),'UNKNOWN');
   assert.equal(risk('SAFE',null),'UNKNOWN');
   assert.equal(risk(null,null,'SAFE'),'UNKNOWN');
-  assert.equal(risk('SAFE','NORMAL','LOW'),'LOW');
+  assert.equal(risk('SAFE','NORMAL','LOW'),'UNKNOWN');
 });
 test('backend elevated risk never gets silently lowered but low cannot hide missing evidence',()=>{
   assert.equal(risk('SAFE','NORMAL','HIGH'),'HIGH');
   assert.equal(risk('WARNING','NORMAL','CRITICAL'),'CRITICAL');
   assert.equal(risk('UNKNOWN','NORMAL','HIGH'),'HIGH');
   assert.equal(risk('UNKNOWN','NORMAL','LOW'),'UNKNOWN');
-  assert.equal(risk('SAFE','NORMAL','???'),'LOW');
+  assert.equal(risk('SAFE','NORMAL','???'),'UNKNOWN');
 });
 test('stale, disconnected or initial data never yields a current risk clearance',()=>{
   for(const freshness of ['loading','stale','unavailable',null]){
@@ -42,7 +42,7 @@ test('stale, disconnected or initial data never yields a current risk clearance'
   assert.equal(reconcileDisplayedFloodRisk({
     waterStatus:'SAFE',rainStatus:'NORMAL',reportedRisk:'LOW'
   }),'UNKNOWN');
-  assert.equal(risk('SAFE','NORMAL','LOW','live'),'LOW');
+  assert.equal(risk('SAFE','NORMAL','LOW','live'),'UNKNOWN');
 });
 test('heavy numerical rainfall overrides NORMAL or lower categorical status',()=>{
   assert.equal(rain('NORMAL',305),'CRITICAL');
@@ -70,4 +70,22 @@ test('the actual live provider applies risk and rain reconciliation before rende
   assert.match(source,/reportedRisk: data\.system\?\.overallRisk/);
   assert.match(source,/freshness,/);
   assert.doesNotMatch(source,/function normalizeRainStatus\(/);
+});
+
+test('LOW risk requires both live shared state and explicit trusted source clearance',()=>{
+  const evaluate=(verifiedClearance,extra={})=>reconcileDisplayedFloodRisk({
+    waterStatus:'SAFE',rainStatus:'NORMAL',
+    reportedRisk:'LOW',freshness:'live',verifiedClearance,...extra
+  });
+  assert.equal(evaluate(false),'UNKNOWN');
+  assert.equal(evaluate(null),'UNKNOWN');
+  assert.equal(evaluate(true),'LOW');
+  assert.equal(evaluate(true,{freshness:'stale'}),'UNKNOWN');
+  assert.equal(evaluate(true,{waterStatus:'UNKNOWN'}),'UNKNOWN');
+  assert.equal(evaluate(true,{rainStatus:'SENSOR_ERROR'}),'UNKNOWN');
+  assert.equal(evaluate(false,{waterStatus:'DANGER'}),'CRITICAL',
+    'Fail closed on LOW without hiding reported hazards');
+  const provider=readFileSync('providers/flood-provider.tsx','utf8');
+  assert.doesNotMatch(provider,/verifiedClearance:\s*true/,
+    'The legacy public RTDB provider cannot fabricate attestation');
 });
