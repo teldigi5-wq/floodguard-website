@@ -33,9 +33,9 @@ const DamScene = dynamic(() => import("@/components/dam-scene"), {
 });
 
 const reasons: Record<string, string> = {
-  DAM_WARNING: "Reservoir distance crossed the warning threshold.",
-  DAM_DANGER: "Reservoir distance entered the danger range.",
-  WATER_DANGER: "The HC-SR04 air gap reached the danger zone.",
+  DAM_WARNING: "The controller reported a water warning-threshold event.",
+  DAM_DANGER: "The controller reported a water danger-threshold event.",
+  WATER_DANGER: "The controller reported a danger-range HC-SR04 air gap.",
   NONE: "No controller reason recorded; current conditions are not independently verified.",
 };
 
@@ -67,7 +67,7 @@ export default function GatePage() {
       ? "Reported pre-open countdown · not a live timer"
       : gateState === "OPEN"
         ? "Reported OPEN · physical position unverified"
-        : gateState === "MOVING"
+         : gateState === "OPENING" || gateState === "CLOSING"
           ? "Reported MOVING · physical position unverified"
           : gateState === "CLOSED"
             ? "Reported CLOSED · physical position unverified"
@@ -146,7 +146,7 @@ export default function GatePage() {
               rain={data?.rain?.currentMm}
               waterDistance={water?.distanceCm}
             />
-            <div className="final-gate-lift" aria-label="Gate lift position">
+            <div className="final-gate-lift" aria-label="Illustrative lift calculated from reported servo angle">
               <span>90°</span>
               <div><i style={{ height: `${lift ?? 0}%` }} /><b style={{ bottom: `calc(${lift ?? 0}% - 9px)` }} /></div>
               <span>0°</span>
@@ -189,9 +189,9 @@ export default function GatePage() {
             <div className="final-gate-reason">
               <ShieldCheck />
               <div>
-                <small>Why is the gate in this state?</small>
-                <strong>{label(gate?.reason ?? "NONE")}</strong>
-                <p>{reasons[(gate?.reason ?? "NONE").toUpperCase()] ?? "The source reported this reason; current conditions are unverified."}</p>
+                <small>Controller-reported gate reason</small>
+                <strong>{label(gate?.reason ?? "UNKNOWN")}</strong>
+                <p>{reasons[(gate?.reason ?? "UNKNOWN").toUpperCase()] ?? "The source reported this reason; current conditions are unverified."}</p>
               </div>
             </div>
           </aside>
@@ -203,7 +203,7 @@ export default function GatePage() {
         <i />
         <div><span>02</span><Activity /><strong>Decide</strong><p>Arduino confirms SAFE, WARNING or DANGER locally.</p></div>
         <i />
-        <div><span>03</span><BellRing /><strong>Warn</strong><p>A real countdown is published before the opening action.</p></div>
+        <div><span>03</span><BellRing /><strong>Warn</strong><p>The prototype can report a countdown; physical timing is not verified by this page.</p></div>
         <i />
         <div><span>04</span><Gauge /><strong>Move</strong><p>SG90 moves the center prototype gate to the commanded angle.</p></div>
         <i />
