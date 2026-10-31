@@ -88,3 +88,16 @@ R3-D1 reference (draft only): `docs/firebase/R3_V2_SERVER_ADMISSION_TIME_LAB_202
 R3-D2a reference (draft only): `docs/firebase/R3_V2_INDEPENDENT_WITNESS_PROTOCOL_LAB_20261031.md`. Implementation commit `4788ea2953a6189ffb16a3f8072cb0e6a928a5ef` passed Actions run #41195399569 (12/12 focused witness tests, 4/4 RTDB emulator tests, 388 pass/6 skipped offline, 0 type/lint errors). Updated-head validation is required after this documentation and lint-only change. The witness is synthetic in-memory test state: CI cannot prove external durability, nonrollback security or production trust.
 
 R3-D2b-local reference (draft only): `docs/firebase/R3_V2_FSYNC_DISK_WITNESS_LAB_20261031.md`. This is only local fsync-backed signed history. Implementation commit `95592b7855d98eeff2cadbd8c6e1595163c841cd` passed Actions run #41196325912: 13/13 local witness tests, 4/4 Firebase emulator tests and 401 pass / 6 skip offline, with zero type/lint errors (two unused-variable warnings introduced by this lab were subsequently corrected). Latest docs/lint-only head requires revalidation. Independent nonrollback storage, production operator credentials and cross-host fencing are still not implemented.
+
+## R3 full-stack security review checkpoint — 31 October 2026
+
+**Draft security and integration review; CI pending for this branch.** Protected main and production deployments remain untouched. At the reviewed #30 SHA, GitHub reported 355 commits ahead / 1 commit behind main with 206 changed files across the combined draft stack. The merge boundary is **NOT READY**.
+
+- Security fix prepared in the review branch: restore protected-main pinned, least-privilege CI and CodeQL definitions; pin previously mutable action refs in Phase A/B and R2/R3 workflows; retain checkout credential protections. The deprecated v4 Java setup is now pinned, but a tested upgrade is outstanding.
+- Review gate prepared: `tests/migration-stack-security-gate.test.mjs` plus branch-only `.github/workflows/r3-consolidated-security-review.yml`, covering workflow supply-chain invariants, offline regression, selected real RTDB emulators, typechecking, lint and Next.js build.
+- All earlier R3 witness tests remain laboratory-only. The local signed fsync journal is **not** independent nonrollback storage, and the sensor/report/issuer trust system is not deployed or verified against real hardware.
+- **Still blocked:** merge-stack security review, actual live Firebase privacy rules, external signer and monotonic witness custody, V2 operator recovery, distributed fencing, real browsers, Flutter/WhatsApp, physical safety testing and release approval.
+
+Detailed audit: `docs/firebase/R3_CONSOLIDATED_STACK_SECURITY_REVIEW_20261031.md`.
+
+**R3 stacked draft release / R8 production decision: NO-GO.**
