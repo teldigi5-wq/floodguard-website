@@ -14,6 +14,9 @@ import {canonicalR2PublisherReceipt,R2_ISSUER_RECEIPT_VERSION,
 import {draftR2RecoveryAnchor,canonicalR2RecoveryAnchor,
   publishR2WithRecoveryAnchorLab}
   from '../experiments/r2-recovery-anchor-lab.mjs';
+import {draftR2CatchupApproval,canonicalR2CatchupApproval,
+  reviewR2OperatorCatchup}
+  from '../experiments/r2-operator-catchup-lab.mjs';
 
 if (process.env.FG_R2_ATTESTED_PUBLISHER_LAB_TEST!=='1' ||
     process.env.FIREBASE_DATABASE_EMULATOR_HOST!=='127.0.0.1:9000')
@@ -315,4 +318,101 @@ test('water checkpoint cannot approve rain, and signed epoch change is refused',
     published:false,reason:'anchor-stream-mismatch'
   });
   assert.deepEqual(await readAdmin(root),before);
+});
+
+
+// The recovery authority is an independent operator, NEVER a Firebase
+// publisher. This approval key is different from the recovery-anchor signer.
+const operatorCatchupApprovalKey=generateKeyPairSync('ed25519');
+const operatorApprovalInput=(stream,publishedInput,signedAnchor,publicRecord)=>{
+  const approval=draftR2CatchupApproval({
+    stream,publicRecord,signedAnchor,receipt:publishedInput.receipt,
+    approvedAtMs:now
+  });
+  return {
+    approval,signature:sign(null,Buffer.from(canonicalR2CatchupApproval(approval)),
+      operatorCatchupApprovalKey.privateKey).toString('base64url')
+  };
+};
+const reviewCatchup=(stream,publishedInput,signedAnchor,publicRecord,
+  signedApproval)=>reviewR2OperatorCatchup({
+  stream,publicRecord,signedAnchor,receipt:publishedInput.receipt,
+  receiptSignature:publishedInput.receiptSignature,signedApproval,
+  trustedReportKey:keys[stream].report.publicKey,
+  trustedReceiptKey:keys[stream].issuer.publicKey,
+  trustedAnchorKey:operatorRecoveryKey.publicKey,
+  trustedApprovalKey:operatorCatchupApprovalKey.publicKey
+});
+
+test('missed anchor advance requires separate signed operator approval per stream',async()=>{
+  const rootBefore=await readAdmin(root);
+  for(const stream of ['water','rain']){
+    const before=await signedOperatorAnchor(stream);
+    const candidate=await input(stream,2);
+    const committed=await publishR2AttestedLabReport(candidate);
+    assert.equal(committed.published,true);
+    const published=await readPublic(stream);
+    assert.equal(published.payload.sequence,2);
+    assert.equal(reviewR2OperatorCatchup({
+      stream,publicRecord:published,signedAnchor:before,
+      receipt:candidate.receipt,receiptSignature:candidate.receiptSignature,
+      trustedReportKey:keys[stream].report.publicKey,
+      trustedReceiptKey:keys[stream].issuer.publicKey,
+      trustedAnchorKey:operatorRecoveryKey.publicKey,
+      trustedApprovalKey:operatorCatchupApprovalKey.publicKey
+    }).reason,'operator-approval-unavailable');
+
+    const signedApproval=operatorApprovalInput(stream,candidate,before,published);
+    const reviewed=reviewCatchup(stream,candidate,before,published,signedApproval);
+    assert.equal(reviewed.approved,true);
+    assert.equal(reviewed.requiresIndependentAnchorSigning,true);
+    assert.equal(reviewed.proposedAnchor.sequence,2);
+    assert.equal(reviewed.proposedAnchor.stream,stream);
+    // Review must not mutate public/private RTDB. The operator would sign
+    // and persist the next anchor independently, which this lab does not do.
+    assert.deepEqual(await readPublic(stream),published);
+    const newAnchor=await signedOperatorAnchor(stream);
+    assert.deepEqual(newAnchor.anchor,reviewed.proposedAnchor);
+  }
+  const after=await readAdmin(root);
+  for(const field of ['staging','confirmedIngest','live','bot','evidenceLabAuthorization'])
+    assert.deepEqual(after[field],rootBefore[field]);
+});
+
+test('forged operator approval or mismatched signed receipt cannot ratify lost acknowledgement',async()=>{
+  const stream='water',oldAnchor=await signedOperatorAnchor(stream);
+  const committed=await input(stream,2);
+  assert.equal((await publishR2AttestedLabReport(committed)).published,true);
+  const publicRecord=await readPublic(stream),before=await readAdmin(root);
+  const signedApproval=operatorApprovalInput(stream,committed,oldAnchor,publicRecord);
+  assert.equal(reviewCatchup(stream,committed,oldAnchor,publicRecord,{
+    ...signedApproval,signature:'A'.repeat(86)
+  }).reason,'operator-approval-signature-invalid');
+  assert.equal(reviewCatchup(stream,{
+    ...committed,receiptSignature:'A'.repeat(86)
+  },oldAnchor,publicRecord,signedApproval).reason,
+    'receipt-signature-invalid');
+  assert.equal(reviewCatchup(stream,committed,oldAnchor,publicRecord,{
+    approval:{...signedApproval.approval,toPayloadDigest:'0'.repeat(64)},
+    signature:signedApproval.signature
+  }).reason,'operator-approval-signature-invalid');
+  assert.deepEqual(await readAdmin(root),before);
+});
+
+test('operator cannot use catch-up to heal a restored database behind newer anchor',async()=>{
+  const stream='rain',recordOld=await readPublic(stream);
+  const original=await input(stream,2);
+  assert.equal((await publishR2AttestedLabReport(original)).published,true);
+  const newerRecord=await readPublic(stream);
+  const priorAnchor=await signedOperatorAnchor(stream,recordOld);
+  const approvalForActualAdvance=operatorApprovalInput(
+    stream,original,priorAnchor,newerRecord
+  );
+  const newerAnchor=await signedOperatorAnchor(stream);
+  await admin(db=>db.ref(path(stream)).set(recordOld));
+  const restored=await readPublic(stream);
+  assert.equal(reviewCatchup(stream,original,newerAnchor,restored,
+    approvalForActualAdvance).reason,
+    'checkpoint-not-ahead-or-unverified');
+  assert.deepEqual(await readPublic(stream),recordOld);
 });
