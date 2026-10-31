@@ -124,14 +124,14 @@ export default function DamScene({angle=0,rain=0,waterDistance}:{angle?:number|n
  const chooseView=(item:ViewMode)=>{setTour(false);setView(item)};
  const toggleFullscreen=async()=>{if(!host.current)return;if(document.fullscreenElement)await document.exitFullscreen();else await host.current.requestFullscreen()};
 
- return <div ref={host} className="scene dam-scene dam-scene-v2 dam-scene-v37" data-flowing={flow>2} data-risk={waterState} aria-label={`Interactive reservoir and dam model. Water sensor gap ${liveDistance??"unavailable"} centimetres. Gate angle ${safeAngle} degrees. Procedural flow intensity ${flow} percent.`}>
+ return <div ref={host} className="scene dam-scene dam-scene-v2 dam-scene-v37" data-flowing={flow>2} data-risk={waterState} aria-label={`Illustrative dam model, not a physical flow measurement. Last reported water gap ${liveDistance??"unavailable"} centimetres. Reported servo angle ${angle??"unavailable"} degrees. Simulated flow intensity ${flow} percent.`}>
    <Canvas frameloop={animate?"always":"demand"} dpr={[1,1.35]} camera={{position:[0,3.8,11.4],fov:43,near:.1,far:55}} gl={{antialias:true,powerPreference:"high-performance"}}>
      <Scene angle={safeAngle} rain={rain??0} level={level} view={view} waterState={waterState}/>
    </Canvas>
 
-   <div className="scene-topbar" aria-label="Live dam telemetry">
-     <div className={`scene-status-chip ${waterState}`}><i/><span><small>Reservoir</small><b>{waterState.toUpperCase()}</b></span></div>
-     <div className="scene-status-chip gate"><span><small>Gate position</small><b>{gateLabel} · {Math.round(safeAngle)}°</b></span></div>
+   <div className="scene-topbar" aria-label="Unverified source reports used for illustration">
+     <div className={`scene-status-chip ${waterState}`}><i/><span><small>Reported reservoir category</small><b>{waterState==="safe"?"LOW LEVEL REPORT":waterState==="unavailable"?"UNAVAILABLE":waterState.toUpperCase()}</b></span></div>
+     <div className="scene-status-chip gate"><span><small>Reported servo angle</small><b>{angle===null?"UNKNOWN":`${gateLabel} · ${Math.round(safeAngle)}°`}</b></span></div>
      <div className="scene-status-chip water"><span><small>HC-SR04 air gap</small><b>{typeof liveDistance==="number"?`${liveDistance.toFixed(1)} cm`:"Unavailable"}</b></span></div>
    </div>
 
@@ -150,15 +150,15 @@ export default function DamScene({angle=0,rain=0,waterDistance}:{angle?:number|n
      <div className="scene-gate-telemetry"><small>Gate lift</small><strong>{Math.round(gateOpen*100)}%</strong><i><span style={{width:`${Math.round(gateOpen*100)}%`}}/></i></div>
      <div className={`scene-water-level ${waterState}`}>
        <i className="scene-level-meter"><span style={{height:`${levelPercent??0}%`}}/></i>
-       <div><small>Live water digital twin</small><b>{levelPercent===null?"Reading unavailable":`${levelPercent}% visual fill`}</b><em>{typeof liveDistance==="number"?`${liveDistance.toFixed(1)} cm air gap`:"Waiting for HC-SR04"}</em></div>
+       <div><small>Illustrative water model</small><b>{levelPercent===null?"Reading unavailable":`${levelPercent}% visual fill`}</b><em>{typeof liveDistance==="number"?`${liveDistance.toFixed(1)} cm air gap`:"Waiting for HC-SR04"}</em></div>
      </div>
-     <div className={`scene-telemetry ${flow>2?"active":""}`}><i/><span><small>{flow>2?"Controlled release":"Reservoir retained"}</small><b>{flow>2?`${flow}% relative flow`:"Gates sealed"}</b></span></div>
-     <div className={`scene-operation ${flow>2?"releasing":"holding"}`}><small>Hydraulic response</small><b>{flow>2?"Release follows gate lift and water head":"Water retained behind closed gates"}</b></div>
+     <div className={`scene-telemetry ${flow>2?"active":""}`}><i/><span><small>Simulated discharge only</small><b>{flow>2?`${flow}% visual flow`:"No simulated flow"}</b></span></div>
+     <div className={`scene-operation ${flow>2?"releasing":"holding"}`}><small>Illustrative hydraulic response</small><b>{flow>2?"Animation follows reported servo angle":"No animated discharge · physical state unknown"}</b></div>
    </div>
 
-   {section&&<aside className="hydraulic-section" aria-label="Live hydraulic cross section"><header><span>Live hydraulic section</span><b>{waterState.toUpperCase()}</b></header><div className="section-diagram"><i className="section-water" style={{height:`${levelPercent??4}%`}}/><i className="section-dam"/><i className="section-gate" style={{transform:`translateY(${-gateOpen*36}px)`}}/><i className="section-release" style={{opacity:gateOpen}}/></div><dl><div><dt>Surface</dt><dd>{levelPercent===null?"—":`${levelPercent}%`}</dd></div><div><dt>Gate lift</dt><dd>{Math.round(gateOpen*100)}%</dd></div><div><dt>Visual flow</dt><dd>{flow}%</dd></div></dl><p>Visualization follows live sensor distance and gate angle. Flow is a relative visual indicator, not a measured discharge rate.</p></aside>}
+   {section&&<aside className="hydraulic-section" aria-label="Illustrative hydraulic cross section"><header><span>Illustrative hydraulic section</span><b>{waterState==="safe"?"LOW REPORT":waterState.toUpperCase()}</b></header><div className="section-diagram"><i className="section-water" style={{height:`${levelPercent??4}%`}}/><i className="section-dam"/><i className="section-gate" style={{transform:`translateY(${-gateOpen*36}px)`}}/><i className="section-release" style={{opacity:gateOpen}}/></div><dl><div><dt>Surface</dt><dd>{levelPercent===null?"—":`${levelPercent}%`}</dd></div><div><dt>Gate lift</dt><dd>{Math.round(gateOpen*100)}%</dd></div><div><dt>Visual flow</dt><dd>{flow}%</dd></div></dl><p>This simulation uses last reported values, which are not independently authenticated or source-fresh. Flow is illustrative and does not prove physical discharge.</p></aside>}
 
-   <div className="scene-sensor-badge"><i/><span><small>HC-SR04</small><b>Beam follows live surface</b></span></div>
+   <div className="scene-sensor-badge"><i/><span><small>HC-SR04</small><b>Illustrative sensor beam</b></span></div>
    <div className="scene-orientation" aria-hidden><span>Upstream</span><i/><span>Dam</span><i/><span>Downstream</span></div>
    <span className="scene-hint">Drag to orbit · scroll to zoom</span>
  </div>
