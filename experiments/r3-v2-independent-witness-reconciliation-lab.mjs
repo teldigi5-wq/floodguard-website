@@ -72,9 +72,13 @@ export function reviewR3V2PublishedForWitness({
   if(!verified(reportBytes,envelope.report.signature,trustedReportKey)||
      !verified(receiptBytes,envelope.admission.signature,trustedIssuerKey))
     return Object.freeze({valid:false,reason:'published-signatures-invalid'});
+  // Hash canonical semantic evidence, not JavaScript object insertion
+  // order. Firebase may re-order nested property keys across a roundtrip.
   const envelopeDigest=sha(JSON.stringify({
-    report:{payload:p,signature:envelope.report.signature},
-    admission:{receipt:q,signature:envelope.admission.signature}
+    report:{payload:JSON.parse(reportBytes),
+      signature:envelope.report.signature},
+    admission:{receipt:JSON.parse(receiptBytes),
+      signature:envelope.admission.signature}
   }));
   return Object.freeze({
     valid:true,stream,sourceAlias:p.sourceAlias,epoch:p.epoch,
