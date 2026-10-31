@@ -51,7 +51,7 @@ test('shared timestamp never renders as a source-verified live alarm clearance',
   assert.match(dashboard,/Recent system timestamp · sources unverified/);
   assert.match(dashboard,/RECENT SYSTEM UPDATE/);
   assert.match(chrome,/Reported alarm active · unverified/);
-  assert.doesNotMatch(chrome,/?"Emergency alarm"/);
+  assert.doesNotMatch(chrome,/"Emergency alarm"/);
   assert.match(diagnostics,/Reported inactive \(unverified\)/);
 });
 
