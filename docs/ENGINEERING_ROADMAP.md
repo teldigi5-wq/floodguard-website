@@ -62,7 +62,7 @@ This staged research track is **additional** to the earlier website stages above
 | R3-A | Browser WebCrypto signed-report reader and restricted public RTDB subscription | **LAB VERIFIED, draft PR #25, not mounted** |
 | R3-B | Atomic combined report and independently signed issuer receipt verified by browser and RTDB rules | **LAB VERIFIED, draft PR #26, not mounted** |
 | R3-C | Operator-pinned, server-side gated ingestion with independently controlled issuer signer | **LAB VERIFIED in draft PR #27**: 11/11 unit, 9/9 RTDB emulator; service deployment absent |
-| R3-D1 | Gateway-owned V2 admission timestamp and separately signed source observation, with browser verifier and restricted isolated RTDB namespace | **LAB IMPLEMENTED IN THIS DRAFT — CI PENDING**; no real issuer or durable commit |
+| R3-D1 | Gateway-owned V2 admission timestamp and separately signed source observation, with browser verifier and restricted isolated RTDB namespace | **LAB VERIFIED in draft PR #28**: 10/10 unit, 6/6 actual RTDB emulator; no real issuer or durable commit |
 | R3-D2 | Independent durable recovery/fencing, real browser matrix, trusted preview and controlled website cutover | **NOT IMPLEMENTED** |
 | R4 | Native Flutter verification and consistent stale/unknown UI | Pending and gated |
 | R5 | WhatsApp bot signed-alert integration and delivery QA | Pending and gated |
@@ -81,4 +81,4 @@ This staged research track is **additional** to the earlier website stages above
 
 Verification: GitHub Actions run #41193680165 PASSED on implementation head `863ae4c31861d05f98ac7a48efc4b2f0ea57e3e9` (before this roadmap-only update), including 372 offline tests (366 pass, 6 skip), typecheck, and ESLint 0 errors/9 warnings. Acceptance on the updated head was subsequently rechecked in successful run #41193827264.\n\nReference: `docs/firebase/R3_OPERATOR_PINNED_GATEWAY_LAB_20261031.md`. The original website roadmap above remains the historical baseline; this section tracks the newer evidence-first telemetry migration.
 
-R3-D1 reference (draft only): `docs/firebase/R3_V2_SERVER_ADMISSION_TIME_LAB_20261031.md`. No production cutover or physical safety claim.
+R3-D1 reference (draft only): `docs/firebase/R3_V2_SERVER_ADMISSION_TIME_LAB_20261031.md`. Implementation head `c8509a9e4368d0fe143ea2ad6422a93b7ac5ca33` passed GitHub Actions run #41194508075: V2 10/10, RTDB emulator 6/6, offline regressions 376 pass / 6 skip, 0 TS/lint errors. Revalidate this updated roadmap commit before claiming final exact-head success. No production cutover or physical safety claim.
