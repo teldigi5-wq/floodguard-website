@@ -11,7 +11,6 @@ import {canonicalR3V2Observation,canonicalR3V2Admission}
 export const R3_V2_WITNESS_VERSION='floodguard-r3-v2-high-water-witness-lab-v1';
 const STREAMS=['water','rain'];
 const FIELDS=['version','stream','sourceAlias','epoch','sequence','envelopeDigest'];
-const MINT=Date.UTC(2000,0,1);
 const HEX=/^[a-f0-9]{64}$/;
 const SIG=/^[A-Za-z0-9_-]{86}$/;
 const object=x=>x!==null&&typeof x==='object'&&!Array.isArray(x)&&
