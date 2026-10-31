@@ -11,6 +11,9 @@ import {canonicalR2PublisherReceipt,R2_ISSUER_RECEIPT_VERSION}
   from '../experiments/r2-attested-dual-stream-publisher.mjs';
 import {createR3ServerVerifiedIngestLab}
   from '../experiments/r3-server-verified-ingest-gate-lab.mjs';
+// Local in-memory adapter only. No emulator connection is made by this file.
+process.env.FG_R3_TRUSTED_INGEST_LAB_TEST='1';
+process.env.FIREBASE_DATABASE_EMULATOR_HOST='127.0.0.1:9000';
 const now=Date.UTC(2026,9,31,14,0,0);
 const streams=['water','rain'];
 const keys=Object.fromEntries(streams.map(s=>[s,{
