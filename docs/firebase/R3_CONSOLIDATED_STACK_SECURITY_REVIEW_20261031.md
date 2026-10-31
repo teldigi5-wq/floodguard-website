@@ -49,4 +49,6 @@ Initial consolidated review head `7a5fe58cab10db1bd408ceb5ada65676ccc0d3ea` pass
 - The upstream `actions/setup-java` **v6.1.0** release ref was resolved to immutable SHA `b843ebf9b913146b38da2eaa7aeddf76074ae1ad`; the current CI proof must verify it against the runner.
 - Neither PR-triggered CI nor SHA pins substitute for independent secret history analysis, production Firebase authorization, real device attestations or a rollback-resistant witness.
 
-**Change status for this review increment: code prepared, latest exact-head CI required before completion.**
+**Change status: PR and push implementation-head CI PASSED; only this documentation-only final head awaits fresh CI.**
+
+PR/push review proof on implementation head `6ba95ea03dbac2a4d3b54f3f0a0ebe31fce1ca73`: [pull_request run #41201298038](https://github.com/teldigi5-wq/floodguard-website/actions/runs/41201298038) and [push run #41201294385](https://github.com/teldigi5-wq/floodguard-website/actions/runs/41201294385) both COMPLETED SUCCESS. 5/5 security review assertions; 406 pass/6 skipped in 412 offline tests; real R2 RTDB 8/8; R3 atomic 6/6; V2 disk witness 4/4; typecheck PASS; ESLint 0 errors/10 existing warnings; Next.js build PASS (14/14 generated static pages). Post-documentation exact-head CI must be rechecked.
