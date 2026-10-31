@@ -179,11 +179,10 @@ test('operator registry pins cannot be substituted from hostile request',async()
     db:db('rain'),
     gateCommand:'OPEN',path:'/floodguard/live/gate'
   };
-  assert.equal((await x.publish(request)).published,true);
-  const after=await readAdmin(base);
-  assert.equal(after.attestedEvidenceLabV1.water.report.payload.sequence,2);
-  assert.deepEqual(after.live,before.live);
-  assert.equal(after.attestedEvidenceLabV1.rain.report.payload.sequence,1);
+  assert.deepEqual(await x.publish(request),{
+    published:false,reason:'untrusted-request-shape'
+  });
+  assert.deepEqual(await readAdmin(base),before);
 });
 
 test('revoked test publisher or cross-stream credential cannot write via gate',async()=>{
