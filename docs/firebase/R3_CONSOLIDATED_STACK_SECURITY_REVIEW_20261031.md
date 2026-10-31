@@ -36,4 +36,6 @@ This review branch restores **the exact current main content** of CI and CodeQL,
 
 **HOLD** draft stack, protected-main merge and all production deployment. Only when all blockers have independently verified evidence should maintainers propose a small, reviewable release subset and require authorization. Keep all live monitoring read-only, hardware and alert routes unchanged.
 
-Evidence for any changed code must be attached to the **exact latest commit**; a successful run for a superseded SHA is not release evidence. The results of this consolidated review are not known until this branch's own CI completes.
+Evidence for any changed code must be attached to the **exact latest commit**; a successful run for a superseded SHA is not release evidence. The consolidated initial-head CI passed with all selected checks; the exact evidence is recorded below, and the latest documentation-only head requires its own run.
+
+Initial consolidated review head `7a5fe58cab10db1bd408ceb5ada65676ccc0d3ea` passed [Actions run #41198020160](https://github.com/teldigi5-wq/floodguard-website/actions/runs/41198020160): workflow security 4/4; offline suite 405 pass, 6 skipped; R2 RTDB 8/8, R3 atomic RTDB 6/6, V2 disk witness RTDB 4/4; TypeScript PASS; lint 0 errors and 10 warnings; Next.js build PASS. Subsequent doc-only commit must be verified separately.
