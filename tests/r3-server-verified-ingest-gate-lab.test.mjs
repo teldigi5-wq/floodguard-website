@@ -132,7 +132,7 @@ test('forged and altered sensor frames cannot trigger issuer or writer',async()=
     }}},
     {...valid,operatorRegistry:{enabled:true}},
     report('water',2,{epoch:2}),
-    report('water',2,{receivedAtMs:now-8000})
+    report('water',2,{observedAtMs:now-9000,receivedAtMs:now-8000})
   ]){
     assert.equal((await x.gate.publish({stream:'water',record:bad})).published,
       false);
