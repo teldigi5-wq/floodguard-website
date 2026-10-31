@@ -12,7 +12,6 @@ import {
   canonicalR3V2WitnessCheckpoint,reviewR3V2WitnessSignedState
 } from './r3-v2-independent-witness-reconciliation-lab.mjs';
 
-const VERSION='floodguard-r3-v2-fsync-witness-journal-lab-v1';
 const STREAMS=['water','rain'];
 const LOG='r3-v2-witness-journal.log';
 const LOCK='r3-v2-witness-journal.lock';
@@ -217,10 +216,10 @@ export function createR3V2DiskWitnessLab({
       const state=validatedFile();
       if(state.count>=MAX_ENTRIES)throw Error('Witness log needs manual rotation');
       const current=state.latest[stream].checkpoint;
-      let expectedBytes,nextBytes;
+      let expectedBytes;
       try{
         expectedBytes=canonicalR3V2WitnessCheckpoint(expectedCheckpoint);
-        nextBytes=canonicalR3V2WitnessCheckpoint(nextCheckpoint);
+        canonicalR3V2WitnessCheckpoint(nextCheckpoint);
       }catch{throw Error('Invalid CAS checkpoint contract');}
       if(expectedBytes!==canonicalR3V2WitnessCheckpoint(current))
         throw Error('Witness CAS expected checkpoint stale');
