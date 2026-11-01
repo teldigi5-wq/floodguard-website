@@ -52,5 +52,5 @@ test('adapter explicitly marks missing-versus-filesystem-error ambiguity as a re
   assert.match(adapter,/return SlotPresence::Uncertain/);
   assert.match(adapter,/if \\(!mounted_ \\|\\|/);
   assert.match(adapter,/file\.flush\(\)/);
-  assert.match(adapter,/if \\(!mounted_ \\|\\|/);
+  assert.match(adapter,/return written == size/);
 });
