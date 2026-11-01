@@ -32,6 +32,14 @@ async function fixture(callback,{wrongHostname=false,dropFirst201=false,
     ],{cwd:dir,encoding:'utf8',timeout:15000,stdio:'pipe'});
     assert.equal(cmd.status,0,'generate ephemeral local trust anchor');
     const ca=fs.readFileSync(path.join(dir,'server.crt'),'utf8');
+    const wrong=spawnSync('openssl',[
+      'req','-x509','-newkey','rsa:2048','-nodes','-days','1',
+      '-keyout','untrusted.key','-out','untrusted.crt',
+      '-subj','/CN=untrusted.invalid',
+      '-addext','subjectAltName=DNS:untrusted.invalid'
+    ],{cwd:dir,encoding:'utf8',timeout:15000,stdio:'pipe'});
+    assert.equal(wrong.status,0,'generate unrelated disposable CA');
+    const untrustedCa=fs.readFileSync(path.join(dir,'untrusted.crt'),'utf8');
     const device=generateKeyPairSync('ed25519');
     const registry=new Map([[UID,{enabled:true,epoch:1,
       scope:'prototype-ingest-v1',publicKey:device.publicKey}]]);
@@ -81,7 +89,7 @@ async function fixture(callback,{wrongHostname=false,dropFirst201=false,
       postSignedLoopbackFramePreflight({
         port,caPem:ca,envelope:e,signature:sig,timeoutMs:2000,...options
       });
-    await callback({send,envelope,signature,ca,port,journal,registry,
+    await callback({send,envelope,signature,ca,untrustedCa,port,journal,registry,
       setOnline:x=>{online=x;},device,dir});
   }finally{
     if(server?.listening)await new Promise(resolve=>server.close(resolve));
@@ -136,9 +144,9 @@ test('lost HTTP response after journal fsync stays uncertain; duplicate retry ca
 test('device TLS rejects an untrusted self-signed server without inserting a frame',async()=>{
   await fixture(async h=>{
     const result=await h.send(h.envelope(),undefined,{
-      caPem:'-----BEGIN CERTIFICATE-----\nINVALID-CA\n-----END CERTIFICATE-----'
+      caPem:h.untrustedCa
     });
-    assert.notEqual(result.outcome,'LOCAL_DURABLE_ONLY');
+    assert.equal(result.outcome,'TLS_TRUST_FAILURE');
     assertNoCloudReceipt(result);
     assert.deepEqual(h.journal.pending(UID),[]);
   });
