@@ -21,6 +21,9 @@ class JournalBootAudit {
 
   template<typename Store>
   BootAuditDisposition inspectOnce(Store &store) {
+    // An explicitly quarantined boot may never be upgraded by an audit.
+    if (disposition_ == BootAuditDisposition::Quarantined)
+      return disposition_;
     // A retry after a bad read/mount is not independent evidence.
     if (inspected_) {
       quarantine();
