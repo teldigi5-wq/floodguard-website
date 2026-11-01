@@ -1,0 +1,41 @@
+name: FloodGuard loopback durable admission TLS lab
+on:
+  push:
+    branches: [test/r2-loopback-durable-admission-20261101]
+  pull_request:
+    branches: [test/r2-durable-admission-outbox-20261101]
+permissions:
+  contents: read
+concurrency:
+  group: fg-loopback-durable-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout without stored credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies (no lifecycle scripts)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Check new and existing transport syntax
+        run: |
+          node --check experiments/loopback-signed-https-ingress.mjs
+          node --check experiments/durable-admission-outbox-lab.mjs
+          node --check tests/loopback-durable-outbox-ingress.test.mjs
+      - name: Real loopback TLS and sealed replay/admission regression
+        run: |
+          node --test tests/loopback-durable-outbox-ingress.test.mjs tests/durable-admission-outbox-lab.test.mjs tests/loopback-signed-https-ingress.test.mjs tests/stage7-durable-ingress.test.mjs
+      - name: Website regression, lint, types, build
+        run: |
+          npm test
+          npm run lint
+          npm run typecheck
+          npm run build
