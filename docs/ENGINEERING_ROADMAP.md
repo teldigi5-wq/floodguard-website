@@ -66,3 +66,5 @@ We prioritize correctness and transparency over visual effects that imply unsupp
 **Verification:** 9 focused local subscription tests plus the existing 8 reducer tests passed; separate PR #34 projection tests must run on the exact review head. GitHub CI on the latest PR #36 head is required before acceptance. Never claim a real-world sensor, mobile app, WhatsApp, or physical alarm test from this Node-only result.
 
 **Next:** Reconcile PR #14's signed-ingestion/replay/publisher research with the newer public leaf schema, then build local emulator and preview integration. Do not operate old ESP firmware (`setInsecure()`, anonymous `/floodguard/live` PATCH) as a verified ingestion client; preserve lockdown. Review recovered v6 Arduino failure-state handling before any field operation. Release **NO-GO**.
+
+**PR #36 hardening addendum:** Denied leaf observers now stay terminal within their subscription generation; delayed callbacks cannot resurrect stale SAFE values. Added regression test, 10 subscription tests (18 focused with reducer). Review exact-head CI before claiming acceptance.
