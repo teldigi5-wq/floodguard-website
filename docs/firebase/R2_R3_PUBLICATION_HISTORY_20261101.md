@@ -19,7 +19,7 @@
   publicationHistoryV1/              PRIVATE signed receipt history
     schema, deviceId, epoch, issuerFingerprint
     entries/
-      <sequence>/
+      s_<sequence>/
         sequence, digest, observedAtMs
         distanceCm, levelCm, status, overallRisk
         receipt, receiptSignature
@@ -27,7 +27,7 @@
 
 - The full existing history must be present and internally valid when the previous checkpoint is initialized. A missing or corrupt record, changed signer, mismatched latest digest, diverged latest public value, replay, bad source-clock order or unexpected field prevents the next proposal.
 - Every historical Stage 8 receipt must verify against the **pinned current Ed25519 issuer** and match its exact device/epoch/sequence/digest. A digest binds the admission's original canonical frame, while the separately recorded public scalar values are *local claimed history*, not an independently signed audit of what all clients observed.
-- The newest signed evidence entry must match the current private high-water and the last projected public water/system scalar values. A candidate adds a new immutable-by-convention sequence key without deleting earlier records. A malicious privileged writer with root access **can rewrite history despite these checks**; external tamper-evidence/append-only storage is still necessary.
+- The newest signed evidence entry must match the current private high-water and the last projected public water/system scalar values. A candidate adds a new immutable-by-convention \`s_<sequence>\` key without deleting earlier records. Prefixed keys avoid Firebase RTDB's dense numeric-map-to-array conversion on read-back. A malicious privileged writer with root access **can rewrite history despite these checks**; external tamper-evidence/append-only storage is still necessary.
 - Deliberate **8-record cap**: exhaustion rejects a new publication instead of pruning earlier receipts. This is a laboratory backpressure limit, not an operational retention or throughput design.
 - The test code is single-authority/single-water-source, not a multi-tenant or generalized device journal. Operator changes and key rotations require separate reviewed migration. It has no local outbox ACK, deletion, reconciliation approval, notification delivery, physical safety proof or gate control.
 
