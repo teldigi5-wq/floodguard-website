@@ -14,8 +14,11 @@ struct MemoryDisk {
   uint8_t bytes[BLOCK_COUNT][BLOCK_SIZE];
   unsigned reads, progs, erases, syncs;
   bool fail_reads, fail_progs, fail_syncs;
+  bool torn_prog_once, trigger_nested_once;
+  unsigned torn_faults;
 };
 static MemoryDisk disk;
+static void (*nested_attempt)() = nullptr;
 
 static bool region(lfs_block_t b,lfs_off_t o,lfs_size_t n) {
   return b < BLOCK_COUNT && o <= BLOCK_SIZE && n <= BLOCK_SIZE-o &&
@@ -34,7 +37,22 @@ static int disk_prog(const lfs_config *c,lfs_block_t b,lfs_off_t o,
   MemoryDisk *d = static_cast<MemoryDisk*>(c->context);
   ++d->progs;
   if (!region(b,o,n) || d->fail_progs) return LFS_ERR_IO;
+  if (d->trigger_nested_once) {
+    d->trigger_nested_once=false;
+    assert(nested_attempt != nullptr);
+    nested_attempt();
+  }
   const uint8_t *v = static_cast<const uint8_t*>(src);
+  if (d->torn_prog_once) {
+    d->torn_prog_once=false;
+    ++d->torn_faults;
+    // A simulated interruption can program a PREFIX before reporting I/O.
+    const lfs_size_t prefix = n/2;
+    for (lfs_size_t i=0;i<prefix;++i)
+      if ((d->bytes[b][o+i]&v[i])!=v[i]) return LFS_ERR_IO;
+    for (lfs_size_t i=0;i<prefix;++i) d->bytes[b][o+i]&=v[i];
+    return LFS_ERR_IO;
+  }
   for (lfs_size_t i=0;i<n;++i)
     if ((d->bytes[b][o+i]&v[i])!=v[i]) return LFS_ERR_IO;
   for (lfs_size_t i=0;i<n;++i) d->bytes[b][o+i]&=v[i];
@@ -83,6 +101,7 @@ class LittleFSImpl {
   lfs_t _lfs = {};
   bool _mounted = false;
   bool _fgExclusiveQuarantined = false;
+  bool _fgExclusiveBusy = false;
   static bool pathValid(const char* p) {
     return p != nullptr && std::strlen(p) < LFS_NAME_MAX;
   }
@@ -132,6 +151,7 @@ static void expect_exact(lfs_t *f,const char *path) {
 static void blank_volume() {
   fresh_disk();
   setup_fixture();
+  nested_attempt = nullptr;
 }
 
 static void case_unmounted_and_invalid() {
@@ -233,12 +253,72 @@ static void case_read_fault_quarantines() {
   fs.stop();
 }
 
+static void case_torn_metadata_program_quarantines() {
+  blank_volume();
+  LittleFSImpl fs;
+  assert(fs.initializeNew());
+  assert(fs.createExclusiveLocal("/fgq2_0.bin",fixture,sizeof(fixture))==
+         ExclusiveLocalResult::LocalBytesMatched);
+  disk.torn_prog_once=true;
+  const auto fault=fs.createExclusiveLocal("/fgq2_1.bin",fixture,sizeof(fixture));
+  assert(fault==ExclusiveLocalResult::CommitUncertain);
+  assert(disk.torn_faults==1);
+  assert(fs._fgExclusiveQuarantined);
+  disk.torn_prog_once=false;
+  const unsigned p=disk.progs,e=disk.erases,r=disk.reads;
+  assert(fs.createExclusiveLocal("/fgq2_2.bin",fixture,sizeof(fixture))==
+         ExclusiveLocalResult::CommitUncertain);
+  assert(disk.progs==p && disk.erases==e && disk.reads==r);
+  // The old bytes are still retained in the simulated volume, but no
+  // recovery or new writes are authorized by this uncertain mount.
+  // A later fresh mount may itself fail; never autoformat on that basis.
+  fs.stop();
+  LittleFSImpl audit;
+  if (audit.mountExisting()) {
+    expect_exact(&audit._lfs,"/fgq2_0.bin");
+    audit.stop();
+  }
+}
+static LittleFSImpl* nested_owner = nullptr;
+static bool nested_rejected = false;
+static void inject_nested_attempt() {
+  assert(nested_owner != nullptr);
+  nested_rejected =
+      nested_owner->createExclusiveLocal("/fgq2_2.bin",fixture,sizeof(fixture))==
+      ExclusiveLocalResult::CommitUncertain;
+}
+static void case_reentrant_writer_refused() {
+  blank_volume();
+  LittleFSImpl fs;
+  assert(fs.initializeNew());
+  assert(fs.createExclusiveLocal("/fgq2_0.bin",fixture,sizeof(fixture))==
+         ExclusiveLocalResult::LocalBytesMatched);
+  nested_owner=&fs;
+  nested_rejected=false;
+  nested_attempt=inject_nested_attempt;
+  disk.trigger_nested_once=true;
+  const auto outer=fs.createExclusiveLocal("/fgq2_1.bin",fixture,sizeof(fixture));
+  assert(nested_rejected);
+  assert(outer==ExclusiveLocalResult::CommitUncertain);
+  assert(fs._fgExclusiveQuarantined);
+  assert(!fs._fgExclusiveBusy);
+  nested_attempt=nullptr;
+  nested_owner=nullptr;
+  const unsigned p=disk.progs,e=disk.erases,r=disk.reads;
+  assert(fs.createExclusiveLocal("/fgq2_3.bin",fixture,sizeof(fixture))==
+         ExclusiveLocalResult::CommitUncertain);
+  assert(disk.progs==p && disk.erases==e && disk.reads==r);
+  fs.stop();
+}
+
 int main() {
   case_unmounted_and_invalid();
   case_exact_new_duplicate_and_remount();
   case_write_fault_quarantines_and_blocks_retry();
   case_sync_fault_quarantines();
   case_read_fault_quarantines();
-  std::puts("PASS exact patched ESP8266 LittleFS core method: 5 RAM host scenarios; no flash");
+  case_torn_metadata_program_quarantines();
+  case_reentrant_writer_refused();
+  std::puts("PASS exact patched ESP8266 LittleFS core method: 7 RAM host scenarios; no flash");
   return 0;
 }
