@@ -143,6 +143,18 @@ static void duplicateOpenAfterStartedIsUncertain() {
   x.written(size, true);
   assert(x.outcome() == ExclusiveObservation::CommitUncertain);
 }
+static void repeatedOperationAfterReadbackInvalidatesLocalMatch() {
+  ExclusiveCreateLifecycle x;
+  x.opened(ExclusiveOpen::Created, bytes, size);
+  x.written(size, true);
+  x.synced(true);
+  x.closed(true);
+  x.readback(bytes, size, true);
+  assert(x.outcome() == ExclusiveObservation::LocalBytesMatched);
+  // Never reuse a previous successful observation to bless a second create.
+  x.opened(ExclusiveOpen::Created, bytes, size);
+  assert(x.outcome() == ExclusiveObservation::CommitUncertain);
+}
 int main() {
   unsupportedDoesNotClaimSuccess();
   existingRetainedRecordNeverACKs();
@@ -159,6 +171,7 @@ int main() {
   fakeReadbackWithoutOpenCannotBeMadeSuccess();
   invalidCreatedRecordIsStillUncertain();
   duplicateOpenAfterStartedIsUncertain();
-  std::puts("PASS 15 exclusive-create lifecycle host safety scenarios (NO FLASH/NO CLOUD ACK)");
+  repeatedOperationAfterReadbackInvalidatesLocalMatch();
+  std::puts("PASS 16 exclusive-create lifecycle host safety scenarios (NO FLASH/NO CLOUD ACK)");
   return 0;
 }
