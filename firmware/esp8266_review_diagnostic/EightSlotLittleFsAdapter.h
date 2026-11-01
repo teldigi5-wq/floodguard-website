@@ -7,30 +7,40 @@
 #include <Arduino.h>
 #include <LittleFS.h>
 #include "BoundedFrameJournal.h"
+#include "JournalMountHealth.h"
 
 namespace floodguard_retained_review {
 class LittleFsEightSlots {
  public:
-  LittleFsEightSlots() : mounted_(false) {}
+  LittleFsEightSlots() {}
 
   // Explicit review harness only; the WiFi-OFF diagnostic sketch never
   // calls this or writes flash.
   bool mountExplicitly() {
-    if (mounted_) return true;
+    if (health_.ready()) return true;
+    if (!health_.beginMount()) return false;
     // ESP8266 core 3.1.2 auto-formats on mount failure by default.
     // Explicitly disable it before touching a possibly historical volume.
     // setConfig() refuses changes after another component has mounted it;
     // treat that as a hard error rather than adopting unknown FS state.
     const LittleFSConfig config(false);
-    if (!LittleFS.setConfig(config)) return false;
-    mounted_ = LittleFS.begin();
-    return mounted_;
+    if (!LittleFS.setConfig(config)) {
+      health_.finishMount(false);
+      return false;
+    }
+    const bool mounted = LittleFS.begin();
+    health_.finishMount(mounted);
+    return health_.ready();
   }
-  bool ready() const { return mounted_; }
+  bool ready() const { return health_.ready(); }
+  bool quarantined() const { return health_.quarantined(); }
 
   SlotPresence probe(uint8_t slot) {
-    if (!mounted_ || slot >= kJournalSlots) return SlotPresence::Uncertain;
+    if (!health_.ready() || slot >= kJournalSlots)
+      return SlotPresence::Uncertain;
     if (LittleFS.exists(path(slot))) return SlotPresence::Present;
+    // exists() can hide LFS_ERR_IO as false; quarantine the whole mount.
+    health_.quarantine();
     // A false exists() is ambiguous on this SDK. It is NOT proof of an
     // empty slot, even if the filesystem mounted successfully.
     return SlotPresence::Uncertain;
@@ -40,15 +50,19 @@ class LittleFsEightSlots {
   // A corrupted record is never interpreted as an absent record.
   bool read(uint8_t slot,uint8_t *dst,size_t capacity,size_t &out) {
     out = 0;
-    if (!mounted_ || !dst || slot >= kJournalSlots ||
+    if (!health_.ready() || !dst || slot >= kJournalSlots ||
         capacity < kMaxRecord) return false;
     File file = LittleFS.open(path(slot),"r");
-    if (!file) return false;
+    if (!file) { health_.quarantine(); return false; }
     const size_t size = static_cast<size_t>(file.size());
-    if (size < 14 || size > capacity) { file.close(); return false; }
+    if (size < 14 || size > capacity) {
+      file.close();
+      health_.quarantine();
+      return false;
+    }
     const size_t n = file.read(dst,size);
     file.close();
-    if (n != size) return false;
+    if (n != size) { health_.quarantine(); return false; }
     out = n;
     return true;
   }
@@ -68,6 +82,6 @@ class LittleFsEightSlots {
     };
     return slot < kJournalSlots ? slots[slot] : "";
   }
-  bool mounted_;
+  JournalMountHealth health_;
 };
 } // namespace floodguard_retained_review
