@@ -49,3 +49,11 @@ This is an engineering plan, not a list of already delivered product claims.
 FloodGuard remains an **educational prototype**: no claim of certified prediction, automatic emergency dispatch, public-safety reliability, or real-world dam operating authority.
 
 We prioritize correctness and transparency over visual effects that imply unsupported sensor precision or live activity.
+
+## 1 November 2026 · R2/R3 signed water to isolated primitive-leaf bridge (draft)
+
+A new **offline-only** `experiments/signed-water-leaf-bridge-lab.mjs` adapter and negative tests reuse PR #14's existing Stage 7/8/9 signed, confirmed and replay-fenced projection planner. They *propose* five child scalar fields under PR #34's new `/floodguard/publicTelemetryLabV1` schema, not the legacy `/floodguard/live` tree. No Firebase client, Admin SDK, network access, physical gate, notification or publisher is introduced. Signed source evidence is still operator-supplied test input rather than a production trust anchor.
+
+The upstream planner's `system/overallRisk` remains `UNKNOWN`; a reported `SAFE` is not a certified field-clearance decision. An implied physical gate position is always `UNVERIFIED`. The bridge is on a standalone review branch based on PR #14; PRs #34-36 remain independent draft branches, and **their integrated runtime compatibility is not yet verified**.
+
+Upcoming gates: verify Stage 9 confirmed-database and durable checkpoint atomicity; independently attest trust anchors/revocation; combine branch code in a disposable Firebase Emulator integration workspace; safely handle real ESP8266 TLS/identity migration, and coordinate website/Flutter/WhatsApp previews. Do not restore anonymous RTDB writes, publish rules, actuate/flash hardware or claim a functional real-time service. **Release NO-GO.**
