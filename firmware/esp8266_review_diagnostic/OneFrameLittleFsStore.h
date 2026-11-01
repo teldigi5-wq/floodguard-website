@@ -13,7 +13,7 @@ class LittleFsOneFrame {
  public:
   LittleFsOneFrame() : mounted_(false) {}
   // Explicit owner/operator-only initialization in a future firmware port.
-  // Never call LittleFS.format() when mounting or reading fails.
+  // Never perform filesystem formatting when mounting or reading fails.
   bool mount() {
     if (mounted_) return true;
     mounted_ = LittleFS.begin();
