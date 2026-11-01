@@ -1,0 +1,48 @@
+name: FloodGuard isolated atomic water publication (emulator)
+on:
+  push:
+    branches: [test/r2-r3-atomic-leaf-publication-20261101]
+  pull_request:
+    branches: [test/r2-r3-composite-emulator-20261101]
+permissions:
+  contents: read
+concurrency:
+  group: fg-r2-r3-atomic-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout no saved credential
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Java 17 for RTDB Emulator
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Reproducible dependency install
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Emulator testing dependency only
+        run: npm install --no-save --package-lock=false --ignore-scripts @firebase/rules-unit-testing@5.0.2
+      - name: Signed receipt and isolated bridge tests
+        run: node --test tests/strict-signed-projection-gate.test.mjs tests/signed-water-leaf-bridge-lab.test.mjs
+      - name: Run atomic state and inherited-read authorization tests
+        run: |
+          npx --yes firebase-tools@14.18.0 emulators:exec --only database \
+            --project demo-fg-atomic-leaf \
+            --config firebase.r2-r3-composite-lab.json \
+            "FG_ATOMIC_LEAF_LAB=1 node --test tests/isolated-atomic-water-state-emulator.mjs"
+      - name: Website regression and production build
+        run: |
+          npm test
+          npm run lint
+          npm run typecheck
+          npm run build
