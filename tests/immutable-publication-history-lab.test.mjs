@@ -61,18 +61,18 @@ test('first signed publication records immutable private evidence with public le
   assert.equal(h.root.publicTelemetryLabV1.water.status,'WARNING');
   assert.equal(h.root.publicTelemetryLabV1.system.overallRisk,'UNKNOWN');
   assert.equal(h.root.projectionControl.devices[UID].digest,req.receipt.digest);
-  assert.equal(h.root.publicationHistoryV1.entries['1'].digest,req.receipt.digest);
-  assert.equal(h.root.publicationHistoryV1.entries['1'].receiptSignature,req.signature);
+  assert.equal(h.root.publicationHistoryV1.entries['s_1'].digest,req.receipt.digest);
+  assert.equal(h.root.publicationHistoryV1.entries['s_1'].receiptSignature,req.signature);
   assert.equal(h.root.privateIngest.metadata,'SYNTHETIC_PRIVATE');
-  assert.equal(h.root.publicationHistoryV1.entries['1'].status,'WARNING');
+  assert.equal(h.root.publicationHistoryV1.entries['s_1'].status,'WARNING');
 });
 test('higher sequence appends independent signed evidence without erasing old frames',()=>{
   const h=harness();advance(h,1);
-  const prior=structuredClone(h.root.publicationHistoryV1.entries['1']);
+  const prior=structuredClone(h.root.publicationHistoryV1.entries['s_1']);
   const {req}=advance(h,2,{distanceCm:13.5,levelCm:11.5,risk:'DANGER',observedAtMs:NOW-500});
-  assert.deepEqual(h.root.publicationHistoryV1.entries['1'],prior);
-  assert.equal(h.root.publicationHistoryV1.entries['2'].digest,req.receipt.digest);
-  assert.deepEqual(Object.keys(h.root.publicationHistoryV1.entries),['1','2']);
+  assert.deepEqual(h.root.publicationHistoryV1.entries['s_1'],prior);
+  assert.equal(h.root.publicationHistoryV1.entries['s_2'].digest,req.receipt.digest);
+  assert.deepEqual(Object.keys(h.root.publicationHistoryV1.entries),['s_1','s_2']);
   assert.equal(h.root.publicTelemetryLabV1.water.status,'DANGER');
 });
 test('replay and duplicate sequence cannot append or change the private checkpoint',()=>{
@@ -86,12 +86,12 @@ test('replay and duplicate sequence cannot append or change the private checkpoi
 test('missing or corrupted prior evidence refuses next signed proposal',()=>{
   const mutation=[
     x=>{delete x.publicationHistoryV1;},
-    x=>{delete x.publicationHistoryV1.entries['1'];},
-    x=>{x.publicationHistoryV1.entries['1'].digest='a'.repeat(64);},
-    x=>{x.publicationHistoryV1.entries['1'].receiptSignature='A'.repeat(86);},
-    x=>{x.publicationHistoryV1.entries['1'].status='SAFE';},
+    x=>{delete x.publicationHistoryV1.entries['s_1'];},
+    x=>{x.publicationHistoryV1.entries['s_1'].digest='a'.repeat(64);},
+    x=>{x.publicationHistoryV1.entries['s_1'].receiptSignature='A'.repeat(86);},
+    x=>{x.publicationHistoryV1.entries['s_1'].status='SAFE';},
     x=>{x.publicationHistoryV1.issuerFingerprint='f'.repeat(64);},
-    x=>{x.publicationHistoryV1.entries['1'].distanceCm={network:'PRIVATE'};}
+    x=>{x.publicationHistoryV1.entries['s_1'].distanceCm={network:'PRIVATE'};}
   ];
   for(const change of mutation){
     const h=harness();advance(h,1);
