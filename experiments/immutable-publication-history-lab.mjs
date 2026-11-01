@@ -14,6 +14,8 @@ const UID=/^device-stage-[a-z0-9-]{1,32}$/;
 const HEX=/^[0-9a-f]{64}$/;
 const SIG=/^[A-Za-z0-9_-]{86}$/;
 const MAX_RECORDS=8; // test backpressure, not production sizing
+// A string prefix prevents RTDB's dense numeric map -> Array conversion.
+const seqKey=n=>'s_'+n;
 const obj=x=>x!==null&&typeof x==='object'&&!Array.isArray(x)&&
   (Object.getPrototypeOf(x)===Object.prototype||Object.getPrototypeOf(x)===null);
 const exact=(x,ks)=>obj(x)&&Object.keys(x).length===ks.length&&
@@ -70,12 +72,13 @@ function validateHistory(current,uid,epoch,issuerFingerprint,trustedReceiptKey) 
   const keys=Object.keys(existing.entries);
   if(keys.length<1||keys.length>MAX_RECORDS)
     return {error:'publication-history-invalid'};
-  const sorted=keys.map(Number).sort((a,b)=>a-b);
-  if(sorted.some((n,i)=>!int(n,1,2147483647)||String(n)!==keys.find(k=>Number(k)===n)||
+  const sorted=keys.map(k=>/^s_[1-9]\\d*$/.test(k)?Number(k.slice(2)):NaN)
+    .sort((a,b)=>a-b);
+  if(sorted.some((n,i)=>!int(n,1,2147483647)||!keys.includes(seqKey(n))||
      (i>0&&sorted[i-1]>=n)))return {error:'publication-history-invalid'};
   let previousTime=0,previousAccepted=0;
   for(const sequence of sorted) {
-    const entry=existing.entries[String(sequence)];
+    const entry=existing.entries[seqKey(sequence)];
     if(!validEntry(entry,uid,epoch,trustedReceiptKey)||
        entry.sequence!==sequence||
        entry.observedAtMs<previousTime||
@@ -84,7 +87,7 @@ function validateHistory(current,uid,epoch,issuerFingerprint,trustedReceiptKey) 
     previousTime=entry.observedAtMs;
     previousAccepted=entry.receipt.acceptedAtMs;
   }
-  const last=existing.entries[String(sorted.at(-1))],publicState=current.publicTelemetryLabV1;
+  const last=existing.entries[seqKey(sorted.at(-1))],publicState=current.publicTelemetryLabV1;
   if(last.sequence!==checkpoint.sequence||last.digest!==checkpoint.digest||
      publicState?.water?.distanceCm!==last.distanceCm||
      publicState?.water?.levelCm!==last.levelCm||
@@ -132,7 +135,7 @@ export function deriveHistoricalAtomicWaterStateLab({
     return deny('publication-evidence-time-regression');
 
   const sequence=envelope.frame.sequence;
-  if(Object.hasOwn(existing.entries,String(sequence)))
+  if(Object.hasOwn(existing.entries,seqKey(sequence)))
     return deny('publication-evidence-replay');
   const record={
     sequence,digest:receipt.digest,
@@ -150,7 +153,7 @@ export function deriveHistoricalAtomicWaterStateLab({
     ...core.next,
     publicationHistoryV1:{
       schema:SCHEMA,deviceId:uid,epoch:envelope.epoch,
-      issuerFingerprint,entries:{...existing.entries,[String(sequence)]:record}
+      issuerFingerprint,entries:{...existing.entries,[seqKey(sequence)]:record}
     }
   };
   return Object.freeze({
