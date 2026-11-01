@@ -41,6 +41,21 @@ ExclusiveLocalResult LittleFSImpl::createExclusiveLocal(
         return ExclusiveLocalResult::InvalidInput;
     }
 
+    // Permit ONLY the eight fixed journal paths. Even an accidentally
+    // exposed generic core API cannot create arbitrary root-level files.
+    static const char *const slots[8] = {
+        "/fgq2_0.bin", "/fgq2_1.bin", "/fgq2_2.bin", "/fgq2_3.bin",
+        "/fgq2_4.bin", "/fgq2_5.bin", "/fgq2_6.bin", "/fgq2_7.bin"
+    };
+    bool slotAllowed = false;
+    for (const char *allowed : slots) {
+        if (strcmp(path, allowed) == 0) {
+            slotAllowed = true;
+            break;
+        }
+    }
+    if (!slotAllowed) return ExclusiveLocalResult::InvalidInput;
+
     _fgExclusiveBusy = true;
     struct BusyRelease {
         bool &flag;

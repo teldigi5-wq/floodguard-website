@@ -177,6 +177,24 @@ static void case_unmounted_and_invalid() {
   assert(!fs._fgExclusiveQuarantined);
   fs.stop();
 }
+static void case_exact_slot_allowlist() {
+  blank_volume();
+  LittleFSImpl fs;
+  assert(fs.initializeNew());
+  // Reject root-level arbitrary names, extensions and case variants before
+  // any low-level LittleFS I/O or metadata updates.
+  const char *bad[]={
+      "/other.bin", "/fgq2_8.bin", "/fgq2_0.bin.bak",
+      "/FGQ2_0.bin", "/fgq2_00.bin", "/fgq2_1.dat"};
+  const unsigned p=disk.progs,e=disk.erases,r=disk.reads;
+  for (const char *path:bad)
+    assert(fs.createExclusiveLocal(path,fixture,sizeof(fixture))==
+           ExclusiveLocalResult::InvalidInput);
+  assert(disk.progs==p && disk.erases==e && disk.reads==r);
+  assert(!fs._fgExclusiveQuarantined);
+  fs.stop();
+}
+
 static void case_exact_new_duplicate_and_remount() {
   blank_volume();
   LittleFSImpl fs;
@@ -313,12 +331,13 @@ static void case_reentrant_writer_refused() {
 
 int main() {
   case_unmounted_and_invalid();
+  case_exact_slot_allowlist();
   case_exact_new_duplicate_and_remount();
   case_write_fault_quarantines_and_blocks_retry();
   case_sync_fault_quarantines();
   case_read_fault_quarantines();
   case_torn_metadata_program_quarantines();
   case_reentrant_writer_refused();
-  std::puts("PASS exact patched ESP8266 LittleFS core method: 7 RAM host scenarios; no flash");
+  std::puts("PASS exact patched ESP8266 LittleFS core method: 8 RAM host scenarios; no flash");
   return 0;
 }

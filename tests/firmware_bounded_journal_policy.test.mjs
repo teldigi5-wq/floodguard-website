@@ -192,3 +192,25 @@ test('torn program and callback reentry must quarantine the exact core overlay m
   const active=sketch.slice(sketch.indexOf('void setup()'));
   assert.doesNotMatch(active,/createExclusiveLocal\s*\(|LittleFS\.begin\s*\(|WiFi\.begin\s*\(/);
 });
+
+test('R2 reboot audit remains read-only and experimental core accepts eight exact slot paths only',()=>{
+  const gate=readFileSync(dir+'JournalBootAudit.h','utf8');
+  const patch=readFileSync('experiments/esp8266-core-excl-review/patch_core.py','utf8');
+  const harness=readFileSync('tests/firmware_core_overlay_exact_host.template.cpp','utf8');
+  const flow=readFileSync('.github/workflows/nodemcu-no-truncation-storage.yml','utf8');
+  assert.match(sketch,/#include "JournalBootAudit.h"/);
+  assert.match(sketch,/static_assert\(sizeof\(floodguard_retained_review::JournalBootAudit\) > 0/);
+  assert.match(gate,/const JournalSnapshot verified = inspectJournal\(store\)/);
+  assert.match(gate,/BootAuditDisposition::ReadOnlyInventory/);
+  assert.match(gate,/BootAuditDisposition::Quarantined/);
+  for(const name of ['mayAppend','mayRetire','maySendAcknowledgment','mayReportSafe'])
+    assert.match(gate,new RegExp('bool '+name+'\\(\\) const \\{ return false; \\}'));
+  for(let i=0;i<8;i++)
+    assert.ok(patch.includes('"/fgq2_'+i+'.bin"'));
+  assert.match(patch,/if \(!slotAllowed\) return ExclusiveLocalResult::InvalidInput/);
+  assert.match(harness,/case_exact_slot_allowlist/);
+  assert.match(flow,/tests\/firmware_journal_boot_audit\.cpp/);
+  assert.match(adapter,/bool writeNew\(uint8_t, const uint8_t \*,size_t\)\s*\{\s*return false;/);
+  const active=sketch.slice(sketch.indexOf('void setup()'));
+  assert.doesNotMatch(active,/JournalBootAudit|createExclusiveLocal\s*\(|LittleFS\.begin\s*\(/);
+});
