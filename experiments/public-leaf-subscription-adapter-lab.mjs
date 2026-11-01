@@ -51,8 +51,13 @@ export function createPublicLeafSubscriptionAdapterLab({subscribe, clock = Date.
     started = true;
     try {
       for (const path of PUBLIC_MONITOR_LAB_LEAF_PATHS) {
+        // A Firebase onValue cancellation callback terminates that specific
+        // listener. Ignore any subsequent queued value callback until a new
+        // explicit subscription generation is established.
+        let terminal = false;
         const notify = (kind, value) => {
-          if (!started || state.generation !== generation) return;
+          if (!started || state.generation !== generation ||
+              (terminal && kind === 'value')) return;
           state = applyPublicLeafEventLab(state, {
             kind, path, value, atMs:timestamp(), generation,
           });
@@ -62,6 +67,8 @@ export function createPublicLeafSubscriptionAdapterLab({subscribe, clock = Date.
           path,
           value => notify('value', value),
           error => {
+            if (terminal) return;
+            terminal = true;
             const code = error?.code;
             // Never forward provider error objects or secret-bearing URLs.
             notify(code === 'PERMISSION_DENIED' || code === 'permission_denied'
