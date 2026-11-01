@@ -25,6 +25,12 @@
 #include <time.h>
 #include "V6SerialParser.h"
 #include "SecureIngressTransport.h"
+#include "OneFrameLittleFsStore.h"
+
+// Compile-check LittleFS record preservation; do NOT mount the flash or
+// create/write any file in setup() or loop(). The live device remains untouched.
+static_assert(sizeof(floodguard_retained_review::LittleFsOneFrame) > 0,
+              "LittleFS retaining module must compile but remain dormant");
 
 // The transport implementation is COMPILED but NEVER called: there is no
 // signed event, device secret, trusted CA, gateway or approved bench Wi-Fi.
