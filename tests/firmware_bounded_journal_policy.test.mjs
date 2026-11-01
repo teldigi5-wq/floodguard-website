@@ -348,3 +348,29 @@ test('R2 resolved CLI FS layouts must agree with pinned SDK and never grant rele
   const active=sketch.slice(sketch.indexOf('void setup()'));
   assert.doesNotMatch(active,/show-properties|r2_resolved_build_layout|LittleFS\.begin\s*\(/);
 });
+
+test('R2 private backup pair checker remains offline, byte-level and irrevocably NO-GO',()=>{
+  const script=readFileSync('experiments/esp8266-core-excl-review/r2_private_backup_pair.py','utf8');
+  const cases=readFileSync('tests/firmware_private_backup_pair_test.py','utf8');
+  const ci=readFileSync('.github/workflows/nodemcu-no-truncation-storage.yml','utf8');
+  assert.match(script,/board\.get_profiles\(boards_text, verify_pin=True\)/);
+  assert.match(script,/board\.read_json_no_duplicate_keys\(manifest_bytes\)/);
+  assert.match(script,/os\.O_NOFOLLOW/);
+  assert.match(script,/stat\.S_ISREG/);
+  assert.match(script,/os\.read\(a, amount\), os\.read\(b, amount\)/);
+  assert.match(script,/hmac\.compare_digest/);
+  assert.match(script,/BACKUP_MODIFIED_DURING_READ/);
+  assert.match(script,/COPIES_SHARE_SAME_FILE/);
+  assert.match(script,/independent_hardware_reads_proven": False/);
+  assert.match(script,/production_go": False/);
+  assert.match(script,/may_write": False/);
+  assert.match(script,/may_operate_gate": False/);
+  assert.match(cases,/test_identical_synthetic_copies_still_deny_hardware_operation/);
+  assert.match(cases,/test_symlink_not_followed/);
+  assert.match(cases,/test_hardlinked_copy_refused/);
+  assert.match(cases,/test_cli_failure_never_prints_paths_hash_or_secret/);
+  assert.match(ci,/firmware_private_backup_pair_test\.py/);
+  assert.match(adapter,/bool writeNew\(uint8_t, const uint8_t \*,size_t\)\s*\{\s*return false;/);
+  const active=sketch.slice(sketch.indexOf('void setup()'));
+  assert.doesNotMatch(active,/compare_copies\s*\(|r2_private_backup_pair|LittleFS\.begin\s*\(|createExclusiveLocal\s*\(/);
+});
