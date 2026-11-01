@@ -9,6 +9,7 @@ import {canonicalOfflineEnvelope} from './stage7-durable-ingress.mjs';
 const SCHEMA='floodguard-durable-admission-outbox-lab-v1';
 const FILE='durable-admission-outbox-lab.json';
 const LOCK='durable-admission-outbox-lab.lock';
+const MARKER='durable-admission-commissioned.marker.json';
 const UID=/^device-stage-[a-z0-9-]{1,32}$/;
 const HEX=/^[a-f0-9]{64}$/;
 const SIG=/^[A-Za-z0-9_-]{86}$/;
@@ -64,8 +65,31 @@ export function createDurableAdmissionOutboxLab({directory,integrityKey,identiti
   if(!stat.isDirectory()||stat.isSymbolicLink()||(stat.mode&0o022)!==0)
     throw Error('Unsafe admission directory');
   const file=path.join(directory,FILE),lock=path.join(directory,LOCK);
+  const marker=path.join(directory,MARKER);
   const seal=state=>createHmac('sha256',integrityKey).update(JSON.stringify(state)).digest('hex');
+  const verifyMarker=()=>{
+    const st=fs.lstatSync(marker);
+    if(!st.isFile()||st.isSymbolicLink()||st.size<1||st.size>1024||
+       (st.mode&0o077)!==0)throw Error('Commission marker unavailable');
+    const fd=fs.openSync(marker,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);
+    let data;
+    try {
+      const opened=fs.fstatSync(fd);
+      if(!opened.isFile()||opened.ino!==st.ino||opened.dev!==st.dev)
+        throw Error('Commission marker changed during read');
+      data=JSON.parse(fs.readFileSync(fd,'utf8'));
+    }finally{fs.closeSync(fd);}
+    if(!exact(data,['commission','mac'])||
+       !exact(data.commission,['schema','nonce'])||
+       data.commission.schema!=='floodguard-admission-commission-v1'||
+       typeof data.commission.nonce!=='string'||
+       !/^[a-f0-9]{32}$/.test(data.commission.nonce)||
+       typeof data.mac!=='string'||!HEX.test(data.mac)||
+       !timingSafeEqual(Buffer.from(seal(data.commission),'hex'),Buffer.from(data.mac,'hex')))
+      throw Error('Commission marker integrity unavailable');
+  };
   const read=()=>{
+    verifyMarker();
     // Never interpret a lost file, symlink, or tampering as a fresh journal.
     const st=fs.lstatSync(file);
     if(!st.isFile()||st.isSymbolicLink()||st.size>MAX_BYTES||st.size===0||
@@ -113,7 +137,17 @@ export function createDurableAdmissionOutboxLab({directory,integrityKey,identiti
     },
     commission(){
       return locked(()=>{
-        if(fs.existsSync(file))throw Error('Admission journal already commissioned');
+        // Marker-first sequence: a crash before the state file is created
+        // blocks future admissions instead of reconstructing lost history.
+        if(fs.existsSync(file)||fs.existsSync(marker))
+          throw Error('Admission journal already commissioned or needs recovery');
+        const commission={schema:'floodguard-admission-commission-v1',
+          nonce:randomBytes(16).toString('hex')};
+        const body=JSON.stringify({commission,mac:seal(commission)});
+        const fd=fs.openSync(marker,'wx',0o600);
+        try{fs.writeFileSync(fd,body);fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
+        const dirFd=fs.openSync(directory,'r');
+        try{fs.fsyncSync(dirFd);}finally{fs.closeSync(dirFd);}
         write({schema:SCHEMA,revision:1,devices:{}});
         return Object.freeze({commissioned:true});
       });
