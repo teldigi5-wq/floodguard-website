@@ -15,6 +15,8 @@ import {deriveHistoricalAtomicWaterStateLab}
   from '../experiments/immutable-publication-history-lab.mjs';
 import {observeHistoricalOutboxRecordLab}
   from '../experiments/historical-outbox-observer-lab.mjs';
+import {canonicalPublicationHistoryWitnessLab,observePinnedHistoricalWitnessLab}
+  from '../experiments/pinned-historical-witness-lab.mjs';
 
 const HOST='127.0.0.1:9000',UID='device-stage-a',NOW=1793450000500;
 const ROOT='/floodguard',PUBLIC=ROOT+'/publicTelemetryLabV1';
@@ -161,5 +163,75 @@ test('privileged nested-object leak is detectable and does not grant historical 
   const result=await observed(1);
   assert.equal(result.observed,false);
   assert.equal(result.reason,'current-public-scalar-diverged');
+  assert.equal(journal.pending(UID).length,2);
+});
+
+test('separately signed witness observes older history in actual RTDB Emulator read-back',async()=>{
+  await publish(reading(1));
+  await publish(reading(2,{distanceCm:13.5,levelCm:11.5,risk:'DANGER'}));
+  const snapshot=await get();
+  const external=generateKeyPairSync('ed25519');
+  const head=snapshot.projectionControl.devices[UID];
+  const historyDigest=createHash('sha256').update(
+    canonicalPublicationHistoryWitnessLab(snapshot.publicationHistoryV1)).digest('hex');
+  const witness={
+    version:'floodguard-external-publication-witness-lab-v1',
+    deviceId:UID,epoch:1,sequence:head.sequence,digest:head.digest,
+    historyDigest,
+    receiptSignerFingerprint:createHash('sha256').update(
+      issuer.publicKey.export({type:'spki',format:'der'})).digest('hex'),
+    witnessedAtMs:NOW+100
+  };
+  const witnessSignature=sign(null,Buffer.from(JSON.stringify(witness)),
+    external.privateKey).toString('base64url');
+  const trustedExternalHead={sequence:head.sequence,digest:head.digest,historyDigest};
+  const expectedWitnessFingerprint=createHash('sha256').update(
+    external.publicKey.export({type:'spki',format:'der'})).digest('hex');
+  const observed=observePinnedHistoricalWitnessLab({
+    pending:journal.pending(UID)[0],root:snapshot,sourceBinding,
+    trustedReceiptKey:issuer.publicKey,
+    witness,witnessSignature,trustedWitnessKey:external.publicKey,
+    expectedWitnessFingerprint,trustedExternalHead,nowMs:NOW+100
+  });
+  assert.equal(observed.observed,true,JSON.stringify(observed));
+  assert.equal(observed.latestSequence,2);
+  assert.equal(observed.canAcknowledge,false);
+});
+
+test('emulated old root and valid old signature fail against retained newer external head',async()=>{
+  await publish(reading(1));
+  const old=await get();
+  await publish(reading(2,{distanceCm:13.5,levelCm:11.5,risk:'DANGER'}));
+  const latest=await get();
+  const head=latest.projectionControl.devices[UID];
+  const latestHistoryDigest=createHash('sha256').update(
+    canonicalPublicationHistoryWitnessLab(latest.publicationHistoryV1)).digest('hex');
+  const heldHead={sequence:head.sequence,digest:head.digest,
+    historyDigest:latestHistoryDigest};
+  // A stale RTDB snapshot may be internally consistent, but it cannot match
+  // a separately retained, newer operator head. No Firebase prod data touched.
+  await seed(old);
+  const external=generateKeyPairSync('ed25519');
+  const oldCheckpoint=old.projectionControl.devices[UID];
+  const oldHistoryDigest=createHash('sha256').update(
+    canonicalPublicationHistoryWitnessLab(old.publicationHistoryV1)).digest('hex');
+  const witness={version:'floodguard-external-publication-witness-lab-v1',
+    deviceId:UID,epoch:1,sequence:oldCheckpoint.sequence,
+    digest:oldCheckpoint.digest,historyDigest:oldHistoryDigest,
+    receiptSignerFingerprint:createHash('sha256').update(
+      issuer.publicKey.export({type:'spki',format:'der'})).digest('hex'),
+    witnessedAtMs:NOW+100};
+  const signature=sign(null,Buffer.from(JSON.stringify(witness)),
+    external.privateKey).toString('base64url');
+  const result=observePinnedHistoricalWitnessLab({
+    pending:journal.pending(UID)[0],root:await get(),sourceBinding,
+    trustedReceiptKey:issuer.publicKey,witness,witnessSignature:signature,
+    trustedWitnessKey:external.publicKey,
+    expectedWitnessFingerprint:createHash('sha256').update(
+      external.publicKey.export({type:'spki',format:'der'})).digest('hex'),
+    trustedExternalHead:heldHead,nowMs:NOW+100
+  });
+  assert.equal(result.observed,false);
+  assert.equal(result.reason,'external-witness-snapshot-mismatch');
   assert.equal(journal.pending(UID).length,2);
 });
