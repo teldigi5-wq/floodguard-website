@@ -298,3 +298,30 @@ test('R2 ESP8266 loop and flash evidence are compile-only and never authorize de
   const active=sketch.slice(sketch.indexOf('void setup()'));
   assert.doesNotMatch(active,/CooperativeReadOnlyAuditPump|ReviewFlashInventory|inspectFlashInventory\s*\(|LittleFS\.begin\s*\(|createExclusiveLocal\s*\(/);
 });
+
+test('R2 pinned board layout evidence is offline, never flash authorization or production input',()=>{
+  const script=readFileSync('experiments/esp8266-core-excl-review/r2_board_layout_evidence.py','utf8');
+  const manifest=JSON.parse(readFileSync('experiments/esp8266-core-excl-review/board_evidence_template.json','utf8'));
+  const workflow=readFileSync('.github/workflows/nodemcu-no-truncation-storage.yml','utf8');
+  assert.match(script,/PINNED_BOARDS_GIT_BLOB = "[0-9a-f]{40}"/);
+  assert.match(script,/BOARD = "nodemcuv2"/);
+  assert.match(script,/PROFILE_IDS = \("4M1M", "4M2M", "4M3M", "4M"\)/);
+  assert.match(script,/get_profiles\(.*verify_pin: bool = True/);
+  assert.match(script,/if profile == "4M":/);
+  assert.match(script,/SELECTED_MENU_HAS_NO_FILESYSTEM/);
+  assert.match(script,/BACKUP_REPEATED_READ_MISMATCH/);
+  assert.match(script,/"may_flash": False/);
+  assert.match(script,/"may_write": False/);
+  assert.match(script,/"may_operate_gate": False/);
+  assert.match(script,/"production_go": False/);
+  assert.equal(manifest.origin,'not-observed');
+  assert.equal(manifest.selected_flash_menu,null);
+  assert.equal(manifest.bench_isolated,false);
+  assert.equal(manifest.backup.sha256,null);
+  assert.match(workflow,/r2_board_layout_evidence\.py/);
+  assert.match(workflow,/--sdk-only/);
+  assert.match(workflow,/firmware_board_layout_evidence_test\.py/);
+  assert.match(adapter,/bool writeNew\(uint8_t, const uint8_t \*,size_t\)\s*\{\s*return false;/);
+  const active=sketch.slice(sketch.indexOf('void setup()'));
+  assert.doesNotMatch(active,/r2_board_layout_evidence|flash_id|read_flash|write_flash|LittleFS\.begin\s*\(/);
+});
