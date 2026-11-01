@@ -77,7 +77,7 @@ inline bool prepared(const PreparedFrame &frame) {
     const unsigned char c = static_cast<unsigned char>(frame.signedJson[i]);
     if (c < 0x20 || c > 0x7e) return false;
   }
-  return frame.signedJson[frame.bytes] == 0 &&
+  return strnlen(frame.signedJson, kMaxRequest + 1) == frame.bytes &&
     strncmp(frame.signedJson, "{\"envelope\":", 12) == 0 &&
     strstr(frame.signedJson, "\"signature\":\"") != nullptr;
 }
@@ -97,11 +97,22 @@ inline bool readLine(BearSSL::WiFiClientSecure &client, char *dest,
       dest[used] = 0;
       return true;
     }
-    if (used + 1 >= capacity || c < 0x20 && c != '\r' || c > 0x7e)
+    if (used + 1 >= capacity || (c < 0x20 && c != '\r') || c > 0x7e)
       return false;
     dest[used++] = static_cast<char>(c);
   }
   return false;
+}
+inline bool casePrefix(const char *actual, const char *prefix) {
+  if (!actual || !prefix) return false;
+  for (size_t i = 0; prefix[i]; ++i) {
+    if (!actual[i]) return false;
+    char a = actual[i], b = prefix[i];
+    if (a >= 'A' && a <= 'Z') a += 'a' - 'A';
+    if (b >= 'A' && b <= 'Z') b += 'a' - 'A';
+    if (a != b) return false;
+  }
+  return true;
 }
 inline bool parseContentLength(const char *raw, uint16_t &out) {
   if (!raw || !*raw) return false;
@@ -189,14 +200,16 @@ inline Result submitPreparedFrame(
       client.stop(); return result(Outcome::UnverifiedResponse);
     }
     if (line[0] == 0) break;
-    if (strncmp(line, "Content-Length: ", 16) == 0) {
+    if (casePrefix(line, "Content-Length: ")) {
       if (hasLength || !parseContentLength(line + 16, expectedLength)) {
         client.stop(); return result(Outcome::UnverifiedResponse);
       }
       hasLength = true;
     }
-    if (strncmp(line, "Content-Type: application/json", 30) == 0)
-      hasJson = true;
+    if (casePrefix(line, "Content-Type: application/json")) {
+      const size_t prefixLen = strlen("Content-Type: application/json");
+      if (line[prefixLen] == 0 || line[prefixLen] == ';') hasJson = true;
+    }
     if (headers == 19) { client.stop(); return result(Outcome::UnverifiedResponse); }
   }
   if (!hasLength || !hasJson) {
