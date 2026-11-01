@@ -6,6 +6,7 @@ const sketch=readFileSync(dir+'esp8266_review_diagnostic.ino','utf8');
 const journal=readFileSync(dir+'BoundedFrameJournal.h','utf8');
 const adapter=readFileSync(dir+'EightSlotLittleFsAdapter.h','utf8');
 const health=readFileSync(dir+'JournalMountHealth.h','utf8');
+const lifecycle=readFileSync(dir+'ExclusiveCreateLifecycle.h','utf8');
 const codec=readFileSync(dir+'RetainedFrameCodec.h','utf8');
 
 test('NodeMCU diagnostic compiles bounded outbox, but runs no flash or cloud functions',()=>{
@@ -103,4 +104,23 @@ test('ESP8266 core access boundary must fail closed until a supported exclusive-
                           /lfs_file_open\s*\(/,/LittleFS\.begin\s*\(/,
                           /WiFi\.begin\s*\(/])
     assert.doesNotMatch(active,forbidden);
+});
+
+test('future exclusive-create lifecycle is local-only and cannot activate a device writer',()=>{
+  assert.match(sketch,/#include "ExclusiveCreateLifecycle.h"/);
+  assert.match(sketch,/static_assert\(sizeof\(floodguard_retained_review::ExclusiveCreateLifecycle\) > 0/);
+  assert.match(lifecycle,/enum class ExclusiveObservation/);
+  for(const name of ['Unsupported','ExistingUnacknowledged','StorageFault',
+                     'CommitUncertain','LocalBytesMatched'])
+    assert.ok(lifecycle.includes(name),name);
+  assert.match(lifecycle,/void written\(size_t bytesWritten, bool writeOk\)/);
+  assert.match(lifecycle,/void synced\(bool syncOk\)/);
+  assert.match(lifecycle,/void closed\(bool closeOk\)/);
+  assert.match(lifecycle,/memcmp\(expected_, actual, count_\) != 0/);
+  assert.doesNotMatch(lifecycle,/\b(acknowledge|delete|erase|format|upload|firebase|servo)\s*\(/i);
+  assert.doesNotMatch(lifecycle,/\b(getImpl|getFS|lfs_file_open|WiFi\.begin|LittleFS\.open)\s*\(/);
+  // The only possible device backend remains explicitly disabled.
+  assert.match(adapter,/bool writeNew\(uint8_t, const uint8_t \*,size_t\)\s*\{\s*return false;/);
+  const active=sketch.slice(sketch.indexOf('void setup()'));
+  assert.doesNotMatch(active,/ExclusiveCreateLifecycle|\.opened\s*\(|\.written\s*\(|\.readback\s*\(/);
 });
