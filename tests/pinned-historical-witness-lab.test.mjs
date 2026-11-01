@@ -50,7 +50,7 @@ function fixture(fn){
       assert.equal(journal.accept({envelope,signature:signed}).accepted,true);
       const digest=sha(canonicalOfflineEnvelope(envelope));
       const receipt={version:'floodguard-offline-receipt-v1',deviceId:UID,
-        epoch:1,sequence,digest,acceptedAtMs:NOW-200};
+        epoch:1,sequence,digest,acceptedAtMs:NOW+50};
       const sig=sign(null,Buffer.from(JSON.stringify(receipt)),
         issuer.privateKey).toString('base64url');
       root.staging.ingestV1[UID]={...envelope.frame};
@@ -70,7 +70,7 @@ function fixture(fn){
       const witness={version:VERSION,deviceId:UID,epoch:1,
         sequence:head.sequence,digest:head.digest,
         historyDigest,receiptSignerFingerprint:fp(issuer.publicKey),
-        witnessedAtMs:NOW};
+        witnessedAtMs:NOW+100};
       const signature=sign(null,Buffer.from(JSON.stringify(witness)),
         witnessKey.privateKey).toString('base64url');
       return {witness,signature,head:{sequence:head.sequence,digest:head.digest,
@@ -84,7 +84,7 @@ function fixture(fn){
         trustedWitnessKey:witnessKey.publicKey,
         expectedWitnessFingerprint:fp(witnessKey.publicKey),
         trustedExternalHead:current.head,witness:current.witness,
-        witnessSignature:current.signature,nowMs:NOW+100,...other
+        witnessSignature:current.signature,nowMs:NOW+200,...other
       });
     };
     return fn({append,observe,signedWitness,journal,sourceBinding,issuer,
