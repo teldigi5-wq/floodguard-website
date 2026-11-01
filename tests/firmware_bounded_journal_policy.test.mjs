@@ -149,3 +149,26 @@ test('core API overlay remains pinned, isolated and never invoked by operational
   assert.doesNotMatch(sketch,/createExclusiveLocal\s*\(/);
   assert.match(adapter,/bool writeNew\(uint8_t, const uint8_t \*,size_t\)\s*\{\s*return false;/);
 });
+
+test('core overlay exact-body host fault matrix and sticky error quarantine are mandatory',()=>{
+  const patch=readFileSync('experiments/esp8266-core-excl-review/patch_core.py','utf8');
+  const generator=readFileSync('experiments/esp8266-core-excl-review/generate_exact_overlay_host.py','utf8');
+  const template=readFileSync('tests/firmware_core_overlay_exact_host.template.cpp','utf8');
+  const workflow=readFileSync('.github/workflows/nodemcu-no-truncation-storage.yml','utf8');
+  assert.match(patch,/if \(_fgExclusiveQuarantined\) return ExclusiveLocalResult::CommitUncertain;/);
+  assert.match(patch,/_fgExclusiveQuarantined = true/);
+  assert.match(patch,/bool\s+_fgExclusiveQuarantined = false;/);
+  assert.match(generator,/runpy\.run_path/);
+  assert.match(generator,/\["IMPLEMENTATION"\]/);
+  assert.match(generator,/original\.replace\(MARKER, payload\)/);
+  assert.match(template,/EXACT_IMPL_FROM_PINNED_OVERLAY/);
+  assert.match(template,/case_exact_new_duplicate_and_remount/);
+  assert.match(template,/case_write_fault_quarantines_and_blocks_retry/);
+  assert.match(template,/case_sync_fault_quarantines/);
+  assert.match(template,/case_read_fault_quarantines/);
+  assert.match(workflow,/generate_exact_overlay_host\.py/);
+  assert.match(workflow,/\/tmp\/fg-core-overlay-exact-host/);
+  assert.match(adapter,/bool writeNew\(uint8_t, const uint8_t \*,size_t\)\s*\{\s*return false;/);
+  const active=sketch.slice(sketch.indexOf('void setup()'));
+  assert.doesNotMatch(active,/createExclusiveLocal\s*\(|mountExplicitly\s*\(/);
+});
