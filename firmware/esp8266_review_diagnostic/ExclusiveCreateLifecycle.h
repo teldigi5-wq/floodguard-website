@@ -115,10 +115,11 @@ class ExclusiveCreateLifecycle {
     count_ = 0;
   }
 
-  // Illegal ordering after an attempted create remains uncertain; a terminal
-  // outcome cannot be turned into success by any additional event.
+  // Illegal ordering after an attempted create remains uncertain; a
+  // duplicate operation also invalidates a previously matched local record.
+  // Failed terminal outcomes cannot be resurrected by later events.
   void denyTransition() {
-    if (phase_ == Phase::Locked || phase_ == Phase::LocalMatch) return;
+    if (phase_ == Phase::Locked) return;
     lock(ExclusiveObservation::CommitUncertain);
   }
 
