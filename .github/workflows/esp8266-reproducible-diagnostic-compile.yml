@@ -1,0 +1,82 @@
+name: FloodGuard ESP8266 firmware diagnostic compile (no flash)
+on:
+  push:
+    branches: [test/r2-esp8266-reproducible-diagnostic-build-20261101]
+  pull_request:
+    branches: [test/r2-legacy-firmware-serial-safety-20261101]
+permissions:
+  contents: read
+concurrency:
+  group: fg-esp8266-diagnostic-compile-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  host-parser-and-site:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout without persisted GitHub credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Compiler-test the exact portable parser header used by the ESP sketch
+        run: |
+          g++ -std=c++11 -Wall -Wextra -Werror -pedantic \
+            tests/firmware_v6_esp8266_parser.cpp -o /tmp/floodguard-v6-parser-test
+          /tmp/floodguard-v6-parser-test
+      - name: Review-only firmware static safety gate and legacy Node regression
+        run: |
+          node --test tests/firmware_v6_diagnostic_policy.test.mjs tests/v6-serial-water-safety-preflight.test.mjs
+          node --test tests/esp8266-transport-migration-preflight.test.mjs tests/loopback-durable-outbox-ingress.test.mjs tests/loopback-signed-https-ingress.test.mjs
+      - name: Locked website dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Full website tests lint types and build
+        run: |
+          npm test
+          npm run lint
+          npm run typecheck
+          npm run build
+
+  compile-esp8266:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout without persisted GitHub credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install SHA256-verified Arduino CLI 1.5.1 archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --tlsv1.2 -fL --retry 3 \
+            https://github.com/arduino/arduino-cli/releases/download/v1.5.1/arduino-cli_1.5.1_Linux_64bit.tar.gz \
+            -o /tmp/arduino-cli_1.5.1_Linux_64bit.tar.gz
+          echo "28a8e119c498a25607821c36cb2dc49e8463941b261a0d99091baa7bc692dd2b  /tmp/arduino-cli_1.5.1_Linux_64bit.tar.gz" | sha256sum --check
+          mkdir -p /tmp/fg-arduino-bin
+          tar -xzf /tmp/arduino-cli_1.5.1_Linux_64bit.tar.gz -C /tmp/fg-arduino-bin arduino-cli
+          echo "/tmp/fg-arduino-bin" >> "$GITHUB_PATH"
+      - name: Install version-locked ESP8266 Arduino core 3.1.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          arduino-cli version
+          arduino-cli core update-index \
+            --additional-urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
+          arduino-cli core install esp8266:esp8266@3.1.2 \
+            --additional-urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
+          arduino-cli core list
+      - name: Real ESP8266 GCC compile, generic board, no upload or artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          arduino-cli compile \
+            --fqbn esp8266:esp8266:generic \
+            --warnings all \
+            --build-property compiler.cpp.extra_flags=-DFG_DIAGNOSTIC_BUILD_ONLY \
+            firmware/esp8266_review_diagnostic
+          echo "ESP8266_DIAGNOSTIC_COMPILE_SUCCESS_NO_FLASH"
