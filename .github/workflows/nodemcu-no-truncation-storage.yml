@@ -1,9 +1,9 @@
 name: FloodGuard no-truncation NodeMCU and POSIX exclusive journal checks
 on:
   push:
-    branches: [security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101, test/r2-pinned-esp8266-api-access-boundary-20261101, test/r2-exclusive-write-lifecycle-20261101, test/r2-single-owner-core-api-overlay-20261101, test/r2-core-overlay-exact-host-faults-20261101, test/r2-core-overlay-torn-write-reentry-20261101, security/r2-eight-slot-boot-audit-20261101, test/r2-typed-probe-owner-queue-20261101, test/r2-owner-thread-host-dispatcher-20261101, test/r2-esp8266-loop-flash-evidence-20261101]
+    branches: [security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101, test/r2-pinned-esp8266-api-access-boundary-20261101, test/r2-exclusive-write-lifecycle-20261101, test/r2-single-owner-core-api-overlay-20261101, test/r2-core-overlay-exact-host-faults-20261101, test/r2-core-overlay-torn-write-reentry-20261101, security/r2-eight-slot-boot-audit-20261101, test/r2-typed-probe-owner-queue-20261101, test/r2-owner-thread-host-dispatcher-20261101, test/r2-esp8266-loop-flash-evidence-20261101, test/r2-board-layout-evidence-gate-20261101]
   pull_request:
-    branches: [test/r2-bounded-device-journal-20261101, security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101, test/r2-pinned-esp8266-api-access-boundary-20261101, test/r2-exclusive-write-lifecycle-20261101, test/r2-single-owner-core-api-overlay-20261101, test/r2-core-overlay-exact-host-faults-20261101, test/r2-core-overlay-torn-write-reentry-20261101, security/r2-eight-slot-boot-audit-20261101, test/r2-typed-probe-owner-queue-20261101, test/r2-owner-thread-host-dispatcher-20261101]
+    branches: [test/r2-bounded-device-journal-20261101, security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101, test/r2-pinned-esp8266-api-access-boundary-20261101, test/r2-exclusive-write-lifecycle-20261101, test/r2-single-owner-core-api-overlay-20261101, test/r2-core-overlay-exact-host-faults-20261101, test/r2-core-overlay-torn-write-reentry-20261101, security/r2-eight-slot-boot-audit-20261101, test/r2-typed-probe-owner-queue-20261101, test/r2-owner-thread-host-dispatcher-20261101, test/r2-esp8266-loop-flash-evidence-20261101]
 permissions:
   contents: read
 concurrency:
@@ -56,6 +56,14 @@ jobs:
             tests/firmware_cooperative_loop_flash_inventory.cpp \
             -o /tmp/fg-loop-flash-inventory-test
           /tmp/fg-loop-flash-inventory-test
+      - name: Validate synthetic NodeMCU board evidence without device access
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'firmware_board_layout_evidence_test.py' -v
+          # The public template MUST be incomplete, never an operator permit.
+          python3 -m json.tool \
+            experiments/esp8266-core-excl-review/board_evidence_template.json >/dev/null
       - name: Review-only firmware static safety gate and legacy Node regression
         run: |
           node --test tests/firmware_v6_diagnostic_policy.test.mjs tests/firmware_bearssl_transport_policy.test.mjs tests/firmware_nodemcu_storage_policy.test.mjs tests/firmware_bounded_journal_policy.test.mjs tests/v6-serial-water-safety-preflight.test.mjs
@@ -149,6 +157,14 @@ jobs:
           arduino-cli core install esp8266:esp8266@3.1.2 \
             --additional-urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
           arduino-cli core list
+      - name: Verify installed ESP8266 3.1.2 NodeMCU menu flash definitions against upstream Git blob
+        shell: bash
+        run: |
+          set -euo pipefail
+          BOARDS="$HOME/.arduino15/packages/esp8266/hardware/esp8266/3.1.2/boards.txt"
+          test -f "$BOARDS"
+          python3 experiments/esp8266-core-excl-review/r2_board_layout_evidence.py \
+            --boards "$BOARDS" --sdk-only
       - name: Real NodeMCU 1.0 ESP-12E GCC compile, no upload or artifacts
         shell: bash
         run: |
