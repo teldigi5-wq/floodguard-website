@@ -1,0 +1,22 @@
+{
+  "schema": "floodguard-r2-board-evidence-v1",
+  "origin": "not-observed",
+  "core_version": "3.1.2",
+  "fqbn": "esp8266:esp8266:nodemcuv2",
+  "selected_flash_menu": null,
+  "selected_flash_ld": null,
+  "real_flash_bytes": null,
+  "configured_flash_bytes": null,
+  "filesystem_start": null,
+  "filesystem_end": null,
+  "bench_isolated": false,
+  "actuators_disconnected": false,
+  "read_only_observation": false,
+  "independent_partition_review": false,
+  "backup": {
+    "size_bytes": null,
+    "sha256": null,
+    "second_read_sha256": null,
+    "stored_privately": false
+  }
+}
