@@ -1,9 +1,9 @@
 name: FloodGuard no-truncation NodeMCU and POSIX exclusive journal checks
 on:
   push:
-    branches: [security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101, test/r2-pinned-esp8266-api-access-boundary-20261101, test/r2-exclusive-write-lifecycle-20261101]
+    branches: [security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101, test/r2-pinned-esp8266-api-access-boundary-20261101, test/r2-exclusive-write-lifecycle-20261101, test/r2-single-owner-core-api-overlay-20261101]
   pull_request:
-    branches: [test/r2-bounded-device-journal-20261101, security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101, test/r2-pinned-esp8266-api-access-boundary-20261101]
+    branches: [test/r2-bounded-device-journal-20261101, security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101, test/r2-pinned-esp8266-api-access-boundary-20261101, test/r2-exclusive-write-lifecycle-20261101]
 permissions:
   contents: read
 concurrency:
@@ -155,3 +155,22 @@ jobs:
             fi
             echo "PASS pinned ESP8266 core rejects protected ${expected} access (NO DEVICE FLASH)"
           done
+
+      - name: Apply source-locked single-owner LittleFS API overlay in disposable CI core (never flash)
+        shell: bash
+        run: |
+          set -euo pipefail
+          CORE="$HOME/.arduino15/packages/esp8266/hardware/esp8266/3.1.2"
+          test -f "$CORE/libraries/LittleFS/src/LittleFS.cpp"
+          python3 experiments/esp8266-core-excl-review/patch_core.py "$CORE"
+          arduino-cli compile \
+            --fqbn esp8266:esp8266:nodemcuv2 \
+            --warnings all \
+            --build-property compiler.cpp.extra_flags=-DFG_ISOLATED_CORE_OVERLAY_REVIEW \
+            experiments/esp8266-core-excl-review/compile_only_review
+          arduino-cli compile \
+            --fqbn esp8266:esp8266:nodemcuv2 \
+            --warnings all \
+            --build-property compiler.cpp.extra_flags=-DFG_DIAGNOSTIC_BUILD_ONLY \
+            firmware/esp8266_review_diagnostic
+          echo "PASS PINNED ESP8266 SINGLE_OWNER_CORE_API OVERLAY COMPILES WITHOUT FLASH"
