@@ -343,7 +343,8 @@ test('operator has only one-way device revoke, not source-key rotation or public
   await revokeDevice();
   await assertFails(operator.ref(ROOT+'/device/enabled').set(true));
   await assertFails(operator.ref(ROOT+'/device/enabled').remove());
-  await assertFails(operator.ref(ROOT+'/authority/enabled').set(false));
+  // The independent operator retains its separate publisher-revoke power.
+  await assertSucceeds(operator.ref(ROOT+'/authority/enabled').set(false));
   assert.equal((await readProtected()).device.enabled,false);
 });
 
