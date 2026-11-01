@@ -46,7 +46,9 @@ class ExclusiveCreateLifecycle {
       return;
     }
     if (!bytes || count == 0 || count > kMaxRecord) {
-      lock(ExclusiveObservation::StorageFault);
+      // The exclusive-open outcome already said Created. Even with invalid
+      // input, it may have allocated metadata and cannot be retried.
+      lock(ExclusiveObservation::CommitUncertain);
       return;
     }
     // The create may already have changed flash; from this point a failed
