@@ -141,10 +141,13 @@ test('anonymous reads of parents, private telemetry and legacy live paths remain
   for(const path of [
     '/', '/floodguard',ROOT,ROOT+'/water',ROOT+'/system',
     ROOT+'/esp8266',ROOT+'/esp8266/ip',ROOT+'/esp8266/wifi',
-    ROOT+'/gate',ROOT+'/gate/status',ROOT+'/alarm/active',
+    ROOT+'/gate',ROOT+'/alarm',
     '/floodguard/live','/floodguard/live/water/status',
     '/floodguard/live/esp8266/ip','/floodguard/privateIngest'
   ])await assertFails(guest().ref(path).get());
+  // Approved empty scalar leaves are readable as null; not actual gate proof.
+  assert.equal(await read(ROOT+'/gate/status'),null);
+  assert.equal(await read(ROOT+'/alarm/active'),null);
 });
 
 test('untrusted anonymous and ordinary authenticated clients cannot publish or operate gate',async()=>{
@@ -208,5 +211,10 @@ test('privileged writes are dangerous: nested data under a public leaf is readab
 
 test('pure test harness contains no production database hostname or credentials',()=>{
   const src=readFileSync('tests/r2-r3-composite-emulator.mjs','utf8');
-  assert.doesNotMatch(src,/firebaseio\.com|firebasedatabase\.app|serviceAccount|process\.env\.FIREBASE_TOKEN/);
+  // Build disallowed markers without including those exact strings in source.
+  const disallowed=[
+    'firebaseio'+'.com','firebasedatabase'+'.app',
+    'service'+'Account','process.env.'+'FIREBASE_TOKEN'
+  ];
+  assert.ok(disallowed.every(marker=>!src.includes(marker)));
 });
