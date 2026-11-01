@@ -1,0 +1,52 @@
+name: FloodGuard signed external witness anti-rollback lab
+on:
+  push:
+    branches: [test/r2-r3-external-witness-rollback-20261101]
+  pull_request:
+    branches: [test/r2-r3-historical-outbox-proof-20261101]
+permissions:
+  contents: read
+concurrency:
+  group: fg-witness-rollback-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout without persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Java 17 for isolated RTDB Emulator
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Locked install without npm lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install isolated emulator rule test SDK
+        run: npm install --no-save --package-lock=false --ignore-scripts @firebase/rules-unit-testing@5.0.2
+      - name: Static syntax and new external-witness plus prior signed recovery tests
+        run: |
+          node --check experiments/pinned-historical-witness-lab.mjs
+          node --check tests/pinned-historical-witness-lab.test.mjs
+          node --check tests/historical-outbox-observer-emulator.mjs
+          node --test tests/pinned-historical-witness-lab.test.mjs tests/historical-outbox-observer-lab.test.mjs tests/immutable-publication-history-lab.test.mjs tests/durable-admission-outbox-lab.test.mjs
+      - name: Emulator current and stale-snapshot witnessed read-back
+        run: |
+          npx --yes firebase-tools@14.18.0 emulators:exec --only database \
+            --project demo-fg-historic-outbox \
+            --config firebase.r2-r3-composite-lab.json \
+            "FG_HISTORIC_OUTBOX_LAB=1 node --test tests/historical-outbox-observer-emulator.mjs"
+      - name: Full website tests, lint, types and build
+        run: |
+          npm test
+          npm run lint
+          npm run typecheck
+          npm run build
