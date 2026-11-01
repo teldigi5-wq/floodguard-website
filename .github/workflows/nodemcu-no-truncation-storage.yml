@@ -1,9 +1,9 @@
 name: FloodGuard no-truncation NodeMCU and POSIX exclusive journal checks
 on:
   push:
-    branches: [security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101, test/r2-pinned-esp8266-api-access-boundary-20261101, test/r2-exclusive-write-lifecycle-20261101, test/r2-single-owner-core-api-overlay-20261101]
+    branches: [security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101, test/r2-pinned-esp8266-api-access-boundary-20261101, test/r2-exclusive-write-lifecycle-20261101, test/r2-single-owner-core-api-overlay-20261101, test/r2-core-overlay-exact-host-faults-20261101]
   pull_request:
-    branches: [test/r2-bounded-device-journal-20261101, security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101, test/r2-pinned-esp8266-api-access-boundary-20261101, test/r2-exclusive-write-lifecycle-20261101]
+    branches: [test/r2-bounded-device-journal-20261101, security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101, test/r2-pinned-esp8266-api-access-boundary-20261101, test/r2-exclusive-write-lifecycle-20261101, test/r2-single-owner-core-api-overlay-20261101]
 permissions:
   contents: read
 concurrency:
@@ -78,6 +78,21 @@ jobs:
             "$SRC/lfs.c" "$SRC/lfs_util.c" \
             -o /tmp/fg-littlefs-exclusive-host
           /tmp/fg-littlefs-exclusive-host
+          # Compile upstream C as C (not C++) and link the exact patched
+          # LittleFSImpl method against a disposable RAM-backed host driver.
+          python3 experiments/esp8266-core-excl-review/generate_exact_overlay_host.py \
+            /tmp/fg-core-overlay-exact-host.cpp
+          gcc -std=c99 -O2 -Wall -Wextra -Werror \
+            -DLFS_NO_DEBUG -DLFS_NO_WARN -DLFS_NO_ERROR \
+            -I "$SRC" -c "$SRC/lfs.c" -o /tmp/fg-pinned-lfs.o
+          gcc -std=c99 -O2 -Wall -Wextra -Werror \
+            -DLFS_NO_DEBUG -DLFS_NO_WARN -DLFS_NO_ERROR \
+            -I "$SRC" -c "$SRC/lfs_util.c" -o /tmp/fg-pinned-lfs-util.o
+          g++ -std=c++11 -O2 -Wall -Wextra -Werror -pedantic \
+            -I "$SRC" /tmp/fg-core-overlay-exact-host.cpp \
+            /tmp/fg-pinned-lfs.o /tmp/fg-pinned-lfs-util.o \
+            -o /tmp/fg-core-overlay-exact-host
+          /tmp/fg-core-overlay-exact-host
       - name: Real POSIX Linux exclusive file, symlink and process race tests
         run: |
           node --check experiments/exclusive-device-journal-fs-lab.mjs
