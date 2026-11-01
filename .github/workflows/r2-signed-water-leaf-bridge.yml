@@ -3,7 +3,7 @@ on:
   push:
     branches: [test/r2-signed-water-leaf-bridge-20261101]
   pull_request:
-    branches: [integration/firebase-r2-r3-consolidated-20261027]
+    branches: [test/strict-emulator-atomic-projector-20261027]
 permissions:
   contents: read
 concurrency:
