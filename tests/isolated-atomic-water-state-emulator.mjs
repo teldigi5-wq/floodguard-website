@@ -215,6 +215,10 @@ test('public nested object, unexpected field or invalid scalar blocks atomic pub
 test('no missing private replay checkpoint or missing root may initialize by accident',async()=>{
   const obs=observation(),original=await get();
   const a=structuredClone(original);
+  // Firebase removes an empty map when its last child is deleted. Keep a
+  // separate synthetic device record so this tests a missing UID checkpoint
+  // rather than a missing entire device-control registry.
+  a.projectionControl.devices['device-stage-b']={initialized:false,epoch:1};
   delete a.projectionControl.devices[UID];
   await seed(a);
   assert.equal((await denied(obs)).reason,'publication-checkpoint-unavailable');
