@@ -1,8 +1,9 @@
 #pragma once
-// Dormant ESP8266 LittleFS adapter for BoundedFrameJournal.h.
-// Does NOT run in diagnostic setup/loop. No flash format/removal/rename/ACK.
-// A partially created slot remains occupied and can block all later writes.
-// NOT power-fail proven; SDK filesystem and hardware need supervised tests.
+// FloodGuard R2: read-only, fail-closed ESP8266 LittleFS journal adapter.
+// DO NOT re-enable writes until a real exclusive-create primitive, verified
+// error-aware absence probe and supervised flash/power-cut tests exist.
+// LittleFS.exists() false can mean missing OR I/O failure; opening with "w"
+// could truncate an existing signed reading. This adapter WILL NOT risk that.
 #include <Arduino.h>
 #include <LittleFS.h>
 #include "BoundedFrameJournal.h"
@@ -11,20 +12,26 @@ namespace floodguard_retained_review {
 class LittleFsEightSlots {
  public:
   LittleFsEightSlots() : mounted_(false) {}
+
+  // Explicit review harness only; the WiFi-OFF diagnostic sketch never
+  // calls this or writes flash.
   bool mountExplicitly() {
     if (mounted_) return true;
-    // Never format or wipe flash to satisfy an experimental write.
     mounted_ = LittleFS.begin();
     return mounted_;
   }
   bool ready() const { return mounted_; }
+
   SlotPresence probe(uint8_t slot) {
     if (!mounted_ || slot >= kJournalSlots) return SlotPresence::Uncertain;
-    // The SDK's exists() cannot reliably distinguish I/O failure from a
-    // missing path: this remains a deployment blocker.
-    return LittleFS.exists(path(slot)) ?
-      SlotPresence::Present : SlotPresence::Missing;
+    if (LittleFS.exists(path(slot))) return SlotPresence::Present;
+    // A false exists() is ambiguous on this SDK. It is NOT proof of an
+    // empty slot, even if the filesystem mounted successfully.
+    return SlotPresence::Uncertain;
   }
+
+  // Read existing records for possible operator-guided recovery and audit.
+  // A corrupted record is never interpreted as an absent record.
   bool read(uint8_t slot,uint8_t *dst,size_t capacity,size_t &out) {
     out = 0;
     if (!mounted_ || !dst || slot >= kJournalSlots ||
@@ -39,18 +46,13 @@ class LittleFsEightSlots {
     out = n;
     return true;
   }
-  bool writeNew(uint8_t slot,const uint8_t *data,size_t size) {
-    if (!mounted_ || slot >= kJournalSlots || !data ||
-        size < 14 || size > kMaxRecord ||
-        probe(slot) != SlotPresence::Missing) return false;
-    File file = LittleFS.open(path(slot),"w");
-    if (!file) return false;
-    const size_t written = file.write(data,size);
-    file.flush();
-    file.close();
-    // If writes are torn or the size is uncertain, the slot is NOT deleted.
-    // Caller must re-scan existing slots; no retry/overwrite from here.
-    return written == size;
+
+  // NO IMPLEMENTATION: no exclusive-create / O_EXCL equivalent is established
+  // for ESP8266 LittleFS 3.1.2. Never open an apparently absent path with
+  // "w" because that may irreversibly truncate a previously retained event.
+  // A caller always gets an uncertain result and must not retry blindly.
+  bool writeNew(uint8_t, const uint8_t *,size_t) {
+    return false;
   }
  private:
   static const char *path(uint8_t slot) {

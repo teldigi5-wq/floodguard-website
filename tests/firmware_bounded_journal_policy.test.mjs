@@ -47,10 +47,15 @@ test('no format, removal, compact, ACK or live TLS in any journal module',()=>{
   assert.doesNotMatch(adapter,/\.remove\s*\(/);
 });
 
-test('adapter explicitly marks missing-versus-filesystem-error ambiguity as a release blocker',()=>{
-  assert.match(adapter,/cannot reliably distinguish I\/O failure/);
-  assert.match(adapter,/return SlotPresence::Uncertain/);
-  assert.ok(adapter.includes('if (!mounted_ ||'));
-  assert.match(adapter,/file\.flush\(\)/);
-  assert.match(adapter,/return written == size/);
+test('NodeMCU LittleFS adapter refuses ambiguous absence and cannot truncate existing journal data',()=>{
+  assert.ok(adapter.includes('LittleFS.exists(path(slot))'));
+  assert.ok(adapter.includes('return SlotPresence::Uncertain'));
+  assert.ok(adapter.includes('bool writeNew(uint8_t, const uint8_t *,size_t)'));
+  assert.ok(adapter.includes('return false;'));
+  assert.ok(!adapter.includes('LittleFS.open(path(slot),"w")'));
+  assert.ok(!adapter.includes('LittleFS.open(path(slot),"a")'));
+  assert.ok(!adapter.includes('LittleFS.format('));
+  assert.ok(adapter.includes('NO IMPLEMENTATION'));
+  assert.ok(adapter.includes('if (!mounted_ || !dst'));
+  assert.ok(adapter.includes('file.close();'));
 });
