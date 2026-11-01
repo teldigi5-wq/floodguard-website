@@ -124,3 +124,28 @@ test('future exclusive-create lifecycle is local-only and cannot activate a devi
   const active=sketch.slice(sketch.indexOf('void setup()'));
   assert.doesNotMatch(active,/ExclusiveCreateLifecycle|\.opened\s*\(|\.written\s*\(|\.readback\s*\(/);
 });
+
+test('core API overlay remains pinned, isolated and never invoked by operational diagnostic',()=>{
+  const patch=readFileSync('experiments/esp8266-core-excl-review/patch_core.py','utf8');
+  const witness=readFileSync('experiments/esp8266-core-excl-review/compile_only_review/compile_only_review.ino','utf8');
+  const workflow=readFileSync('.github/workflows/nodemcu-no-truncation-storage.yml','utf8');
+  assert.match(patch,/SOURCE[S]? = \{/);
+  for(const path of ['cores/esp8266/FS.h','cores/esp8266/FSImpl.h',
+                     'cores/esp8266/FS.cpp','libraries/LittleFS/src/LittleFS.h',
+                     'libraries/LittleFS/src/LittleFS.cpp'])
+    assert.ok(patch.includes('"'+path+'"'),path);
+  assert.match(patch,/lfs_file_open\(/);
+  assert.match(patch,/LFS_O_CREAT \| LFS_O_EXCL/);
+  assert.match(patch,/opened == LFS_ERR_EXIST/);
+  assert.match(patch,/lfs_file_sync/);
+  assert.match(patch,/lfs_file_close/);
+  assert.match(patch,/lfs_file_read/);
+  assert.match(patch,/ExclusiveLocalResult::CommitUncertain/);
+  assert.doesNotMatch(patch,/LFS_O_TRUNC|LFS_O_APPEND|LittleFS\.format/);
+  assert.match(witness,/#ifndef FG_ISOLATED_CORE_OVERLAY_REVIEW/);
+  assert.match(witness,/volatile bool fgNeverCallReviewApi = false/);
+  assert.match(workflow,/python3 experiments\/esp8266-core-excl-review\/patch_core\.py "\$CORE"/);
+  assert.match(workflow,/PINNED ESP8266 SINGLE_OWNER_CORE_API OVERLAY COMPILES WITHOUT FLASH/);
+  assert.doesNotMatch(sketch,/createExclusiveLocal\s*\(/);
+  assert.match(adapter,/bool writeNew\(uint8_t, const uint8_t \*,size_t\)\s*\{\s*return false;/);
+});
