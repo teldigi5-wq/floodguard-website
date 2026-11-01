@@ -36,17 +36,25 @@ function fingerprint(publicKey){
  * read-only get(deviceId) returning {publicKey,epoch,scope,enabled}.
  * No HTTP route can create/revoke a binding. The injected registry is
  * trusted application setup, NOT a device-supplied identity claim.
- * ledger: Stage 7 synthetic HMAC-sealed offline sequence ledger.
- * ledgerAvailable: independently supplied readiness check; when it cannot
- * establish that replay history exists, all ingress must fail closed.
+ * ledger: existing Stage 7 HMAC-sealed offline replay ledger.
+ * admissionJournal: optional, separate commissioned durable outbox instead
+ * of ledger. Never combine both, and never auto-migrate old replay history.
+ * ledgerAvailable: independently supplied readiness check for either mode.
  */
 export function createLoopbackSignedIngressHandler({
-  identities,ledger,ledgerAvailable,clock=Date.now,bodyReadDeadlineMs=10000
+  identities,ledger,admissionJournal,ledgerAvailable,
+  clock=Date.now,bodyReadDeadlineMs=10000
 }={}) {
+  const journalMode=admissionJournal!==undefined;
+  const ledgerValid=ledger&&typeof ledger.commit==='function'&&
+    typeof ledger.last==='function';
+  const journalValid=admissionJournal&&Object.isFrozen(admissionJournal)&&
+    typeof admissionJournal.accept==='function'&&
+    typeof admissionJournal.ready==='function';
   if((!(identities instanceof Map)&&
       !(identities&&typeof identities.get==='function'&&
         typeof identities.status==='function'&&Object.isFrozen(identities)))||
-     !ledger||typeof ledger.commit!=='function'||typeof ledger.last!=='function'||
+     (journalMode ? (ledger!==undefined||!journalValid) : !ledgerValid)||
      typeof ledgerAvailable!=='function'||typeof clock!=='function')
     throw new TypeError('Explicit identity, sequence ledger and readiness required');
   if(!Number.isSafeInteger(bodyReadDeadlineMs)||
@@ -77,6 +85,7 @@ export function createLoopbackSignedIngressHandler({
     }
     const ledgerIsReady=async()=>{
       if(await ledgerAvailable()!==true)return false;
+      if(journalMode) return admissionJournal.ready()===true;
       const bootstrap=ledger.last(REPLAY_LEDGER_BOOTSTRAP_DEVICE);
       return Boolean(bootstrap&&bootstrap.epoch===1&&bootstrap.sequence===1&&
         bootstrap.keyFingerprint===REPLAY_LEDGER_BOOTSTRAP_FINGERPRINT);
@@ -162,8 +171,36 @@ export function createLoopbackSignedIngressHandler({
       !verify(null,Buffer.from(canonical,'utf8'),binding.publicKey,signature)){
       respond(res,403,'device-signature-invalid');return;
     }
-    // At this point only source signature, frame shape, bounded clock and
-    // test replay ledger are verified. No Firebase/database commitment exists.
+    // At this point only signed-source validity, frame shape and bounded
+    // clock are verified. Neither mode is a Firebase database receipt.
+    // The outbox repeats source verification and identity checks under its
+    // own lock before persisting the full frame plus replay high-water.
+    if(journalMode) {
+      try {
+        const result=admissionJournal.accept({
+          envelope:body.envelope,signature:body.signature
+        });
+        if(result?.accepted===true) {
+          respond(res,201,'LOCAL_DURABLE_ADMISSION_ONLY');return;
+        }
+        const reason=result?.reason;
+        if(reason==='replay-or-out-of-order') {
+          respond(res,409,'replay-or-identity-mismatch');return;
+        }
+        if(reason==='invalid-source-frame'||reason==='source-clock-unverified') {
+          respond(res,422,'invalid-frame');return;
+        }
+        if(reason==='signature-invalid'||reason==='identity-not-authorized'||
+           reason==='identity-rotation-requires-operator') {
+          respond(res,403,'device-not-authorized');return;
+        }
+        // Full, missing, corrupt, locked, or unreadable local history means
+        // service unavailable, never accepted or a reset replay counter.
+        respond(res,503,'durable-admission-unavailable');return;
+      }catch {
+        respond(res,503,'durable-admission-unavailable');return;
+      }
+    }
     try{
       const previous=ledger.last(deviceId); // fail on corrupt/unreadable ledger
       if(previous&&(
