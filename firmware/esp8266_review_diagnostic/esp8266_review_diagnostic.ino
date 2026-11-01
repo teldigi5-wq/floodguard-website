@@ -24,6 +24,13 @@
 #include <WiFiClientSecureBearSSL.h>
 #include <time.h>
 #include "V6SerialParser.h"
+#include "SecureIngressTransport.h"
+
+// The transport implementation is COMPILED but NEVER called: there is no
+// signed event, device secret, trusted CA, gateway or approved bench Wi-Fi.
+// A build passing does not constitute a real MCU-side TLS handshake.
+static_assert(sizeof(floodguard_transport_review::Endpoint) > 0,
+              "ESP8266 BearSSL transport contract must compile");
 
 namespace {
 constexpr uint8_t kUartRxGpio = 14;
