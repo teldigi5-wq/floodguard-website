@@ -1,0 +1,52 @@
+name: FloodGuard per-reading immutable publication evidence (lab)
+on:
+  push:
+    branches: [test/r2-r3-immutable-publication-history-20261101]
+  pull_request:
+    branches: [test/r2-r3-confirmed-outbox-reconciliation-20261101]
+permissions:
+  contents: read
+concurrency:
+  group: fg-history-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout no persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 pinned
+        with:
+          persist-credentials: false
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Java 17 for RTDB Emulator
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0 pinned
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Locked dependency install without scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install test-only Firebase Emulator SDK
+        run: npm install --no-save --package-lock=false --ignore-scripts @firebase/rules-unit-testing@5.0.2
+      - name: Syntax and local signed-history / reconciliation regression
+        run: |
+          node --check experiments/immutable-publication-history-lab.mjs
+          node --check tests/immutable-publication-history-lab.test.mjs
+          node --check tests/immutable-publication-history-emulator.mjs
+          node --test tests/immutable-publication-history-lab.test.mjs tests/confirmed-outbox-reconciliation-lab.test.mjs tests/signed-water-leaf-bridge-lab.test.mjs
+      - name: Real loopback RTDB atomic publication and authorization negatives
+        run: |
+          npx --yes firebase-tools@14.18.0 emulators:exec --only database \
+            --project demo-fg-immutable-history \
+            --config firebase.r2-r3-composite-lab.json \
+            "FG_HISTORY_LAB=1 node --test tests/immutable-publication-history-emulator.mjs"
+      - name: Full website regression
+        run: |
+          npm test
+          npm run lint
+          npm run typecheck
+          npm run build
