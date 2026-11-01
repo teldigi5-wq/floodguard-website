@@ -67,8 +67,8 @@ test('animated network panel does not report CLEAR from missing alarm',()=>{
 test('this UI preview does not modify authorization, publish to Firebase or run device controls',()=>{
   assert.match(files.provider,/onValue\(/);
   assert.match(files.provider,/reconcileDisplayedFloodRisk\(/);
-  const module=readFileSync('lib/public-observation-trust.mjs','utf8');
+  const policySource=readFileSync('lib/public-observation-trust.mjs','utf8');
   for(const unsafe of ['firebase/database','set(','update(','remove(','servo.write','digitalWrite','createExclusiveLocal','fetch('])
-    assert.equal(module.includes(unsafe),false,unsafe);
-  assert.equal(module.includes('authenticatedFieldSource: true'),false);
+    assert.equal(policySource.includes(unsafe),false,unsafe);
+  assert.equal(policySource.includes('authenticatedFieldSource: true'),false);
 });
