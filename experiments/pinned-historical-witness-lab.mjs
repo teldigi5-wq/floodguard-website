@@ -77,11 +77,13 @@ function canonicalWitness(w) {
  * at the supplied time. It does NOT prove: independent witness hardware,
  * monotonic external storage, physical truth, end-user alert delivery,
  * or that a privileged operator cannot forge the input root.
- * NEVER use a client-supplied witness key/pin or this result for queue ACK.
+ * NEVER use a client-supplied witness key/pin/monotonic external head, or this
+ * result for queue ACK. Independent durable head custody is still MISSING.
  */
 export function observePinnedHistoricalWitnessLab({
   pending,root,sourceBinding,trustedReceiptKey,nowMs,
-  witness,witnessSignature,trustedWitnessKey,expectedWitnessFingerprint
+  witness,witnessSignature,trustedWitnessKey,expectedWitnessFingerprint,
+  trustedExternalHead
 }={}) {
   try {
     const base=observeHistoricalOutboxRecordLab({
@@ -97,12 +99,23 @@ export function observePinnedHistoricalWitnessLab({
     const bytes=canonicalWitness(witness);
     const checkpoint=root.projectionControl.devices[pending.envelope.deviceId];
     const history=root.publicationHistoryV1;
+    // A separately held latest head is required. Otherwise restoring a
+    // legitimate old signed witness AND an old RTDB snapshot together would
+    // pass a signature-only verifier. This head is not provisioned here.
+    if(!exact(trustedExternalHead,['sequence','digest','historyDigest'])||
+       !integer(trustedExternalHead.sequence,1,2147483647)||
+       !HEX.test(trustedExternalHead.digest)||
+       !HEX.test(trustedExternalHead.historyDigest))
+      return deny('external-monotonic-head-unavailable');
     if(witness.deviceId!==pending.envelope.deviceId||
        witness.epoch!==pending.envelope.epoch||
        witness.sequence!==checkpoint.sequence||
        witness.digest!==checkpoint.digest||
        witness.receiptSignerFingerprint!==fp(trustedReceiptKey)||
-       witness.historyDigest!==digest(canonicalPublicationHistoryWitnessLab(history)))
+       witness.historyDigest!==digest(canonicalPublicationHistoryWitnessLab(history))||
+       witness.sequence!==trustedExternalHead.sequence||
+       witness.digest!==trustedExternalHead.digest||
+       witness.historyDigest!==trustedExternalHead.historyDigest)
       return deny('external-witness-snapshot-mismatch');
     const latest=history.entries['s_'+checkpoint.sequence];
     if(!latest||witness.witnessedAtMs<latest.receipt.acceptedAtMs||
