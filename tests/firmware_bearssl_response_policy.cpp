@@ -2,6 +2,7 @@
 // Strictly local admission semantics, no cloud confirmation or ACK.
 #include <stdio.h>
 #include <stdlib.h>
+#include <initializer_list>
 #include "../firmware/esp8266_review_diagnostic/LocalAdmissionReceipt.h"
 using namespace floodguard_transport_review;
 static unsigned checks=0;
