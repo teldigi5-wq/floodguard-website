@@ -72,7 +72,7 @@ function validateHistory(current,uid,epoch,issuerFingerprint,trustedReceiptKey) 
   const keys=Object.keys(existing.entries);
   if(keys.length<1||keys.length>MAX_RECORDS)
     return {error:'publication-history-invalid'};
-  const sorted=keys.map(k=>/^s_[1-9]\\d*$/.test(k)?Number(k.slice(2)):NaN)
+  const sorted=keys.map(k=>/^s_[1-9]\d*$/.test(k)?Number(k.slice(2)):NaN)
     .sort((a,b)=>a-b);
   if(sorted.some((n,i)=>!int(n,1,2147483647)||!keys.includes(seqKey(n))||
      (i>0&&sorted[i-1]>=n)))return {error:'publication-history-invalid'};
