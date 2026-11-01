@@ -28,6 +28,7 @@ ExclusiveLocalResult LittleFSImpl::createExclusiveLocal(
     // Calls to this experimental API must be separately approved and can
     // never be made from the review-only FloodGuard diagnostic.
     if (!_mounted) return ExclusiveLocalResult::Unsupported;
+    if (_fgExclusiveQuarantined) return ExclusiveLocalResult::CommitUncertain;
     if (!path || !bytes || length == 0 || length > 1038 ||
         path[0] != '/' || path[1] == 0 || strchr(path + 1, '/') ||
         !pathValid(path)) {
@@ -39,7 +40,10 @@ ExclusiveLocalResult LittleFSImpl::createExclusiveLocal(
         &_lfs, &file, path, LFS_O_WRONLY | LFS_O_CREAT | LFS_O_EXCL);
     if (opened == LFS_ERR_EXIST) return ExclusiveLocalResult::AlreadyExists;
     // Any other lower-level open failure may have changed metadata.
-    if (opened != 0) return ExclusiveLocalResult::CommitUncertain;
+    if (opened != 0) {
+        _fgExclusiveQuarantined = true;
+        return ExclusiveLocalResult::CommitUncertain;
+    }
 
     const lfs_ssize_t written = lfs_file_write(&_lfs, &file, bytes, length);
     // Never skip close: it may also flush and return an independent error.
@@ -48,14 +52,17 @@ ExclusiveLocalResult LittleFSImpl::createExclusiveLocal(
     const int closed = lfs_file_close(&_lfs, &file);
     if (written != static_cast<lfs_ssize_t>(length) ||
         synced != 0 || closed != 0) {
+        _fgExclusiveQuarantined = true;
         return ExclusiveLocalResult::CommitUncertain;
     }
 
     // A local readback check is NOT physical power-loss durability, remote
     // receipt or safe-to-delete proof. Read in small bounded chunks.
     lfs_file_t check = {};
-    if (lfs_file_open(&_lfs, &check, path, LFS_O_RDONLY) != 0)
+    if (lfs_file_open(&_lfs, &check, path, LFS_O_RDONLY) != 0) {
+        _fgExclusiveQuarantined = true;
         return ExclusiveLocalResult::CommitUncertain;
+    }
     bool same = lfs_file_size(&_lfs, &check) ==
                 static_cast<lfs_soff_t>(length);
     uint8_t scratch[64] = {};
@@ -72,6 +79,7 @@ ExclusiveLocalResult LittleFSImpl::createExclusiveLocal(
         offset += n;
     }
     if (lfs_file_close(&_lfs, &check) != 0) same = false;
+    if (!same) _fgExclusiveQuarantined = true;
     return same ? ExclusiveLocalResult::LocalBytesMatched
                 : ExclusiveLocalResult::CommitUncertain;
 }
@@ -145,6 +153,11 @@ bool FS::exists(const char* path) {""", fscpp)
         anchor+"""    ExclusiveLocalResult createExclusiveLocal(
         const char* path, const uint8_t* bytes, size_t length) override;
 """, littleh)
+    raw[littleh] = replace_once(raw[littleh],
+        "    bool     _mounted;\n};",
+        "    bool     _mounted;\n"
+        "    // This experimental gate is volatile, per filesystem instance.\n"
+        "    bool     _fgExclusiveQuarantined = false;\n};", littleh)
 
     littlecpp = "libraries/LittleFS/src/LittleFS.cpp"
     raw[littlecpp] = replace_once(raw[littlecpp],
