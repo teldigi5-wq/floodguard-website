@@ -26,6 +26,12 @@
 #include "V6SerialParser.h"
 #include "SecureIngressTransport.h"
 #include "OneFrameLittleFsStore.h"
+#include "EightSlotLittleFsAdapter.h"
+
+// Compile-only eight-slot journal; no filesystem mount, writes, ACK or uploads.
+// Do NOT flash as the working flood-warning controller.
+static_assert(sizeof(floodguard_retained_review::LittleFsEightSlots) > 0,
+              "Bounded LittleFS adapter must compile and remain dormant");
 
 // Compile-check LittleFS record preservation; do NOT mount the flash or
 // create/write any file in setup() or loop(). The live device remains untouched.
