@@ -85,3 +85,22 @@ test('LittleFS storage faults latch quarantine and block all same-instance mount
   assert.ok(!/\breset\s*\(/.test(health));
   assert.match(adapter,/bool writeNew\(uint8_t, const uint8_t \*,size_t\)\s*\{\s*return false;/);
 });
+
+test('ESP8266 core access boundary must fail closed until a supported exclusive-create extension exists',()=>{
+  const negative=readFileSync('tests/firmware_negative_core_abi/firmware_negative_core_abi.ino','utf8');
+  assert.match(negative,/#ifndef FG_CORE_ABI_NEGATIVE_TEST/);
+  assert.match(negative,/#if defined\(FG_NEGATIVE_GET_IMPL\) == defined\(FG_NEGATIVE_GET_FS\)/);
+  assert.match(negative,/LittleFS\.getImpl\(\)/);
+  assert.match(negative,/implementation->getFS\(\)/);
+  // These internal pointers remain prohibited in production adapter code.
+  for(const forbidden of [/\.getImpl\s*\(/,/->getFS\s*\(/,/\blfs_file_open\s*\(/,
+                          /LittleFS\.open\s*\([^\n]*"wx"/]){
+    assert.doesNotMatch(adapter,forbidden);
+  }
+  assert.match(adapter,/bool writeNew\(uint8_t, const uint8_t \*,size_t\)\s*\{\s*return false;/);
+  const active=sketch.slice(sketch.indexOf('void setup()'));
+  for(const forbidden of [/mountExplicitly\s*\(/,/appendJournal\s*\(/,
+                          /lfs_file_open\s*\(/,/LittleFS\.begin\s*\(/,
+                          /WiFi\.begin\s*\(/])
+    assert.doesNotMatch(active,forbidden);
+});
