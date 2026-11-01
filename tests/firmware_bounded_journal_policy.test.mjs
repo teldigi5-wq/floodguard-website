@@ -50,7 +50,7 @@ test('no format, removal, compact, ACK or live TLS in any journal module',()=>{
 test('adapter explicitly marks missing-versus-filesystem-error ambiguity as a release blocker',()=>{
   assert.match(adapter,/cannot reliably distinguish I\/O failure/);
   assert.match(adapter,/return SlotPresence::Uncertain/);
-  assert.match(adapter,/if \\(!mounted_ \\|\\|/);
+  assert.ok(adapter.includes('if (!mounted_ ||'));
   assert.match(adapter,/file\.flush\(\)/);
   assert.match(adapter,/return written == size/);
 });
