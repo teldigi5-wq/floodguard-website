@@ -77,11 +77,14 @@ static const struct lfs_config config = {
 static const char payload[] =
     "opaque journal fixture; not device-authenticated and not cloud-confirmed";
 static const char *const target = "/fgq2_0.bin";
+static const char *phase = "unknown";
 
 static void expect_original(lfs_t *fs) {
     lfs_file_t f = {0};
     char buf[sizeof(payload)] = {0};
-    assert(lfs_file_open(fs, &f, target, LFS_O_RDONLY) == 0);
+    const int opened = lfs_file_open(fs, &f, target, LFS_O_RDONLY);
+    if (opened != 0) fprintf(stderr, "read-back open failed: phase=%s code=%d\\n", phase, opened);
+    assert(opened == 0);
     assert(lfs_file_read(fs, &f, buf, sizeof(payload)) ==
            (lfs_ssize_t)sizeof(payload));
     assert(memcmp(buf, payload, sizeof(payload)) == 0);
@@ -114,13 +117,16 @@ int main(void) {
            (lfs_ssize_t)sizeof(payload));
     assert(lfs_file_sync(&fs, &first) == 0);
     assert(lfs_file_close(&fs, &first) == 0);
+    phase = "initial commit";
     expect_original(&fs);
+    phase = "initial duplicate";
     expect_exclusive_refusal(&fs);
 
     // A normal remount is a host restart simulation, not a brownout proof.
     assert(lfs_unmount(&fs) == 0);
     memset(&fs, 0, sizeof(fs));
     assert(lfs_mount(&fs, &config) == 0);
+    phase = "remounted duplicate";
     expect_exclusive_refusal(&fs);
 
     // A block-device read error must never authorize create-over-existing.
@@ -130,6 +136,7 @@ int main(void) {
                               LFS_O_WRONLY | LFS_O_CREAT | LFS_O_EXCL);
     assert(result < 0);
     disk.fail_read_once = 0;
+    phase = "injected read fault aftermath";
     expect_original(&fs);
     assert(lfs_unmount(&fs) == 0);
 
