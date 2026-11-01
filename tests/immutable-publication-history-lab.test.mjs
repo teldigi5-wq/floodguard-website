@@ -140,7 +140,7 @@ test('history backpressure blocks ninth event rather than discarding prior eight
     advance(h,sequence,options);
   }
   const before=structuredClone(h.root.publicationHistoryV1);
-  const ninth=h.derive(h.request(9,{observedAtMs:NOW-100,
+  const ninth=h.derive(h.request(9,{observedAtMs:NOW-300,
     distanceCm:13.5,levelCm:11.5,risk:'DANGER'}));
   assert.equal(ninth.allowed,false);
   assert.equal(ninth.reason,'publication-evidence-capacity-reached');
