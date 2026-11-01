@@ -180,7 +180,7 @@ test('separately signed witness observes older history in actual RTDB Emulator r
     historyDigest,
     receiptSignerFingerprint:createHash('sha256').update(
       issuer.publicKey.export({type:'spki',format:'der'})).digest('hex'),
-    witnessedAtMs:NOW
+    witnessedAtMs:NOW+100
   };
   const witnessSignature=sign(null,Buffer.from(JSON.stringify(witness)),
     external.privateKey).toString('base64url');
@@ -220,7 +220,7 @@ test('emulated old root and valid old signature fail against retained newer exte
     digest:oldCheckpoint.digest,historyDigest:oldHistoryDigest,
     receiptSignerFingerprint:createHash('sha256').update(
       issuer.publicKey.export({type:'spki',format:'der'})).digest('hex'),
-    witnessedAtMs:NOW};
+    witnessedAtMs:NOW+100};
   const signature=sign(null,Buffer.from(JSON.stringify(witness)),
     external.privateKey).toString('base64url');
   const result=observePinnedHistoricalWitnessLab({
