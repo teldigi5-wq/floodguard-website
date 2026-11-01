@@ -250,3 +250,27 @@ test('R2 single-consumer review queue is read-only, bounded and inactive in MCU 
   const active=sketch.slice(sketch.indexOf('void setup()'));
   assert.doesNotMatch(active,/ReadOnlyOwnerQueue|probeJournalSlot\s*\(|createExclusiveLocal\s*\(|LittleFS\.begin\s*\(/);
 });
+
+test('R2 host-only thread owner enforces guarded read dispatch, never device activation',()=>{
+  const owner=readFileSync('experiments/esp8266-core-excl-review/HostOwnerReadDispatcher.h','utf8');
+  const harness=readFileSync('tests/firmware_host_owner_read_dispatcher.cpp','utf8');
+  const workflow=readFileSync('.github/workflows/nodemcu-no-truncation-storage.yml','utf8');
+  assert.match(owner,/std::this_thread::get_id\(\) != owner_/);
+  assert.match(owner,/std::lock_guard<std::mutex>/);
+  assert.match(owner,/if \(id != 0 && id <= highestAcceptedId_\)/);
+  assert.match(owner,/queue_\.take\(ticket\)/);
+  assert.match(owner,/queue_\.complete\(ticket.requestId,readOk\)/);
+  assert.match(owner,/catch \(\.\.\.\)/);
+  assert.match(owner,/bool mayWrite\(\) const \{ return false; \}/);
+  assert.match(owner,/bool maySendCloudAck\(\) const \{ return false; \}/);
+  assert.match(owner,/bool mayOperateGate\(\) const \{ return false; \}/);
+  assert.match(harness,/testConcurrentSameIdExactlyOneAccepted/);
+  assert.match(harness,/testWrongThreadCannotInvokeReader/);
+  assert.match(harness,/testCorruptCRCStopsAllFutureCallbacks/);
+  assert.match(harness,/decode\(records\[t.slot\]/);
+  assert.match(workflow,/g\+\+ -std=c\+\+11 -O2 -Wall -Wextra -Werror -pedantic -pthread/);
+  assert.match(workflow,/firmware_host_owner_read_dispatcher\.cpp/);
+  assert.match(adapter,/bool writeNew\(uint8_t, const uint8_t \*,size_t\)\s*\{\s*return false;/);
+  const active=sketch.slice(sketch.indexOf('void setup()'));
+  assert.doesNotMatch(active,/HostOwnerReadDispatcher|std::thread|std::mutex|createExclusiveLocal\s*\(/);
+});
