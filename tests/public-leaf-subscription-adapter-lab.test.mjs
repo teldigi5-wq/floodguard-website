@@ -58,6 +58,21 @@ test('permission denial or transport failure evicts previously accepted values',
   assert.equal(h.adapter.current.state.faults[PREFIX+'rain/status'],'TRANSPORT_ERROR');
   assert.doesNotMatch(JSON.stringify(h.reports),/private URL must not leak/);
 });
+test('a revoked leaf cannot be resurrected by a delayed value callback',()=>{
+  const h=harness(); h.adapter.start();
+  const old=h.listeners.get(PREFIX+'water/status');
+  old.onValue('WARNING');
+  old.onError({code:'PERMISSION_DENIED'});
+  const count=h.reports.length;
+  old.onValue('SAFE');
+  old.onError({code:'ERR_LATE'});
+  assert.equal(h.reports.length,count);
+  assert.equal(h.adapter.current.state.records[PREFIX+'water/status'],undefined);
+  assert.equal(h.adapter.current.state.faults[PREFIX+'water/status'],'PERMISSION_DENIED');
+  h.adapter.reconnect();
+  h.read('water/status','WARNING');
+  assert.equal(h.adapter.current.state.records[PREFIX+'water/status'].value,'WARNING');
+});
 test('invalid object at a readable scalar leaf cannot poison status',()=>{
   const h=harness();h.adapter.start();
   h.read('water/status',{networkPassword:'not real'});
