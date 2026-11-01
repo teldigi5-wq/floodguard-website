@@ -1,9 +1,9 @@
 name: FloodGuard no-truncation NodeMCU and POSIX exclusive journal checks
 on:
   push:
-    branches: [security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101, test/r2-pinned-esp8266-api-access-boundary-20261101, test/r2-exclusive-write-lifecycle-20261101, test/r2-single-owner-core-api-overlay-20261101, test/r2-core-overlay-exact-host-faults-20261101, test/r2-core-overlay-torn-write-reentry-20261101, security/r2-eight-slot-boot-audit-20261101, test/r2-typed-probe-owner-queue-20261101, test/r2-owner-thread-host-dispatcher-20261101, test/r2-esp8266-loop-flash-evidence-20261101, test/r2-board-layout-evidence-gate-20261101]
+    branches: [security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101, test/r2-pinned-esp8266-api-access-boundary-20261101, test/r2-exclusive-write-lifecycle-20261101, test/r2-single-owner-core-api-overlay-20261101, test/r2-core-overlay-exact-host-faults-20261101, test/r2-core-overlay-torn-write-reentry-20261101, security/r2-eight-slot-boot-audit-20261101, test/r2-typed-probe-owner-queue-20261101, test/r2-owner-thread-host-dispatcher-20261101, test/r2-esp8266-loop-flash-evidence-20261101, test/r2-board-layout-evidence-gate-20261101, test/r2-resolved-build-layout-20261101]
   pull_request:
-    branches: [test/r2-bounded-device-journal-20261101, security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101, test/r2-pinned-esp8266-api-access-boundary-20261101, test/r2-exclusive-write-lifecycle-20261101, test/r2-single-owner-core-api-overlay-20261101, test/r2-core-overlay-exact-host-faults-20261101, test/r2-core-overlay-torn-write-reentry-20261101, security/r2-eight-slot-boot-audit-20261101, test/r2-typed-probe-owner-queue-20261101, test/r2-owner-thread-host-dispatcher-20261101, test/r2-esp8266-loop-flash-evidence-20261101]
+    branches: [test/r2-bounded-device-journal-20261101, security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101, test/r2-pinned-esp8266-api-access-boundary-20261101, test/r2-exclusive-write-lifecycle-20261101, test/r2-single-owner-core-api-overlay-20261101, test/r2-core-overlay-exact-host-faults-20261101, test/r2-core-overlay-torn-write-reentry-20261101, security/r2-eight-slot-boot-audit-20261101, test/r2-typed-probe-owner-queue-20261101, test/r2-owner-thread-host-dispatcher-20261101, test/r2-esp8266-loop-flash-evidence-20261101, test/r2-board-layout-evidence-gate-20261101]
 permissions:
   contents: read
 concurrency:
@@ -61,6 +61,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'firmware_board_layout_evidence_test.py' -v
+          python3 -m unittest discover -s tests -p 'firmware_resolved_build_layout_test.py' -v
           # The public template MUST be incomplete, never an operator permit.
           python3 -m json.tool \
             experiments/esp8266-core-excl-review/board_evidence_template.json >/dev/null
@@ -165,6 +166,23 @@ jobs:
           test -f "$BOARDS"
           python3 experiments/esp8266-core-excl-review/r2_board_layout_evidence.py \
             --boards "$BOARDS" --sdk-only
+      - name: Cross-check explicit Arduino CLI resolved build properties for 4 NodeMCU FS menus (no compile/upload)
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="$HOME/.arduino15/packages/esp8266/hardware/esp8266/3.1.2/boards.txt"
+          for MENU in 4M1M 4M2M 4M3M 4M; do
+            FQBN="esp8266:esp8266:nodemcuv2:eesz=${MENU}"
+            PROPERTIES="$(mktemp /tmp/fg-cli-physical-unknown.XXXXXX)"
+            # CLI documentation: --show-properties prints resolved configuration
+            # without compiling/uploading. The full output is never logged.
+            arduino-cli compile --fqbn "$FQBN" --show-properties=expanded \
+              firmware/esp8266_review_diagnostic > "$PROPERTIES"
+            python3 experiments/esp8266-core-excl-review/r2_resolved_build_layout.py \
+              --boards "$SDK" --properties "$PROPERTIES" --fqbn "$FQBN" --menu "$MENU"
+            rm -f "$PROPERTIES"
+          done
+          echo "PASS 4 PINNED RESOLVED BUILD MENUS; NO PHYSICAL BOARD MEASUREMENT"
       - name: Real NodeMCU 1.0 ESP-12E GCC compile, no upload or artifacts
         shell: bash
         run: |

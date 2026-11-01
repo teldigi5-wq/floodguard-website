@@ -325,3 +325,26 @@ test('R2 pinned board layout evidence is offline, never flash authorization or p
   const active=sketch.slice(sketch.indexOf('void setup()'));
   assert.doesNotMatch(active,/r2_board_layout_evidence|flash_id|read_flash|write_flash|LittleFS\.begin\s*\(/);
 });
+
+test('R2 resolved CLI FS layouts must agree with pinned SDK and never grant release permission',()=>{
+  const gate=readFileSync('experiments/esp8266-core-excl-review/r2_resolved_build_layout.py','utf8');
+  const cases=readFileSync('tests/firmware_resolved_build_layout_test.py','utf8');
+  const workflow=readFileSync('.github/workflows/nodemcu-no-truncation-storage.yml','utf8');
+  assert.match(gate,/board\.get_profiles\(pinned_boards, verify_pin=True\)/);
+  assert.match(gate,/if fqbn != f"\{TARGET\}:eesz=\{menu\}"/);
+  assert.match(gate,/if props\["build\.flash_ld"\] != expected\["ld"\]/);
+  assert.match(gate,/if props\["build\.flash_size"\] != "4M"/);
+  assert.match(gate,/filesystem_physically_verified": False/);
+  assert.match(gate,/production_go": False/);
+  assert.match(gate,/may_flash": False/);
+  assert.match(cases,/test_implicit_default_fqbn_rejected/);
+  assert.match(cases,/test_no_fs_cannot_claim_fs/);
+  assert.match(cases,/test_unrelated_property_not_echoed/);
+  assert.match(workflow,/--show-properties=expanded/);
+  assert.match(workflow,/--menu "\$MENU"/);
+  assert.match(workflow,/firmware_resolved_build_layout_test\.py/);
+  assert.match(workflow,/rm -f "\$PROPERTIES"/);
+  assert.match(adapter,/bool writeNew\(uint8_t, const uint8_t \*,size_t\)\s*\{\s*return false;/);
+  const active=sketch.slice(sketch.indexOf('void setup()'));
+  assert.doesNotMatch(active,/show-properties|r2_resolved_build_layout|LittleFS\.begin\s*\(/);
+});
