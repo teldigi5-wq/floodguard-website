@@ -1,9 +1,9 @@
 name: FloodGuard no-truncation NodeMCU and POSIX exclusive journal checks
 on:
   push:
-    branches: [security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101]
+    branches: [security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101, test/r2-pinned-esp8266-api-access-boundary-20261101]
   pull_request:
-    branches: [test/r2-bounded-device-journal-20261101, security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101]
+    branches: [test/r2-bounded-device-journal-20261101, security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101]
 permissions:
   contents: read
 concurrency:
@@ -128,3 +128,27 @@ jobs:
             --build-property compiler.cpp.extra_flags=-DFG_DIAGNOSTIC_BUILD_ONLY \
             firmware/esp8266_review_diagnostic
           echo "NODEMCU_NO_TRUNCATION_COMPILE_SUCCESS_NO_FLASH_NO_NETWORK"
+      - name: Prove protected LittleFS access is REJECTED by the pinned NodeMCU compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          for symbol in GET_IMPL GET_FS; do
+            log="$(mktemp /tmp/fg-core-abi-deny.XXXXXX)"
+            if arduino-cli compile \
+              --fqbn esp8266:esp8266:nodemcuv2 \
+              --warnings all \
+              --build-property "compiler.cpp.extra_flags=-DFG_CORE_ABI_NEGATIVE_TEST -DFG_NEGATIVE_${symbol}" \
+              tests/firmware_negative_core_abi >"$log" 2>&1
+            then
+              echo "FAIL: protected ${symbol} unexpectedly compiled. Do not enable direct storage access." >&2
+              exit 1
+            fi
+            expected="getImpl"
+            if [ "$symbol" = "GET_FS" ]; then expected="getFS"; fi
+            if ! grep -E "error:.*${expected}.*protected" "$log" >/dev/null; then
+              echo "FAIL: negative build did not reject ${expected} for the expected protected-access reason." >&2
+              tail -n 35 "$log" >&2
+              exit 1
+            fi
+            echo "PASS pinned ESP8266 core rejects protected ${expected} access (NO DEVICE FLASH)"
+          done
