@@ -13,11 +13,11 @@ const NOW=1700000000500;
 const frame=(sequence=1,fields={})=>({
   sequence,distanceCm:16.5,levelCm:8.5,risk:'WARNING',...fields
 });
-function fixture(fields={}) {
+function fixture(fields={}, selectedFrame=frame()) {
   const {privateKey,publicKey}=generateKeyPairSync('ed25519');
   const envelope={
     version:'floodguard-offline-envelope-v1',deviceId:'device-stage-a',
-    epoch:1,observedAtMs:NOW-1000,frame:frame(),
+    epoch:1,observedAtMs:NOW-1000,frame:selectedFrame,
   };
   const digest=createHash('sha256').update(
     canonicalOfflineEnvelope(envelope),'utf8').digest('hex');
@@ -55,11 +55,12 @@ test('valid signed receipt + confirmed database record proposes ONLY five isolat
   assert.ok(Object.isFrozen(p.proposedLeaves));
   assert.ok(Object.isFrozen(p.nextCheckpoint));
 });
-test('reported SAFE is an unsigned physical conclusion, never field clearance',()=>{
-  const x=fixture();
+test('signed report SAFE is not proof of physical field clearance',()=>{
+  const x=fixture({},frame(1,{distanceCm:18.5,levelCm:6.5,risk:'SAFE'}));
   // This receipt proves the lab input's sequence/digest, not calibration,
   // independent hydraulic safety or actual gate position.
   const p=accepted(x);
+  assert.equal(p.proposedLeaves['water/status'],'SAFE');
   assert.equal(p.floodClearance,'UNKNOWN');
   assert.equal(p.physicalGatePosition,'UNVERIFIED');
   assert.equal(p.notificationDelivery,'NOT_VERIFIED');
