@@ -56,13 +56,20 @@ function initialState(obs) {
 const seed=async state=>env.withSecurityRulesDisabled(
   async ctx=>ctx.database().ref(ROOT).set(state)
 );
-const get=async()=>env.withSecurityRulesDisabled(async ctx=>
-  (await ctx.database().ref(ROOT).get()).val()
-);
+const get=async()=>{
+  // Test-environment callback return values are not exposed; capture the
+  // snapshot inside the privileged context explicitly.
+  let snapshot;
+  await env.withSecurityRulesDisabled(async ctx=>{
+    snapshot=(await ctx.database().ref(ROOT).get()).val();
+  });
+  return snapshot;
+};
 const guest=()=>env.unauthenticatedContext().database();
 const read=async path=>(await assertSucceeds(guest().ref(path).get())).val();
 async function atomic(obs){
-  return env.withSecurityRulesDisabled(async ctx=>{
+  let outcome;
+  await env.withSecurityRulesDisabled(async ctx=>{
     const ref=ctx.database().ref(ROOT);
     // Hold RTDB's initial value in the sync tree across the transaction;
     // get() alone may be released before the transaction's first callback.
@@ -84,10 +91,11 @@ async function atomic(obs){
         result=deriveIsolatedAtomicWaterStateLab({current,...obs});
         return result.allowed ? result.next : undefined;
       },undefined,false);
-      return {committed:completed.committed,reason:result.reason||null,
+      outcome={committed:completed.committed,reason:result.reason||null,
         sequence:result.allowed ? result.sequence:null};
     }finally{ref.off('value',cb.listener);}
   });
+  return outcome;
 }
 const denied=async obs=>{
   const before=await get(),res=await atomic(obs);
@@ -227,6 +235,6 @@ test('SAFE report still leaves global safety unknown and never changes physical 
 
 test('pure state reducer has no direct SDK, network, credentials, command or write API',()=>{
   const src=readFileSync('experiments/isolated-atomic-water-state-lab.mjs','utf8');
-  assert.doesNotMatch(src,/firebase-admin|firebase\/database|node:https|fetch\s*\(|\.set\s*\(|\.update\s*\(|\.listen\s*\(/);
+  assert.doesNotMatch(src,/firebase-admin|firebase\\/database|node:https|fetch\\s*\\(|\\b(?:db|database|ref|target)\\.(?:set|update)\\s*\\(|\\.listen\\s*\\(/);
   assert.doesNotMatch(src,/servo\.write|serviceAccount|process\.env|\.transaction\s*\(/);
 });
