@@ -1,9 +1,9 @@
 name: FloodGuard no-truncation NodeMCU and POSIX exclusive journal checks
 on:
   push:
-    branches: [security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101]
+    branches: [security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101]
   pull_request:
-    branches: [test/r2-bounded-device-journal-20261101, security/r2-no-truncation-exclusive-journal-20261101]
+    branches: [test/r2-bounded-device-journal-20261101, security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101]
 permissions:
   contents: read
 concurrency:
@@ -41,6 +41,37 @@ jobs:
         run: |
           node --test tests/firmware_v6_diagnostic_policy.test.mjs tests/firmware_bearssl_transport_policy.test.mjs tests/firmware_nodemcu_storage_policy.test.mjs tests/firmware_bounded_journal_policy.test.mjs tests/v6-serial-water-safety-preflight.test.mjs
           node --test tests/esp8266-transport-migration-preflight.test.mjs tests/loopback-durable-outbox-ingress.test.mjs tests/loopback-signed-https-ingress.test.mjs
+      - name: Verify and execute the EXACT Arduino-pinned upstream LittleFS O_EXCL C implementation (host only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          UPSTREAM=6a53d76e90af33f0656333c1db09bd337fa75d23
+          SRC="$(mktemp -d /tmp/fg-littlefs-upstream.XXXXXX)"
+          # Hashes are Git blob identities for files AT the submodule SHA above.
+          # Do not allow silently switching to a floating branch or newer ABI.
+          for pair in \
+            "lfs.h 2bce17f5ccb91236341f30994c1b8ff42fc06872" \
+            "lfs.c 26280fa89509bb4f94ced008ac02cd60b5c2cff8" \
+            "lfs_util.h 13e9396178c24286ef4d3548c029d844d0c3be3d" \
+            "lfs_util.c 9cdd1c60ebec468cb3866bda48f0af5462742a57"
+          do
+            read -r name sha <<< "$pair"
+            curl --proto '=https' --tlsv1.2 -fsSL --retry 3 \
+              "https://raw.githubusercontent.com/littlefs-project/littlefs/${UPSTREAM}/${name}" \
+              -o "${SRC}/${name}"
+            actual="$(git hash-object "${SRC}/${name}")"
+            if [ "$actual" != "$sha" ]; then
+              echo "Source revision mismatch for ${name}" >&2
+              exit 1
+            fi
+          done
+          gcc -std=c99 -O2 -Wall -Wextra -Werror \
+            -DLFS_NO_DEBUG -DLFS_NO_WARN -DLFS_NO_ERROR \
+            -I "$SRC" \
+            tests/firmware_littlefs_pinned_exclusive_host.c \
+            "$SRC/lfs.c" "$SRC/lfs_util.c" \
+            -o /tmp/fg-littlefs-exclusive-host
+          /tmp/fg-littlefs-exclusive-host
       - name: Real POSIX Linux exclusive file, symlink and process race tests
         run: |
           node --check experiments/exclusive-device-journal-fs-lab.mjs
