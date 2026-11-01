@@ -42,7 +42,7 @@ inline bool parseUnsigned(const char *s, uint32_t maxValue, uint32_t &out) {
   for (const char *p = s; *p; ++p) {
     if (*p < '0' || *p > '9') return false;
     const uint32_t d = static_cast<uint32_t>(*p - '0');
-    if (n > (maxValue - d) / 10) return false;
+    if (d > maxValue || n > (maxValue - d) / 10) return false;
     n = n * 10 + d;
   }
   out = n;
