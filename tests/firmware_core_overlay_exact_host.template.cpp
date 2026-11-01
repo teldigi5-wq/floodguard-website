@@ -93,9 +93,14 @@ namespace fs {
 enum class ExclusiveLocalResult : uint8_t {
   Unsupported, InvalidInput, AlreadyExists, CommitUncertain, LocalBytesMatched
 };
+enum class JournalSlotObservation : uint8_t {
+  Unsupported, InvalidInput, PresentUnverified,
+  AbsenceUnverified, StorageUncertain
+};
 }
 namespace littlefs_impl {
 using fs::ExclusiveLocalResult;
+using fs::JournalSlotObservation;
 class LittleFSImpl {
  public:
   lfs_t _lfs = {};
@@ -107,6 +112,7 @@ class LittleFSImpl {
   }
   ExclusiveLocalResult createExclusiveLocal(
       const char* path,const uint8_t* bytes,size_t length);
+  JournalSlotObservation probeJournalSlot(const char* path);
   bool mountExisting() {
     if (_mounted) return false;
     std::memset(&_lfs,0,sizeof(_lfs));
@@ -128,11 +134,13 @@ class LittleFSImpl {
 };
 
 // EXACT_IMPL_FROM_PINNED_OVERLAY
+// EXACT_PROBE_FROM_PINNED_OVERLAY
 
 } // namespace littlefs_impl
 
 using littlefs_impl::LittleFSImpl;
 using fs::ExclusiveLocalResult;
+using fs::JournalSlotObservation;
 static uint8_t fixture[220];
 static void setup_fixture() {
   for(size_t i=0;i<sizeof(fixture);++i)
@@ -329,6 +337,64 @@ static void case_reentrant_writer_refused() {
   fs.stop();
 }
 
+static void case_probe_unmounted_invalid() {
+  blank_volume();
+  LittleFSImpl fs;
+  assert(fs.probeJournalSlot("/fgq2_0.bin")==JournalSlotObservation::Unsupported);
+  assert(fs.initializeNew());
+  const unsigned p=disk.progs,e=disk.erases,r=disk.reads;
+  assert(fs.probeJournalSlot(nullptr)==JournalSlotObservation::InvalidInput);
+  assert(fs.probeJournalSlot("/outside.bin")==JournalSlotObservation::InvalidInput);
+  assert(fs.probeJournalSlot("/fgq2_8.bin")==JournalSlotObservation::InvalidInput);
+  assert(disk.progs==p && disk.erases==e && disk.reads==r);
+  assert(!fs._fgExclusiveQuarantined);
+  fs.stop();
+}
+static void case_probe_present_is_only_metadata() {
+  blank_volume();
+  LittleFSImpl fs;
+  assert(fs.initializeNew());
+  assert(fs.createExclusiveLocal("/fgq2_0.bin",fixture,sizeof(fixture))==
+         ExclusiveLocalResult::LocalBytesMatched);
+  const unsigned p=disk.progs,e=disk.erases;
+  assert(fs.probeJournalSlot("/fgq2_0.bin")==
+         JournalSlotObservation::PresentUnverified);
+  assert(disk.progs==p && disk.erases==e);
+  assert(!fs._fgExclusiveQuarantined);
+  fs.stop();
+}
+static void case_probe_absence_quarantines_even_if_no_io_error() {
+  blank_volume();
+  LittleFSImpl fs;
+  assert(fs.initializeNew());
+  assert(fs.probeJournalSlot("/fgq2_1.bin")==
+         JournalSlotObservation::AbsenceUnverified);
+  assert(fs._fgExclusiveQuarantined);
+  const unsigned p=disk.progs,e=disk.erases,r=disk.reads;
+  assert(fs.probeJournalSlot("/fgq2_1.bin")==
+         JournalSlotObservation::StorageUncertain);
+  assert(fs.createExclusiveLocal("/fgq2_1.bin",fixture,sizeof(fixture))==
+         ExclusiveLocalResult::CommitUncertain);
+  assert(disk.progs==p && disk.erases==e && disk.reads==r);
+  fs.stop();
+}
+static void case_probe_after_torn_program_is_denied_without_io() {
+  blank_volume();
+  LittleFSImpl fs;
+  assert(fs.initializeNew());
+  assert(fs.createExclusiveLocal("/fgq2_0.bin",fixture,sizeof(fixture))==
+         ExclusiveLocalResult::LocalBytesMatched);
+  disk.torn_prog_once=true;
+  assert(fs.createExclusiveLocal("/fgq2_1.bin",fixture,sizeof(fixture))==
+         ExclusiveLocalResult::CommitUncertain);
+  assert(fs._fgExclusiveQuarantined);
+  const unsigned p=disk.progs,e=disk.erases,r=disk.reads;
+  assert(fs.probeJournalSlot("/fgq2_0.bin")==
+         JournalSlotObservation::StorageUncertain);
+  assert(disk.progs==p && disk.erases==e && disk.reads==r);
+  fs.stop();
+}
+
 int main() {
   case_unmounted_and_invalid();
   case_exact_slot_allowlist();
@@ -338,6 +404,10 @@ int main() {
   case_read_fault_quarantines();
   case_torn_metadata_program_quarantines();
   case_reentrant_writer_refused();
-  std::puts("PASS exact patched ESP8266 LittleFS core method: 8 RAM host scenarios; no flash");
+  case_probe_unmounted_invalid();
+  case_probe_present_is_only_metadata();
+  case_probe_absence_quarantines_even_if_no_io_error();
+  case_probe_after_torn_program_is_denied_without_io();
+  std::puts("PASS exact patched ESP8266 LittleFS core: 8 write + 4 typed probe RAM scenarios; no flash");
   return 0;
 }
