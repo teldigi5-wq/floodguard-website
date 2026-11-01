@@ -47,6 +47,16 @@ test('no format, removal, compact, ACK or live TLS in any journal module',()=>{
   assert.doesNotMatch(adapter,/\.remove\s*\(/);
 });
 
+test('NodeMCU adapter prevents implicit LittleFS auto-format even when mount fails',()=>{
+  // ESP8266 core 3.1.2 defaults LittleFSConfig to autoFormat=true.
+  // Reject failure to set the no-format configuration before begin().
+  assert.match(adapter,/LittleFSConfig\\s+config\\s*\\(\\s*false\\s*\\)/);
+  assert.match(adapter,/if\\s*\\(!LittleFS\\.setConfig\\(config\\)\\)\\s*return false;/);
+  assert.ok(adapter.indexOf('LittleFS.setConfig(config)') < adapter.indexOf('LittleFS.begin()'));
+  assert.ok(!adapter.includes('LittleFS.format('));
+  assert.ok(!adapter.includes('setAutoFormat(true)'));
+});
+
 test('NodeMCU LittleFS adapter refuses ambiguous absence and cannot truncate existing journal data',()=>{
   assert.ok(adapter.includes('LittleFS.exists(path(slot))'));
   assert.ok(adapter.includes('return SlotPresence::Uncertain'));
