@@ -5,6 +5,7 @@ const dir='firmware/esp8266_review_diagnostic/';
 const sketch=readFileSync(dir+'esp8266_review_diagnostic.ino','utf8');
 const journal=readFileSync(dir+'BoundedFrameJournal.h','utf8');
 const adapter=readFileSync(dir+'EightSlotLittleFsAdapter.h','utf8');
+const health=readFileSync(dir+'JournalMountHealth.h','utf8');
 const codec=readFileSync(dir+'RetainedFrameCodec.h','utf8');
 
 test('NodeMCU diagnostic compiles bounded outbox, but runs no flash or cloud functions',()=>{
@@ -51,7 +52,7 @@ test('NodeMCU adapter prevents implicit LittleFS auto-format even when mount fai
   // ESP8266 core 3.1.2 defaults LittleFSConfig to autoFormat=true.
   // Reject failure to set the no-format configuration before begin().
   assert.match(adapter,/LittleFSConfig\s+config\s*\(\s*false\s*\)/);
-  assert.match(adapter,/if\s*\(!LittleFS\.setConfig\(config\)\)\s*return false;/);
+  assert.match(adapter,/if\s*\(!LittleFS\.setConfig\(config\)\)\s*\{\s*health_\.finishMount\(false\);\s*return false;/);
   assert.ok(adapter.indexOf('LittleFS.setConfig(config)') < adapter.indexOf('LittleFS.begin()'));
   assert.ok(!adapter.includes('LittleFS.format('));
   assert.ok(!adapter.includes('setAutoFormat(true)'));
@@ -66,6 +67,21 @@ test('NodeMCU LittleFS adapter refuses ambiguous absence and cannot truncate exi
   assert.ok(!adapter.includes('LittleFS.open(path(slot),"a")'));
   assert.ok(!adapter.includes('LittleFS.format('));
   assert.ok(adapter.includes('NO IMPLEMENTATION'));
-  assert.ok(adapter.includes('if (!mounted_ || !dst'));
+  assert.ok(adapter.includes('if (!health_.ready() || !dst'));
   assert.ok(adapter.includes('file.close();'));
+});
+
+test('LittleFS storage faults latch quarantine and block all same-instance mount retries',()=>{
+  assert.match(adapter,/#include "JournalMountHealth.h"/);
+  assert.match(adapter,/JournalMountHealth health_/);
+  assert.match(adapter,/if \(!health_\.beginMount\(\)\) return false;/);
+  assert.match(adapter,/health_\.finishMount\(mounted\);/);
+  assert.match(adapter,/if \(!health_\.ready\(\) \|\| slot >= kJournalSlots\)/);
+  assert.match(adapter,/if \(LittleFS\.exists\(path\(slot\)\)\) return SlotPresence::Present;\s*\/\/[^\n]*\n\s*health_\.quarantine\(\);/);
+  assert.match(adapter,/if \(!file\) \{ health_\.quarantine\(\); return false; \}/);
+  assert.match(adapter,/if \(n != size\) \{ health_\.quarantine\(\); return false; \}/);
+  assert.match(health,/bool beginMount\(\)/);
+  assert.match(health,/void quarantine\(\)/);
+  assert.ok(!/\breset\s*\(/.test(health));
+  assert.match(adapter,/bool writeNew\(uint8_t, const uint8_t \*,size_t\)\s*\{\s*return false;/);
 });
