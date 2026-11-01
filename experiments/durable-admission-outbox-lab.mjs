@@ -104,6 +104,13 @@ export function createDurableAdmissionOutboxLab({directory,integrityKey,identiti
     try{return fn();}finally{fs.closeSync(fd);fs.unlinkSync(lock);}
   };
   return Object.freeze({
+    // Only a verified existing commissioned journal is usable as admission
+    // history. This is an internal readiness probe, NOT device enrollment.
+    ready(){
+      try {
+        return locked(()=>{read();return true;});
+      }catch{return false;}
+    },
     commission(){
       return locked(()=>{
         if(fs.existsSync(file))throw Error('Admission journal already commissioned');
