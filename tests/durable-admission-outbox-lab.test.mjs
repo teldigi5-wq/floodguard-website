@@ -125,6 +125,41 @@ test('loss of the on-disk journal cannot silently reconstruct high-water history
   assert.throws(()=>journal.pending(UID));
 }));
 
+test('separate commissioning seal rejects missing journal and manual history reset',()=>setup(x=>{
+  const journal=x.create();
+  assert.equal(journal.ready(),false);
+  journal.commission();
+  assert.equal(journal.ready(),true);
+  journal.accept(x.signed());
+  const journalPath=path.join(x.dir,'durable-admission-outbox-lab.json');
+  const markerPath=path.join(x.dir,'durable-admission-commissioned.marker.json');
+  assert.equal(fs.existsSync(markerPath),true);
+  fs.unlinkSync(journalPath);
+  assert.equal(journal.ready(),false);
+  assert.equal(x.create().accept(x.signed(2)).accepted,false);
+  assert.throws(()=>journal.commission(),/already commissioned or needs recovery/);
+  assert.equal(fs.existsSync(journalPath),false);
+  // Even an otherwise intact state file is refused if commissioning evidence
+  // is missing. This is not a trusted off-host anti-rollback anchor.
+  fs.unlinkSync(markerPath);
+  assert.equal(x.create().ready(),false);
+}));
+
+test('commission marker integrity, symlinks and wrong sealing keys deny',()=>setup(x=>{
+  const journal=x.create();journal.commission();
+  const marker=path.join(x.dir,'durable-admission-commissioned.marker.json');
+  const copy=fs.readFileSync(marker,'utf8');
+  const wrong=x.create({integrityKey:randomBytes(32)});
+  assert.equal(wrong.ready(),false);
+  fs.writeFileSync(marker,copy.replace('commission-v1','commission-v2'));
+  assert.equal(journal.ready(),false);
+  fs.writeFileSync(marker,copy);
+  assert.equal(journal.ready(),true);
+  fs.renameSync(marker,marker+'.bak');
+  fs.symlinkSync(marker+'.bak',marker);
+  assert.equal(journal.ready(),false);
+}));
+
 test('symlinked journal, stale lock and wrong key refuse operation',()=>setup(x=>{
   const journal=x.create();journal.commission();journal.accept(x.signed());
   const different=x.create({integrityKey:randomBytes(32)});
