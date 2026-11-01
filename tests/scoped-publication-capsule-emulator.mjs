@@ -53,6 +53,10 @@ function signed(sequence=1,changes={}){
 async function transaction(packet,{binding=sourceBinding,receiptKey=issuer.publicKey}={}){
   let candidate=null;
   const ref=publisher.ref(CAPSULE_ROOT);
+  // Fetch a server-authorized snapshot, not just an empty local cache event.
+  const initial=(await assertSucceeds(ref.get())).val();
+  assert.ok(initial?.public?.water&&initial?.checkpoint,
+    'scoped publication capsule must be readable before transaction');
   // RTDB transaction reads root using its authenticated scoped capability.
   await new Promise((resolve,reject)=>{
     const timer=setTimeout(()=>reject(Error('publisher scoped listener timeout')),4000);
