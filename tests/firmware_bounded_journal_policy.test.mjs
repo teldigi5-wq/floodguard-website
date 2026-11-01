@@ -172,3 +172,23 @@ test('core overlay exact-body host fault matrix and sticky error quarantine are 
   const active=sketch.slice(sketch.indexOf('void setup()'));
   assert.doesNotMatch(active,/createExclusiveLocal\s*\(|mountExplicitly\s*\(/);
 });
+
+test('torn program and callback reentry must quarantine the exact core overlay method',()=>{
+  const overlay=readFileSync('experiments/esp8266-core-excl-review/patch_core.py','utf8');
+  const harness=readFileSync('tests/firmware_core_overlay_exact_host.template.cpp','utf8');
+  const flow=readFileSync('.github/workflows/nodemcu-no-truncation-storage.yml','utf8');
+  assert.match(overlay,/if \(_fgExclusiveBusy\) \{/);
+  assert.match(overlay,/_fgExclusiveQuarantined = true;/);
+  assert.match(overlay,/struct BusyRelease \{/);
+  assert.match(overlay,/bool\s+_fgExclusiveBusy = false;/);
+  assert.match(overlay,/!_fgExclusiveQuarantined\)/);
+  assert.match(harness,/torn_prog_once/);
+  assert.match(harness,/const lfs_size_t prefix = n\/2/);
+  assert.match(harness,/case_torn_metadata_program_quarantines/);
+  assert.match(harness,/case_reentrant_writer_refused/);
+  assert.match(harness,/assert\(!fs\._fgExclusiveBusy\)/);
+  assert.match(flow,/test\/r2-core-overlay-torn-write-reentry-20261101/);
+  assert.match(adapter,/bool writeNew\(uint8_t, const uint8_t \*,size_t\)\s*\{\s*return false;/);
+  const active=sketch.slice(sketch.indexOf('void setup()'));
+  assert.doesNotMatch(active,/createExclusiveLocal\s*\(|LittleFS\.begin\s*\(|WiFi\.begin\s*\(/);
+});
