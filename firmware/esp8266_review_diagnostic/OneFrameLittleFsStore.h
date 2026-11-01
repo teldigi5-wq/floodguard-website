@@ -22,8 +22,8 @@ class LittleFsOneFrame {
   Status load(Frame &frame) {
     frame = {};
     if (!mounted_) return Status::StorageUncertain;
-    if (!LittleFS.exists(kPath)) return Status::InvalidInput; // no record
-    File file = LittleFS.open(kPath, "r");
+    if (!LittleFS.exists(path())) return Status::InvalidInput; // no record
+    File file = LittleFS.open(path(), "r");
     if (!file) return Status::StorageUncertain;
     const size_t count = static_cast<size_t>(file.size());
     if (count < 14 || count > kMaxRecord) {
@@ -40,13 +40,13 @@ class LittleFsOneFrame {
                    size_t bodyLength) {
     if (!mounted_) return Status::StorageUncertain;
     // A damaged record is *not* an empty queue. Never reset a record in place.
-    if (LittleFS.exists(kPath)) return Status::ExistingUnacknowledged;
+    if (LittleFS.exists(path())) return Status::ExistingUnacknowledged;
     uint8_t bytes[kMaxRecord] = {};
     size_t total = 0;
     const Status built = encode(sequence, signedBody, bodyLength,
                                 bytes, sizeof(bytes), total);
     if (built != Status::Valid) return built;
-    File file = LittleFS.open(kPath, "w");
+    File file = LittleFS.open(path(), "w");
     if (!file) return Status::StorageUncertain;
     const size_t wrote = file.write(bytes, total);
     file.flush();
@@ -62,7 +62,7 @@ class LittleFsOneFrame {
   }
   // Deliberately no remove, format, clear, compact, rotate or ACK method.
  private:
-  static constexpr const char *kPath = "/fg_pending_v1.dat";
+  static const char *path() { return "/fg_pending_v1.dat"; }
   bool mounted_;
 };
 } // namespace floodguard_retained_review
