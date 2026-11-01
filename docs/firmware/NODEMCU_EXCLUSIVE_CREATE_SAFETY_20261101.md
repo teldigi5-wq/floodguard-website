@@ -27,6 +27,14 @@ The real disk integration tests cover:
 
 A Linux filesystem result does not establish identical flags or crash consistency on the ESP8266: `O_EXCL` is **not** presented as an ESP8266 LittleFS API. Native CRC32 is integrity/damage detection only; signed-looking JSON is not authenticated. The test directory is disposable and safe for delete by the test harness, never a production outbox.
 
+## Additional verified failure mode — implicit auto-format on mount (successor review)
+
+Source inspection of **ESP8266 Arduino core 3.1.2** (`libraries/LittleFS/src/LittleFS.h`) confirms that `LittleFSConfig(bool autoFormat = true)` defaults to formatting enabled. When `LittleFSImpl::begin()` cannot mount a filesystem, it can invoke `format()` if that setting remains enabled. The dormant PR #56 adapter's `mountExplicitly()` called `LittleFS.begin()` without first overriding the default. That is a potential loss-of-existing-volume hazard if the method were ever activated; **there is no evidence it was activated or caused loss**.
+
+The follow-up review makes mounting **fail closed**: create `LittleFSConfig config(false)`, require `LittleFS.setConfig(config)` to succeed **before** `LittleFS.begin()`, and refuse to proceed otherwise. A failed mount cannot authorize automatic formatting through this adapter. A targeted static regression checks the required ordering. The diagnostic sketch still never invokes the mount or writer; `writeNew()` remains disabled.
+
+Core source reference: [ESP8266 Arduino 3.1.2 LittleFS.h](https://github.com/esp8266/Arduino/blob/3.1.2/libraries/LittleFS/src/LittleFS.h). This safeguard does **not** establish that a normal LittleFS mount is physically read-only, prove brownout durability, or make physical flash testing safe. No live device filesystem operation is authorized.
+
 ## Release gates
 
 1. **Owner-supervised physical NodeMCU flash test:** identify actual chip/flash layout, gather serial/power measurements, demonstrate safe read/create API behavior in the target core without any truncating open, controlled brownout/power-off during each program/metadata operation, reboot and preserve all unacknowledged frames. Until then the device write path remains disabled.

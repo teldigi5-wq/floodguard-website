@@ -17,6 +17,12 @@ class LittleFsEightSlots {
   // calls this or writes flash.
   bool mountExplicitly() {
     if (mounted_) return true;
+    // ESP8266 core 3.1.2 auto-formats on mount failure by default.
+    // Explicitly disable it before touching a possibly historical volume.
+    // setConfig() refuses changes after another component has mounted it;
+    // treat that as a hard error rather than adopting unknown FS state.
+    const LittleFSConfig config(false);
+    if (!LittleFS.setConfig(config)) return false;
     mounted_ = LittleFS.begin();
     return mounted_;
   }
