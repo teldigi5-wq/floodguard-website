@@ -27,6 +27,12 @@
 #include "SecureIngressTransport.h"
 #include "OneFrameLittleFsStore.h"
 #include "EightSlotLittleFsAdapter.h"
+#include "ExclusiveCreateLifecycle.h"
+
+// Compile-check the strictly local typed future-write observation protocol.
+// No instance is constructed; no write API, direct core access or cloud ACK.
+static_assert(sizeof(floodguard_retained_review::ExclusiveCreateLifecycle) > 0,
+              "Local-only exclusive-create lifecycle must remain portable");
 
 // Compile-only eight-slot journal; no filesystem mount, writes, ACK or uploads.
 // Do NOT flash as the working flood-warning controller.
