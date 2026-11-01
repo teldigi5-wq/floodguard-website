@@ -118,7 +118,7 @@ test('authenticated scoped publisher commits signed capsule without root Admin p
   assert.equal(proof.observed,true,JSON.stringify(proof));
   assert.equal(proof.canAcknowledge,false);
   assert.equal(outbox.pending(UID).length,1);
-  const sensitive=await elevated(db=>(await db.ref('/floodguard/privateIngest/esp8266').get()).val());
+  const sensitive=await elevated(async db=>(await db.ref('/floodguard/privateIngest/esp8266').get()).val());
   assert.equal(sensitive.wifi,'SYNTHETIC_PRIVATE_WIFI');
 });
 
