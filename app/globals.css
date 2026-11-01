@@ -339,3 +339,7 @@ body{overflow-x:hidden}
 .diagnostics-page .diag-note{border-left:3px solid #58adc4;padding:1rem 1.25rem;background:rgba(20,73,88,.24);border-radius:0 12px 12px 0;line-height:1.7;color:#cde3ed}
 @media(max-width:840px){.diagnostics-page .diag-lead,.diagnostics-page .diag-streams{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.diagnostics-page .diag-lead,.diagnostics-page .diag-streams{grid-template-columns:minmax(0,1fr)}}
+
+/* R2: recent RTDB timestamps are not physical-source authentication. */
+.live-badge.live{color:var(--amber)}
+.status-pulse.live{background:var(--amber);box-shadow:0 0 0 5px rgba(255,189,74,.08);animation:none}

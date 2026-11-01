@@ -3,6 +3,7 @@ import {useEffect} from "react";
 import {Activity,CloudRain,Cpu,Droplets,Gauge,Radio,Wifi} from "lucide-react";
 import {useLive} from "@/hooks/use-live";
 import {fmt,label} from "@/components/ui";
+import {reconcileDisplayedAlarmState} from "@/lib/telemetry-safety.mjs";
 
 export function MotionOrchestrator({route}:{route:string}){
  useEffect(()=>{
@@ -26,11 +27,11 @@ function RibbonGroup({hidden=false}:{hidden?:boolean}){
 }
 
 export function TelemetryRibbon(){
- return <section className="telemetry-ribbon" aria-label="Current FloodGuard telemetry"><div className="ribbon-track"><RibbonGroup/><RibbonGroup hidden/></div></section>;
+ return <section className="telemetry-ribbon" aria-label="FloodGuard reported database observations"><div className="ribbon-track"><RibbonGroup/><RibbonGroup hidden/></div></section>;
 }
 
 export function NetworkScope(){
  const{data,freshness,age}=useLive();
  const live=freshness==="live";
- return <section className={"network-scope "+(live?"live":"")} aria-labelledby="scope-title"><div className="scope-copy"><p className="eyebrow"><Activity/> Realtime signal fabric</p><h2 id="scope-title">The field network, moving as one.</h2><p>Every illuminated path represents an active monitoring relationship. Values remain direct from Firebase; the animation visualizes connectivity, not invented history.</p><div className="scope-rows"><span><Droplets/><small>Reservoir</small><b>{fmt(data?.water?.levelCm,"cm")}</b><i/></span><span><Activity/><small>Alarm</small><b>{data?.alarm?.active?"ACTIVE":"CLEAR"}</b><i/></span><span><Gauge/><small>Gate servo</small><b>{fmt(data?.gate?.angle,"°",0)}</b><i/></span><span><Wifi/><small>ESP8266</small><b>{label(data?.esp8266?.status??data?.esp8266?.connection)}</b><i/></span></div></div><div className="scope-radar" aria-label={"Field network "+freshness}><div className="radar-sweep"/><div className="radar-ring one"/><div className="radar-ring two"/><span className="radar-hub"><Cpu/><b>ARDUINO</b><small>{live?"SYNCHRONIZED":freshness}</small></span>{[[Droplets,"water"],[Activity,"alarm"],[Gauge,"gate"],[Wifi,"wifi"]].map(([Icon,name],index)=>{const NodeIcon=Icon as typeof Activity;return <span className={"radar-node node-"+index} key={name as string}><NodeIcon/><i/></span>})}<em>{age===null?"Awaiting timestamp":"Signal age "+age+"s"}</em></div></section>;
+ return <section className={"network-scope "+(live?"live":"")} aria-labelledby="scope-title"><div className="scope-copy"><p className="eyebrow"><Activity/> Database observation preview</p><h2 id="scope-title">Recent readings, without claiming hardware verification.</h2><p>Animation depicts database observations only. It does not verify sensor identity, physical gate motion, or message delivery.</p><div className="scope-rows"><span><Droplets/><small>Reservoir</small><b>{fmt(data?.water?.levelCm,"cm")}</b><i/></span><span><Activity/><small>Alarm</small><b>{reconcileDisplayedAlarmState({active:data?.alarm?.active,freshness})}</b><i/></span><span><Gauge/><small>Gate servo</small><b>{fmt(data?.gate?.angle,"°",0)}</b><i/></span><span><Wifi/><small>ESP8266</small><b>{label(data?.esp8266?.status??data?.esp8266?.connection)}</b><i/></span></div></div><div className="scope-radar" aria-label={"Database observation "+freshness+"; physical source unverified"}><div className="radar-sweep"/><div className="radar-ring one"/><div className="radar-ring two"/><span className="radar-hub"><Cpu/><b>ARDUINO</b><small>{live?"RECENT · UNVERIFIED":freshness}</small></span>{[[Droplets,"water"],[Activity,"alarm"],[Gauge,"gate"],[Wifi,"wifi"]].map(([Icon,name],index)=>{const NodeIcon=Icon as typeof Activity;return <span className={"radar-node node-"+index} key={name as string}><NodeIcon/><i/></span>})}<em>{age===null?"Awaiting timestamp":"Signal age "+age+"s"}</em></div></section>;
 }
