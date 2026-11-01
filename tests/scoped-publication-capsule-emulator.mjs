@@ -58,21 +58,27 @@ async function transaction(packet,{binding=sourceBinding,receiptKey=issuer.publi
   assert.ok(initial?.public?.water&&initial?.checkpoint,
     'scoped publication capsule must be readable before transaction');
   // RTDB transaction reads root using its authenticated scoped capability.
+  const holder={};
   await new Promise((resolve,reject)=>{
     const timer=setTimeout(()=>reject(Error('publisher scoped listener timeout')),4000);
-    const onValue=()=>{clearTimeout(timer);ref.off('value',onValue);resolve();};
-    ref.on('value',onValue,e=>{clearTimeout(timer);reject(e);});
+    holder.listener=()=>{clearTimeout(timer);resolve();};
+    ref.on('value',holder.listener,e=>{clearTimeout(timer);reject(e);});
   });
-  const result=await ref.transaction(current=>{
-    candidate=deriveScopedPublicationCapsuleLab({
-      current,pending:packet.pending,
-      receipt:packet.receipt,receiptSignature:packet.signature,
-      sourceBinding:binding,trustedReceiptKey:receiptKey,nowMs:NOW+100
-    });
-    return candidate.allowed===true?candidate.next:undefined;
-  },undefined,false);
-  return {committed:result.committed,reason:candidate?.reason,
-    capsule:(await get()).val()};
+  try {
+    // Keep the server-authorized listener attached through the transaction:
+    // detached listeners can allow the SDK's local transaction cache to
+    // appear empty and spuriously invoke the reducer with null.
+    const result=await ref.transaction(current=>{
+      candidate=deriveScopedPublicationCapsuleLab({
+        current,pending:packet.pending,
+        receipt:packet.receipt,receiptSignature:packet.signature,
+        sourceBinding:binding,trustedReceiptKey:receiptKey,nowMs:NOW+100
+      });
+      return candidate.allowed===true?candidate.next:undefined;
+    },undefined,false);
+    return {committed:result.committed,reason:candidate?.reason,
+      capsule:(await get()).val()};
+  } finally { ref.off('value',holder.listener); }
 }
 async function readback(pending){
   const current=(await get()).val();
