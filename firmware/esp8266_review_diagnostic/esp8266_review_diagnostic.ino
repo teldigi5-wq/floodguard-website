@@ -59,7 +59,7 @@ static_assert(sizeof(ESP.getSketchSize()) == sizeof(uint32_t),
               "Pinned core must expose compiled sketch size API");
 static_assert(sizeof(ESP.getFreeSketchSpace()) == sizeof(uint32_t),
               "Pinned core must expose available sketch space API");
-static_assert(sizeof(floodguard_retained_review::ReviewFlashInventory) > 0,
+static_assert(sizeof(floodguard_retained_review::FlashInventoryReview) > 0,
               "Host-only geometry evidence classification must compile");
 static_assert(sizeof(floodguard_retained_review::CooperativeReadOnlyAuditPump) > 0,
               "Single-loop read-only pump must compile, never activate");
