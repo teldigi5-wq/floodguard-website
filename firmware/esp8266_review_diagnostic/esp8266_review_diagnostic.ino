@@ -28,11 +28,17 @@
 #include "OneFrameLittleFsStore.h"
 #include "EightSlotLittleFsAdapter.h"
 #include "ExclusiveCreateLifecycle.h"
+#include "JournalBootAudit.h"
 
 // Compile-check the strictly local typed future-write observation protocol.
 // No instance is constructed; no write API, direct core access or cloud ACK.
 static_assert(sizeof(floodguard_retained_review::ExclusiveCreateLifecycle) > 0,
               "Local-only exclusive-create lifecycle must remain portable");
+
+// The boot-audit type only inventories pre-existing records; it has no
+// authorization to append or ACK after reboot. No object is instantiated.
+static_assert(sizeof(floodguard_retained_review::JournalBootAudit) > 0,
+              "Read-only reboot audit must compile without activation");
 
 // Compile-only eight-slot journal; no filesystem mount, writes, ACK or uploads.
 // Do NOT flash as the working flood-warning controller.
