@@ -18,6 +18,12 @@ The submodule's [`lfs.h`](https://github.com/littlefs-project/littlefs/blob/6a53
 - The existing Linux `O_EXCL` process-race experiments, firmware static no-write gate, NodeMCU target cross-compile and full website tests remain enabled in branch CI.
 - The original `EightSlotLittleFsAdapter.h` retains `writeNew() { return false; }` and uncertain missing-slot classification. The diagnostic sketch still neither mounts flash nor transmits/controls anything.
 
+## Fault-injection discovery: do not reuse a mount after a read error
+
+The first exact-source host test surfaced an important negative case: after a deliberately injected lower-level block-read error, the same mounted instance subsequently returned `LFS_ERR_NOENT` (`-2`) for an existing test slot. This was **observed only in the disposable RAM-backed simulator**, not on deployed hardware. It reinforces that an absent-looking result after storage uncertainty is **not evidence of empty space**. The original test's unconditional same-session read-back assertion was invalid for this failure model; the corrected test quarantines the mounted instance, unmounts, remounts against retained bytes, and checks that the original record remains unchanged and duplicate exclusive creation remains forbidden. If the fresh-remount check fails, this branch must stay red and the storage design must be revisited.
+
+This is evidence **against** permitting automatic retries after I/O errors. The ESP8266 adapter remains read-only and never converts ambiguous absence to Missing.
+
 ## What this cannot prove
 
 Even if the pinned C harness passes, a possible future device-side adapter must still have a **reviewed, safe way to obtain a correctly initialized LittleFS instance** with real flash geometry, concurrency exclusion, explicit no-autoformat, and error-aware API results. Reaching into private implementation state or compiling a second flash owner is **not authorized**. This work does not demonstrate MCU-level atomicity under brownouts, physical flash wear or capacity, NOR driver correctness, corrupt metadata recovery, secure device signing, durable cloud receipt, queue ACK/deletion, warning delivery or safe gate actuation.
