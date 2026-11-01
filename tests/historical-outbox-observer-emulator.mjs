@@ -1,0 +1,158 @@
+// Real Firebase RTDB Emulator, synthetic signed source and local outbox ONLY.
+// Never use production project credentials or actuate physical hardware.
+import {before,after,beforeEach,afterEach,test} from 'node:test';
+import assert from 'node:assert/strict';
+import {createHash,generateKeyPairSync,randomBytes,sign} from 'node:crypto';
+import {readFileSync,mkdtempSync,rmSync} from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {initializeTestEnvironment,assertFails,assertSucceeds}
+  from '@firebase/rules-unit-testing';
+import {canonicalOfflineEnvelope} from '../experiments/stage7-durable-ingress.mjs';
+import {createDurableAdmissionOutboxLab}
+  from '../experiments/durable-admission-outbox-lab.mjs';
+import {deriveHistoricalAtomicWaterStateLab}
+  from '../experiments/immutable-publication-history-lab.mjs';
+import {observeHistoricalOutboxRecordLab}
+  from '../experiments/historical-outbox-observer-lab.mjs';
+
+const HOST='127.0.0.1:9000',UID='device-stage-a',NOW=1793450000500;
+const ROOT='/floodguard',PUBLIC=ROOT+'/publicTelemetryLabV1';
+if(process.env.FG_HISTORIC_OUTBOX_LAB!=='1'||
+   process.env.FIREBASE_DATABASE_EMULATOR_HOST!==HOST)
+  throw Error('Exact disposable loopback RTDB Emulator required');
+
+let env,dir,device,issuer,journal,sourceBinding;
+async function elevated(fn){
+  let value;await env.withSecurityRulesDisabled(async c=>{
+    value=await fn(c.database());
+  });return value;
+}
+const get=()=>elevated(async db=>(await db.ref(ROOT).get()).val());
+const seed=state=>elevated(db=>db.ref(ROOT).set(state));
+function reading(sequence,fields={}){
+  const envelope={version:'floodguard-offline-envelope-v1',
+    deviceId:UID,epoch:1,observedAtMs:NOW-1500+sequence*400,
+    frame:{sequence,distanceCm:16.5,levelCm:8.5,risk:'WARNING',...fields}};
+  const deviceSig=sign(null,Buffer.from(canonicalOfflineEnvelope(envelope)),
+    device.privateKey).toString('base64url');
+  const digest=createHash('sha256').update(canonicalOfflineEnvelope(envelope)).digest('hex');
+  const receipt={version:'floodguard-offline-receipt-v1',deviceId:UID,
+    epoch:1,sequence,digest,acceptedAtMs:NOW+50};
+  const signature=sign(null,Buffer.from(JSON.stringify(receipt)),
+    issuer.privateKey).toString('base64url');
+  return {envelope,deviceSig,receipt,signature,
+    trustedReceiptKey:issuer.publicKey,nowMs:NOW+100};
+}
+async function atomic(req){
+  let result;
+  await env.withSecurityRulesDisabled(async c=>{
+    const ref=c.database().ref(ROOT);
+    const h=()=>{};
+    await new Promise((resolve,reject)=>{
+      const timer=setTimeout(()=>reject(Error('RTDB local listener timeout')),4000);
+      h.listener=()=>{clearTimeout(timer);resolve();};
+      ref.on('value',h.listener,e=>{clearTimeout(timer);reject(e);});
+    });
+    try{
+      let plan={allowed:false,reason:'not-called'};
+      const txn=await ref.transaction(current=>{
+        plan=deriveHistoricalAtomicWaterStateLab({current,...req});
+        return plan.allowed ? plan.next : undefined;
+      },undefined,false);
+      result={committed:txn.committed,reason:plan.reason??null};
+    }finally{ref.off('value',h.listener);}
+  });
+  return result;
+}
+async function publish(req){
+  assert.equal(journal.accept({envelope:req.envelope,signature:req.deviceSig}).accepted,true);
+  const state=await get();
+  state.staging.ingestV1[UID]={...req.envelope.frame};
+  state.confirmedIngest[UID]={deviceId:UID,epoch:1,
+    sequence:req.envelope.frame.sequence,digest:req.receipt.digest,
+    acceptedAtMs:req.receipt.acceptedAtMs,status:'DATABASE_CONFIRMED'};
+  await seed(state);
+  assert.deepEqual(await atomic(req),{committed:true,reason:null});
+}
+async function observed(sequence,overrides={}){
+  const root=await get();
+  return observeHistoricalOutboxRecordLab({
+    pending:journal.pending(UID).find(x=>x.sequence===sequence),
+    root,sourceBinding,trustedReceiptKey:issuer.publicKey,nowMs:NOW+100,...overrides
+  });
+}
+before(async()=>{
+  env=await initializeTestEnvironment({
+    projectId:'demo-fg-historic-outbox',
+    database:{host:'127.0.0.1',port:9000,
+      rules:readFileSync('tests/fixtures/pr34/public-telemetry-leaf-lab.rules.json','utf8')}
+  });
+});
+after(async()=>{if(env)await env.cleanup();});
+beforeEach(async()=>{
+  await env.clearDatabase();
+  dir=mkdtempSync(path.join(os.tmpdir(),'fg-historic-emulator-'));
+  device=generateKeyPairSync('ed25519');
+  issuer=generateKeyPairSync('ed25519');
+  sourceBinding={deviceId:UID,epoch:1,enabled:true,
+    scope:'prototype-ingest-v1',publicKey:device.publicKey};
+  journal=createDurableAdmissionOutboxLab({directory:dir,
+    integrityKey:randomBytes(32),identities:new Map([[UID,sourceBinding]]),
+    clock:()=>NOW});
+  journal.commission();
+  const fp=createHash('sha256').update(issuer.publicKey.export({
+    type:'spki',format:'der'})).digest('hex');
+  await seed({
+    projectionControl:{waterAuthority:{deviceId:UID,epoch:1,enabled:true,
+      scope:'water-primary',receiptSignerFingerprint:fp},
+      devices:{[UID]:{initialized:false,epoch:1}}},
+    deviceAuthorization:{[UID]:{enabled:true,scope:'prototype-ingest-v1'}},
+    staging:{ingestV1:{}},confirmedIngest:{},
+    publicTelemetryLabV1:{
+      water:{distanceCm:18.5,levelCm:6.5,status:'SAFE'},
+      system:{lastUpdate:NOW-2500,overallRisk:'UNKNOWN'},
+      gate:{status:'UNKNOWN'},alarm:{active:false}
+    },
+    privateIngest:{secret:'SYNTHETIC_PRIVATE'}
+  });
+});
+afterEach(()=>{if(dir)rmSync(dir,{recursive:true,force:true});});
+
+test('read-back after two atomic publications verifies old signed entry, not cloud delivery',async()=>{
+  await publish(reading(1));
+  await publish(reading(2,{distanceCm:13.5,levelCm:11.5,risk:'DANGER'}));
+  const old=await observed(1);
+  assert.equal(old.observed,true,JSON.stringify(old));
+  assert.equal(old.latestSequence,2);
+  assert.equal(old.isLatest,false);
+  assert.equal(old.canAcknowledge,false);
+  assert.equal(journal.pending(UID).length,2);
+  assert.equal((await observed(2)).observed,true);
+  const guest=env.unauthenticatedContext().database();
+  assert.equal((await assertSucceeds(guest.ref(PUBLIC+'/water/status').get())).val(),'DANGER');
+  await assertFails(guest.ref(ROOT+'/publicationHistoryV1').get());
+  await assertFails(guest.ref(ROOT+'/publicationHistoryV1/entries/s_1').get());
+  await assertFails(guest.ref(ROOT+'/publicationHistoryV1/entries/s_1').set('FORGED'));
+});
+test('tampering an older private receipt cannot validate even with newer public state',async()=>{
+  await publish(reading(1));
+  await publish(reading(2));
+  await elevated(db=>db.ref(ROOT+'/publicationHistoryV1/entries/s_1/receiptSignature')
+    .set('A'.repeat(86)));
+  const x=await observed(1);
+  assert.equal(x.observed,false);
+  assert.equal(journal.pending(UID).length,2);
+});
+test('privileged nested-object leak is detectable and does not grant historical proof',async()=>{
+  await publish(reading(1));
+  await publish(reading(2));
+  await elevated(db=>db.ref(PUBLIC+'/water/status').set({unexpected:'SYNTHETIC_PRIVATE'}));
+  const guest=env.unauthenticatedContext().database();
+  assert.equal((await assertSucceeds(guest.ref(PUBLIC+'/water/status/unexpected').get())).val(),
+    'SYNTHETIC_PRIVATE');
+  const result=await observed(1);
+  assert.equal(result.observed,false);
+  assert.equal(result.reason,'current-public-scalar-diverged');
+  assert.equal(journal.pending(UID).length,2);
+});
