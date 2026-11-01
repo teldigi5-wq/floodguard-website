@@ -175,3 +175,57 @@ export function deriveScopedPublicationCapsuleLab({
     kind:'SCOPED_EMULATOR_CAPSULE_CANDIDATE_ONLY',
     next,sequence:seq,digest:pending.digest,canAcknowledge:false});
 }
+
+/** A read-only, scoped capsule observation, never independent delivery proof. */
+export function observeScopedPublicationCapsuleLab({
+  current,pending,sourceBinding,trustedReceiptKey,nowMs
+}={}) {
+  const failed=reason=>Object.freeze({
+    observed:false,reason,canAcknowledge:false,
+    notificationDelivery:'NOT_VERIFIED'
+  });
+  try{
+    if(!exact(current,['public','checkpoint','history'])||
+       !validPublic(current.public)||!key(sourceBinding?.publicKey)||
+       !key(trustedReceiptKey)||!integer(nowMs,946684800000,Number.MAX_SAFE_INTEGER)||
+       !exact(pending,['sequence','digest','acceptedAtMs','envelope','signature'])||
+       !integer(pending.sequence,1,2147483647)||!HEX.test(pending.digest)||
+       typeof pending.signature!=='string'||!SIG.test(pending.signature)||
+       !exact(sourceBinding,['deviceId','epoch','enabled','scope','publicKey'])||
+       sourceBinding.enabled!==true||
+       sourceBinding.scope!=='prototype-ingest-v1')
+      return failed('invalid-scoped-readback');
+    const e=pending.envelope,uid=e.deviceId,epoch=e.epoch;
+    const canonical=canonicalOfflineEnvelope(e);
+    if(!UID.test(uid)||sourceBinding.deviceId!==uid||
+       sourceBinding.epoch!==epoch||
+       e.frame.sequence!==pending.sequence||
+       hash(canonical)!==pending.digest||
+       !verify(null,Buffer.from(canonical),sourceBinding.publicKey,
+         Buffer.from(pending.signature,'base64url')))
+      return failed('signed-original-frame-invalid');
+    const cp=current.checkpoint;
+    if(!exact(cp,['initialized','epoch','sequence','digest'])||
+       cp.initialized!==true||cp.epoch!==epoch||
+       !integer(cp.sequence,1,2147483647)||!HEX.test(cp.digest))
+      return failed('scoped-checkpoint-unavailable');
+    const invalid=validateHistory(current.history,cp,current.public,
+      trustedReceiptKey,uid,epoch);
+    if(invalid)return failed(invalid);
+    const own=current.history.entries['s_'+pending.sequence];
+    if(!own||own.digest!==pending.digest||own.sequence!==pending.sequence||
+       own.observedAtMs!==e.observedAtMs||
+       own.distanceCm!==e.frame.distanceCm||
+       own.levelCm!==e.frame.levelCm||own.status!==e.frame.risk||
+       own.receipt.acceptedAtMs<pending.acceptedAtMs||
+       own.receipt.acceptedAtMs>nowMs)
+      return failed('scoped-record-not-proven');
+    return Object.freeze({
+      observed:true,kind:'SCOPED_EMULATOR_HISTORY_MATCH_NO_ACK',
+      sequence:pending.sequence,digest:pending.digest,
+      latestSequence:cp.sequence,canAcknowledge:false,
+      notificationDelivery:'NOT_VERIFIED',
+      floodClearance:'UNKNOWN',physicalGatePosition:'UNVERIFIED'
+    });
+  }catch{return failed('scoped-readback-unavailable');}
+}
