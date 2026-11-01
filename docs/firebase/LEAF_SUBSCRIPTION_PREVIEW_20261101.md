@@ -29,3 +29,7 @@ The isolated local Node 22 test suite covers subscription scope, permission deni
 5. Only under owner-reviewed maintenance and device-safe supervision, deploy the identity and publisher migration, verify writes/reads, inspect real sensor and alert outputs, then cut over consumers; keep a rollback plan that **does not** reopen anonymous writes.
 
 **Status:** Offline read-side subscription adapter lab completed. No trustworthy real-time monitoring restored. Production NO-GO.
+
+### Cancellation hardening (exact source review)
+
+A Firebase subscription's cancellation/error callback now permanently invalidates that leaf callback for the **current subscription generation**. A late queued value or repeated error callback cannot repopulate a denied/transport-failed reading; explicit reconnect is required to re-create listeners. A separate synthetic regression demonstrates denial → late SAFE callback ignored → fresh generation recovery. Local focused read-side tests: **18/18 pass** (10 subscription + 8 reducer). The repository CI result must be checked at the exact final head before accepting this stage.
