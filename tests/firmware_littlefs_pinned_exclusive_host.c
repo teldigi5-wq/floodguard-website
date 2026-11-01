@@ -135,9 +135,16 @@ int main(void) {
     int result = lfs_file_open(&fs, &fault, target,
                               LFS_O_WRONLY | LFS_O_CREAT | LFS_O_EXCL);
     assert(result < 0);
-    disk.fail_read_once = 0;
-    phase = "injected read fault aftermath";
+    // Quarantine the entire mounted instance: after a transient read fault,
+    // the same session may return ENOENT for a retained slot. Never convert
+    // that to permission to create or append a record.
+    assert(disk.fail_read_once == 0);
+    assert(lfs_unmount(&fs) == 0);
+    memset(&fs, 0, sizeof(fs));
+    assert(lfs_mount(&fs, &config) == 0);
+    phase = "fresh remount after read fault";
     expect_original(&fs);
+    expect_exclusive_refusal(&fs);
     assert(lfs_unmount(&fs) == 0);
 
     puts("PASS pinned upstream LittleFS O_EXCL: no overwrite, remount, fail-closed read fault (HOST ONLY)");
