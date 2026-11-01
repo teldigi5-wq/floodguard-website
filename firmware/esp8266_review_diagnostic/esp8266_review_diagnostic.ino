@@ -29,6 +29,7 @@
 #include "EightSlotLittleFsAdapter.h"
 #include "ExclusiveCreateLifecycle.h"
 #include "JournalBootAudit.h"
+#include "ReadOnlyOwnerQueue.h"
 
 // Compile-check the strictly local typed future-write observation protocol.
 // No instance is constructed; no write API, direct core access or cloud ACK.
@@ -39,6 +40,11 @@ static_assert(sizeof(floodguard_retained_review::ExclusiveCreateLifecycle) > 0,
 // authorization to append or ACK after reboot. No object is instantiated.
 static_assert(sizeof(floodguard_retained_review::JournalBootAudit) > 0,
               "Read-only reboot audit must compile without activation");
+
+// A bounded, single-consumer audit request policy is compile-checked only.
+// No owner task, filesystem action, credential or gate actuator is started.
+static_assert(sizeof(floodguard_retained_review::ReadOnlyOwnerQueue) > 0,
+              "Portable review-only audit queue must compile on NodeMCU");
 
 // Compile-only eight-slot journal; no filesystem mount, writes, ACK or uploads.
 // Do NOT flash as the working flood-warning controller.

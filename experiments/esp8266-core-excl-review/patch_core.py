@@ -115,6 +115,56 @@ ExclusiveLocalResult LittleFSImpl::createExclusiveLocal(
 
 """
 
+
+PROBE_IMPLEMENTATION = r"""
+JournalSlotObservation LittleFSImpl::probeJournalSlot(const char* path) {
+    // This is a READ-ONLY observation, never proof that an empty slot can be
+    // created. A negative stat can be ambiguous after metadata I/O faults.
+    if (!_mounted) return JournalSlotObservation::Unsupported;
+    if (_fgExclusiveQuarantined) return JournalSlotObservation::StorageUncertain;
+    if (_fgExclusiveBusy) {
+        _fgExclusiveQuarantined = true;
+        return JournalSlotObservation::StorageUncertain;
+    }
+    static const char *const slots[8] = {
+        "/fgq2_0.bin", "/fgq2_1.bin", "/fgq2_2.bin", "/fgq2_3.bin",
+        "/fgq2_4.bin", "/fgq2_5.bin", "/fgq2_6.bin", "/fgq2_7.bin"
+    };
+    bool allowed = false;
+    if (path) {
+        for (const char *candidate : slots) {
+            if (strcmp(path, candidate) == 0) {
+                allowed = true;
+                break;
+            }
+        }
+    }
+    if (!allowed) return JournalSlotObservation::InvalidInput;
+    _fgExclusiveBusy = true;
+    struct BusyRelease {
+        bool &flag;
+        ~BusyRelease() { flag = false; }
+    } busyRelease = {_fgExclusiveBusy};
+    struct lfs_info info = {};
+    const int status = lfs_stat(&_lfs, path, &info);
+    if (status == LFS_ERR_NOENT) {
+        // The same mount can report NOENT after a transient read fault.
+        // No automatic retry or create is allowed after apparent absence.
+        _fgExclusiveQuarantined = true;
+        return JournalSlotObservation::AbsenceUnverified;
+    }
+    if (status != 0 || info.type != LFS_TYPE_REG) {
+        _fgExclusiveQuarantined = true;
+        return JournalSlotObservation::StorageUncertain;
+    }
+    // Only a metadata observation: no CRC, signature, trusted receipt, or
+    // power-loss survival has been proven.
+    return _fgExclusiveQuarantined
+        ? JournalSlotObservation::StorageUncertain
+        : JournalSlotObservation::PresentUnverified;
+}
+
+"""
 def replace_once(value: str, anchor: str, replacement: str, path: str) -> str:
     if value.count(anchor) != 1:
         raise RuntimeError(f"{path}: expected one exact anchor, got {value.count(anchor)}")
@@ -149,12 +199,18 @@ enum class ExclusiveLocalResult : uint8_t {
     Unsupported, InvalidInput, AlreadyExists,
     CommitUncertain, LocalBytesMatched
 };
+// A metadata probe NEVER authorizes a new write, cleanup, or cloud ACK.
+enum class JournalSlotObservation : uint8_t {
+    Unsupported, InvalidInput, PresentUnverified,
+    AbsenceUnverified, StorageUncertain
+};
 """, fs)
     raw[fs] = replace_once(raw[fs],
         "    File open(const String& path, const char* mode);\n",
         "    File open(const String& path, const char* mode);\n"
         "    ExclusiveLocalResult createExclusiveLocal(\n"
-        "        const char* path, const uint8_t* bytes, size_t length);\n", fs)
+        "        const char* path, const uint8_t* bytes, size_t length);\n"
+        "    JournalSlotObservation probeJournalSlot(const char* path);\n", fs)
 
     impl = "cores/esp8266/FSImpl.h"
     anchor = "    virtual FileImplPtr open(const char* path, OpenMode openMode, AccessMode accessMode) = 0;\n"
@@ -162,6 +218,9 @@ enum class ExclusiveLocalResult : uint8_t {
     virtual ExclusiveLocalResult createExclusiveLocal(
             const char*, const uint8_t*, size_t) {
         return ExclusiveLocalResult::Unsupported;
+    }
+    virtual JournalSlotObservation probeJournalSlot(const char*) {
+        return JournalSlotObservation::Unsupported;
     }
 """, impl)
 
@@ -174,6 +233,11 @@ enum class ExclusiveLocalResult : uint8_t {
     return _impl->createExclusiveLocal(path, bytes, length);
 }
 
+JournalSlotObservation FS::probeJournalSlot(const char* path) {
+    if (!_impl) return JournalSlotObservation::Unsupported;
+    return _impl->probeJournalSlot(path);
+}
+
 bool FS::exists(const char* path) {""", fscpp)
 
     littleh = "libraries/LittleFS/src/LittleFS.h"
@@ -181,6 +245,7 @@ bool FS::exists(const char* path) {""", fscpp)
     raw[littleh] = replace_once(raw[littleh], anchor,
         anchor+"""    ExclusiveLocalResult createExclusiveLocal(
         const char* path, const uint8_t* bytes, size_t length) override;
+    JournalSlotObservation probeJournalSlot(const char* path) override;
 """, littleh)
     raw[littleh] = replace_once(raw[littleh],
         "    bool     _mounted;\n};",
@@ -193,7 +258,7 @@ bool FS::exists(const char* path) {""", fscpp)
     littlecpp = "libraries/LittleFS/src/LittleFS.cpp"
     raw[littlecpp] = replace_once(raw[littlecpp],
         "DirImplPtr LittleFSImpl::openDir(const char *path) {",
-        IMPLEMENTATION + "DirImplPtr LittleFSImpl::openDir(const char *path) {",
+        IMPLEMENTATION + PROBE_IMPLEMENTATION + "DirImplPtr LittleFSImpl::openDir(const char *path) {",
         littlecpp)
 
     # Exact byte lengths and anchors must be verified before starting writes.

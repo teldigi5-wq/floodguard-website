@@ -1,9 +1,9 @@
 name: FloodGuard no-truncation NodeMCU and POSIX exclusive journal checks
 on:
   push:
-    branches: [security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101, test/r2-pinned-esp8266-api-access-boundary-20261101, test/r2-exclusive-write-lifecycle-20261101, test/r2-single-owner-core-api-overlay-20261101, test/r2-core-overlay-exact-host-faults-20261101, test/r2-core-overlay-torn-write-reentry-20261101, security/r2-eight-slot-boot-audit-20261101]
+    branches: [security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101, test/r2-pinned-esp8266-api-access-boundary-20261101, test/r2-exclusive-write-lifecycle-20261101, test/r2-single-owner-core-api-overlay-20261101, test/r2-core-overlay-exact-host-faults-20261101, test/r2-core-overlay-torn-write-reentry-20261101, security/r2-eight-slot-boot-audit-20261101, test/r2-typed-probe-owner-queue-20261101]
   pull_request:
-    branches: [test/r2-bounded-device-journal-20261101, security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101, test/r2-pinned-esp8266-api-access-boundary-20261101, test/r2-exclusive-write-lifecycle-20261101, test/r2-single-owner-core-api-overlay-20261101, test/r2-core-overlay-exact-host-faults-20261101, test/r2-core-overlay-torn-write-reentry-20261101]
+    branches: [test/r2-bounded-device-journal-20261101, security/r2-no-truncation-exclusive-journal-20261101, security/r2-littlefs-no-autoformat-20261101, test/r2-pinned-littlefs-exclusive-host-20261101, security/r2-littlefs-sticky-quarantine-20261101, test/r2-pinned-esp8266-api-access-boundary-20261101, test/r2-exclusive-write-lifecycle-20261101, test/r2-single-owner-core-api-overlay-20261101, test/r2-core-overlay-exact-host-faults-20261101, test/r2-core-overlay-torn-write-reentry-20261101, security/r2-eight-slot-boot-audit-20261101]
 permissions:
   contents: read
 concurrency:
@@ -46,6 +46,9 @@ jobs:
           g++ -std=c++11 -Wall -Wextra -Werror -pedantic \
             tests/firmware_journal_boot_audit.cpp -o /tmp/fg-reboot-audit-test
           /tmp/fg-reboot-audit-test
+          g++ -std=c++11 -Wall -Wextra -Werror -pedantic \
+            tests/firmware_read_only_owner_queue.cpp -o /tmp/fg-review-owner-queue-test
+          /tmp/fg-review-owner-queue-test
       - name: Review-only firmware static safety gate and legacy Node regression
         run: |
           node --test tests/firmware_v6_diagnostic_policy.test.mjs tests/firmware_bearssl_transport_policy.test.mjs tests/firmware_nodemcu_storage_policy.test.mjs tests/firmware_bounded_journal_policy.test.mjs tests/v6-serial-water-safety-preflight.test.mjs

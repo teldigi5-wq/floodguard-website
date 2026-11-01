@@ -214,3 +214,39 @@ test('R2 reboot audit remains read-only and experimental core accepts eight exac
   const active=sketch.slice(sketch.indexOf('void setup()'));
   assert.doesNotMatch(active,/JournalBootAudit|createExclusiveLocal\s*\(|LittleFS\.begin\s*\(/);
 });
+
+test('R2 typed probe may never treat lfs_stat absence as permission to create',()=>{
+  const patch=readFileSync('experiments/esp8266-core-excl-review/patch_core.py','utf8');
+  const generator=readFileSync('experiments/esp8266-core-excl-review/generate_exact_overlay_host.py','utf8');
+  const harness=readFileSync('tests/firmware_core_overlay_exact_host.template.cpp','utf8');
+  assert.match(patch,/PROBE_IMPLEMENTATION = r"""/);
+  assert.match(patch,/lfs_stat\(&_lfs, path, &info\)/);
+  assert.match(patch,/status == LFS_ERR_NOENT/);
+  assert.match(patch,/JournalSlotObservation::AbsenceUnverified/);
+  assert.match(patch,/JournalSlotObservation::PresentUnverified/);
+  assert.match(patch,/_fgExclusiveQuarantined = true/);
+  assert.match(generator,/PROBE_IMPLEMENTATION/);
+  assert.match(generator,/PROBE_MARKER/);
+  assert.match(harness,/EXACT_PROBE_FROM_PINNED_OVERLAY/);
+  assert.match(harness,/case_probe_absence_quarantines_even_if_no_io_error/);
+  assert.match(harness,/case_probe_after_torn_program_is_denied_without_io/);
+  assert.doesNotMatch(adapter,/probeJournalSlot\s*\(/);
+  assert.match(adapter,/bool writeNew\(uint8_t, const uint8_t \*,size_t\)\s*\{\s*return false;/);
+});
+test('R2 single-consumer review queue is read-only, bounded and inactive in MCU loop',()=>{
+  const queue=readFileSync(dir+'ReadOnlyOwnerQueue.h','utf8');
+  const checks=readFileSync('tests/firmware_read_only_owner_queue.cpp','utf8');
+  const workflow=readFileSync('.github/workflows/nodemcu-no-truncation-storage.yml','utf8');
+  assert.match(sketch,/#include "ReadOnlyOwnerQueue.h"/);
+  assert.match(sketch,/static_assert\(sizeof\(floodguard_retained_review::ReadOnlyOwnerQueue\) > 0/);
+  assert.match(queue,/static constexpr uint8_t kCapacity = 4/);
+  assert.match(queue,/if \(active_\) \{ quarantine\(\); return false; \}/);
+  assert.match(queue,/bool mayWrite\(\) const \{ return false; \}/);
+  assert.match(queue,/bool mayAcknowledge\(\) const \{ return false; \}/);
+  assert.match(queue,/bool mayOperateGate\(\) const \{ return false; \}/);
+  assert.match(checks,/nestedTakeQuarantines/);
+  assert.match(checks,/overflowRefusedWithoutDroppingPending/);
+  assert.match(workflow,/firmware_read_only_owner_queue\.cpp/);
+  const active=sketch.slice(sketch.indexOf('void setup()'));
+  assert.doesNotMatch(active,/ReadOnlyOwnerQueue|probeJournalSlot\s*\(|createExclusiveLocal\s*\(|LittleFS\.begin\s*\(/);
+});
