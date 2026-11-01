@@ -103,12 +103,19 @@ beforeEach(async()=>{
   journal.commission();
   const fp=createHash('sha256').update(issuer.publicKey.export({
     type:'spki',format:'der'})).digest('hex');
+  // RTDB omits empty maps. Seed an actual synthetic first input so that
+  // the required privileged staging and confirmed domains exist.
+  const first=reading(1);
   await seed({
     projectionControl:{waterAuthority:{deviceId:UID,epoch:1,enabled:true,
       scope:'water-primary',receiptSignerFingerprint:fp},
       devices:{[UID]:{initialized:false,epoch:1}}},
     deviceAuthorization:{[UID]:{enabled:true,scope:'prototype-ingest-v1'}},
-    staging:{ingestV1:{}},confirmedIngest:{},
+    staging:{ingestV1:{[UID]:{...first.envelope.frame}}},
+    confirmedIngest:{[UID]:{
+      deviceId:UID,epoch:1,sequence:1,digest:first.receipt.digest,
+      acceptedAtMs:first.receipt.acceptedAtMs,status:'DATABASE_CONFIRMED'
+    }},
     publicTelemetryLabV1:{
       water:{distanceCm:18.5,levelCm:6.5,status:'SAFE'},
       system:{lastUpdate:NOW-2500,overallRisk:'UNKNOWN'},
