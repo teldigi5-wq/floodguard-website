@@ -1,0 +1,51 @@
+name: FloodGuard scoped publication capsule authorization lab
+on:
+  push:
+    branches: [test/r2-r3-scoped-publication-capsule-20261101]
+  pull_request:
+    branches: [test/r2-r3-emulator-publisher-recovery-20261101]
+permissions:
+  contents: read
+concurrency:
+  group: fg-capsule-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout without persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Java 17 for loopback database Emulator
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install locked dependencies without scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install test-only RTDB Rules SDK
+        run: npm install --no-save --package-lock=false --ignore-scripts @firebase/rules-unit-testing@5.0.2
+      - name: Check source and existing signed telemetry tests
+        run: |
+          node --check experiments/scoped-publication-capsule-lab.mjs
+          node --check tests/scoped-publication-capsule-emulator.mjs
+          node --test tests/durable-admission-outbox-lab.test.mjs tests/immutable-publication-history-lab.test.mjs tests/pinned-historical-witness-lab.test.mjs
+      - name: Authenticated scoped RTDB transaction and denial tests
+        run: |
+          npx --yes firebase-tools@14.18.0 emulators:exec --only database \
+            --project demo-fg-scoped-capsule \
+            --config firebase.scoped-publication-capsule-lab.json \
+            "FG_SCOPED_CAPSULE_LAB=1 node --test tests/scoped-publication-capsule-emulator.mjs"
+      - name: Website tests lint typecheck build
+        run: |
+          npm test
+          npm run lint
+          npm run typecheck
+          npm run build

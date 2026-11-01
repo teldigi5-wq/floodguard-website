@@ -1,0 +1,97 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "floodguard": {
+      ".read": false,
+      ".write": false
+    },
+    "floodguardPublicationLabV2": {
+      ".read": "auth !== null && auth.uid === 'publisher-stage-a' && auth.token.fgCapsulePublisher === true",
+      ".write": "auth !== null && auth.uid === 'publisher-stage-a' && auth.token.fgCapsulePublisher === true",
+      ".validate": "newData.hasChildren(['public','checkpoint'])",
+      "public": {
+        ".validate": "newData.hasChildren(['water','system'])",
+        "water": {
+          ".validate": "newData.hasChildren(['distanceCm','levelCm','status'])",
+          "distanceCm": {
+            ".read": true,
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 400"
+          },
+          "levelCm": {
+            ".read": true,
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 25"
+          },
+          "status": {
+            ".read": true,
+            ".validate": "newData.isString() && (newData.val() === 'SAFE' || newData.val() === 'WARNING' || newData.val() === 'DANGER' || newData.val() === 'SENSOR_ERROR' || newData.val() === 'UNKNOWN')"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "system": {
+          ".validate": "newData.hasChildren(['lastUpdate','overallRisk'])",
+          "lastUpdate": {
+            ".read": true,
+            ".validate": "newData.isNumber() && newData.val() >= 946684800000 && newData.val() <= 8640000000000000"
+          },
+          "overallRisk": {
+            ".read": true,
+            ".validate": "newData.isString() && newData.val() === 'UNKNOWN'"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "$other": {
+          ".validate": false
+        }
+      },
+      "checkpoint": {
+        ".validate": "newData.hasChildren(['initialized','epoch']) && (newData.child('initialized').val() === false || newData.hasChildren(['sequence','digest']))",
+        "initialized": {
+          ".validate": "newData.isBoolean()"
+        },
+        "epoch": {
+          ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 10000"
+        },
+        "sequence": {
+          ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 2147483647"
+        },
+        "digest": {
+          ".validate": "newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/)"
+        },
+        "$other": {
+          ".validate": false
+        }
+      },
+      "history": {
+        ".validate": "newData.hasChildren(['schema','deviceId','epoch','issuerFingerprint','entries'])",
+        "schema": {
+          ".validate": "newData.isString() && newData.val() === 'floodguard-immutable-publication-history-lab-v1'"
+        },
+        "deviceId": {
+          ".validate": "newData.isString() && newData.val() === 'device-stage-a'"
+        },
+        "epoch": {
+          ".validate": "newData.isNumber() && newData.val() === 1"
+        },
+        "issuerFingerprint": {
+          ".validate": "newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/)"
+        },
+        "entries": {
+          "$sequence": {
+            ".validate": "newData.hasChildren(['sequence','digest','observedAtMs','distanceCm','levelCm','status','overallRisk','receipt','receiptSignature'])"
+          }
+        },
+        "$other": {
+          ".validate": false
+        }
+      },
+      "$other": {
+        ".validate": false
+      }
+    }
+  }
+}
