@@ -1,0 +1,14 @@
+{
+  "database": {
+    "rules": "tests/fixtures/device-revocation-fence-lab.rules.json"
+  },
+  "emulators": {
+    "database": {
+      "host": "127.0.0.1",
+      "port": 9000
+    },
+    "ui": {
+      "enabled": false
+    }
+  }
+}
