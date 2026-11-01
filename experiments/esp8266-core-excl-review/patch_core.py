@@ -29,11 +29,23 @@ ExclusiveLocalResult LittleFSImpl::createExclusiveLocal(
     // never be made from the review-only FloodGuard diagnostic.
     if (!_mounted) return ExclusiveLocalResult::Unsupported;
     if (_fgExclusiveQuarantined) return ExclusiveLocalResult::CommitUncertain;
+    // This detects same-instance recursion only; it is NOT a cross-task lock.
+    // All callers must still be serialized by a separately reviewed owner.
+    if (_fgExclusiveBusy) {
+        _fgExclusiveQuarantined = true;
+        return ExclusiveLocalResult::CommitUncertain;
+    }
     if (!path || !bytes || length == 0 || length > 1038 ||
         path[0] != '/' || path[1] == 0 || strchr(path + 1, '/') ||
         !pathValid(path)) {
         return ExclusiveLocalResult::InvalidInput;
     }
+
+    _fgExclusiveBusy = true;
+    struct BusyRelease {
+        bool &flag;
+        ~BusyRelease() { flag = false; }
+    } busyRelease = {_fgExclusiveBusy};
 
     lfs_file_t file = {};
     const int opened = lfs_file_open(
@@ -47,11 +59,12 @@ ExclusiveLocalResult LittleFSImpl::createExclusiveLocal(
 
     const lfs_ssize_t written = lfs_file_write(&_lfs, &file, bytes, length);
     // Never skip close: it may also flush and return an independent error.
-    const int synced = (written == static_cast<lfs_ssize_t>(length))
+    const int synced = (written == static_cast<lfs_ssize_t>(length) &&
+                        !_fgExclusiveQuarantined)
         ? lfs_file_sync(&_lfs, &file) : LFS_ERR_IO;
     const int closed = lfs_file_close(&_lfs, &file);
     if (written != static_cast<lfs_ssize_t>(length) ||
-        synced != 0 || closed != 0) {
+        synced != 0 || closed != 0 || _fgExclusiveQuarantined) {
         _fgExclusiveQuarantined = true;
         return ExclusiveLocalResult::CommitUncertain;
     }
@@ -80,8 +93,9 @@ ExclusiveLocalResult LittleFSImpl::createExclusiveLocal(
     }
     if (lfs_file_close(&_lfs, &check) != 0) same = false;
     if (!same) _fgExclusiveQuarantined = true;
-    return same ? ExclusiveLocalResult::LocalBytesMatched
-                : ExclusiveLocalResult::CommitUncertain;
+    return (same && !_fgExclusiveQuarantined)
+        ? ExclusiveLocalResult::LocalBytesMatched
+        : ExclusiveLocalResult::CommitUncertain;
 }
 
 """
@@ -157,7 +171,9 @@ bool FS::exists(const char* path) {""", fscpp)
         "    bool     _mounted;\n};",
         "    bool     _mounted;\n"
         "    // This experimental gate is volatile, per filesystem instance.\n"
-        "    bool     _fgExclusiveQuarantined = false;\n};", littleh)
+        "    bool     _fgExclusiveQuarantined = false;\n"
+        "    // Reentrant-call sentinel, not a thread-safe mutex.\n"
+        "    bool     _fgExclusiveBusy = false;\n};", littleh)
 
     littlecpp = "libraries/LittleFS/src/LittleFS.cpp"
     raw[littlecpp] = replace_once(raw[littlecpp],
