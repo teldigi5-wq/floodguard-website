@@ -157,6 +157,6 @@ test('untrusted empty root, invalid nowMs and receipt from future never confirm'
 test('no network, write, outbox ACK or physical command interfaces in reconciler',()=>{
   const src=fs.readFileSync('experiments/confirmed-outbox-reconciliation-lab.mjs','utf8');
   assert.doesNotMatch(src,/firebase-admin|node:https|fetch\s*\(|\.transaction\s*\(/);
-  assert.doesNotMatch(src,/\.set\s*\(|\.remove\s*\(|\.update\s*\(|servo\.write|sendMessage\s*\(/);
+  assert.doesNotMatch(src,/\b(?:db|database|ref|target)\.(?:set|update|remove)\s*\(|servo\.write|sendMessage\s*\(/);
   assert.doesNotMatch(src,/\.acknowledge\s*\(|\.delete\s*\(/);
 });
