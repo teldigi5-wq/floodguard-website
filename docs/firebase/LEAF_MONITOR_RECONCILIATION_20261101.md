@@ -31,3 +31,15 @@ The deliberate lockdown also removes legacy website/mobile/bot real-time telemet
 6. Run a supervised end-to-end fault-recovery test and obtain owner approval before any real data or physical device changes.
 
 **Status:** Pure reducer design lab tested locally, not a live read adapter, not deployed, not firmware validation. Runtime CI and review remain independent release gates.
+
+## Recovered controller source evidence (private project files)
+
+The 2026-08-25 original files `FloodGuard_Arduino_UNO_FINAL_v6.ino` and `FloodGuard_ESP8266_FIREBASE_FINAL_v6.ino` were subsequently located in the owner's separate file library, not in the three current GitHub repository trees. Do not copy private firmware source, credentials, or hardware details into a public repository without review.
+
+- Arduino Uno has locally evaluated water statuses: sensor-to-bottom reference **25.0 cm**, `SAFE <8.5 cm`, `WARNING >=8.5 and <11 cm`, `DANGER >=11 cm` calculated water level. It issues a local buzzer and red LED on danger, with a 10-second countdown before writing the 90-degree servo target. This is source evidence, not real hardware testing or safe hydraulic actuation proof.
+- In the recovered source, impossible readings greater than the 25 cm installation reference may be clamped to level 0 despite being outside the trusted geometry, and the sensor-error branch disables the buzzer. These are candidate **hardware-safety failure modes** for independent testing and explicit operator policy. Do not blindly change the actuator failure policy without actual mechanical/water-flow safety assessment.
+- ESP8266 v6 directly sends anonymous multi-path HTTPS PATCH requests to legacy `/floodguard/live.json`. It contains `WiFiClientSecure.setInsecure()` in regular and offline-publishing paths: host certificate verification is disabled. That firmware is incompatible with the published deny-read/deny-write lockdown and must not be reenabled by opening anonymous writes.
+- Water thresholds, gate response and alarm must remain **local physical controller responsibilities**; authenticated cloud telemetry is observational and cannot authenticate the actual servo position without independent feedback.
+- Resolve the clock, TLS, device identity, replay, calibration, disconnect, and manual override acceptance before any firmware flash or hardware test. Confirm the firmware actually flashed before asserting this exact library copy is installed.
+
+**Revised checkpoint:** Recovered archived v6 source for architecture review. Firmware still not compiled, flashed, device-tested or source-of-truth-verified on physical hardware.
