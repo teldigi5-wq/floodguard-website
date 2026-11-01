@@ -22,7 +22,7 @@ The expected-byte pointer must remain valid and **unchanged** until the read-bac
 
 ## Reproducible tests
 
-- `tests/firmware_exclusive_create_lifecycle.cpp` covers 15 isolated C++11 host scenarios including unsupported API, existing retained data, pre-open fault, local positive path, partial/error write, sync/close failure, corrupt/short/error read-back, out-of-order operations and invalid input after creation.
+- `tests/firmware_exclusive_create_lifecycle.cpp` covers 16 isolated C++11 host scenarios including unsupported API, existing retained data, pre-open fault, local positive path, partial/error write, sync/close failure, corrupt/short/error read-back, out-of-order/repeated operations, including after a prior local match, and invalid input after creation.
 - `tests/firmware_bounded_journal_policy.test.mjs` checks the disabled device writer, dormant sketch, local-only outcome semantics and absent insecure core-private API calls.
 - GitHub Actions builds these exact headers under native C++11 and the pinned **ESP8266 Arduino 3.1.2** NodeMCU cross-compiler; the same workflow retains two compiler-negative protected-access tests, the source-pinned upstream LittleFS C host harness, POSIX races, firmware parser/ingress checks and website regressions.
 - **Do not claim CI success until the final exact-head run is completed.**
