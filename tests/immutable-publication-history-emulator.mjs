@@ -107,13 +107,13 @@ beforeEach(async()=>{
 test('two committed transactions preserve both independently signed private receipts',async()=>{
   const first=reading(1);
   assert.deepEqual(await atomic(first),{committed:true,reason:null});
-  const one=(await get()).publicationHistoryV1.entries['1'];
+  const one=(await get()).publicationHistoryV1.entries['s_1'];
   const second=reading(2,{distanceCm:13.5,levelCm:11.5,risk:'DANGER',observedAtMs:NOW-500});
   await stage(second);
   assert.deepEqual(await atomic(second),{committed:true,reason:null});
   const current=await get();
-  assert.deepEqual(current.publicationHistoryV1.entries['1'],one);
-  assert.equal(current.publicationHistoryV1.entries['2'].receiptSignature,second.signature);
+  assert.deepEqual(current.publicationHistoryV1.entries['s_1'],one);
+  assert.equal(current.publicationHistoryV1.entries['s_2'].receiptSignature,second.signature);
   assert.equal(current.projectionControl.devices[UID].sequence,2);
   assert.equal(current.publicTelemetryLabV1.water.status,'DANGER');
   assert.equal(current.publicTelemetryLabV1.system.overallRisk,'UNKNOWN');
@@ -124,10 +124,10 @@ test('ordinary clients may read approved individual telemetry but cannot read hi
   await atomic(reading(1));
   const guest=env.unauthenticatedContext().database();
   assert.equal((await assertSucceeds(guest.ref(PUBLIC+'/water/status').get())).val(),'WARNING');
-  for(const p of [ROOT,ROOT+'/publicationHistoryV1',ROOT+'/publicationHistoryV1/entries/1',
+  for(const p of [ROOT,ROOT+'/publicationHistoryV1',ROOT+'/publicationHistoryV1/entries/s_1',
     ROOT+'/projectionControl',PUBLIC+'/water'])
     await assertFails(guest.ref(p).get());
-  for(const p of [ROOT+'/publicationHistoryV1',ROOT+'/publicationHistoryV1/entries/1',
+  for(const p of [ROOT+'/publicationHistoryV1',ROOT+'/publicationHistoryV1/entries/s_1',
     PUBLIC+'/water/status'])
     await assertFails(guest.ref(p).set('FORGED'));
 });
@@ -148,7 +148,7 @@ test('deleted or altered historical receipt prevents newer publication without s
     risk:'DANGER',observedAtMs:NOW-500});
   await stage(newer);
   const modified=await get();
-  modified.publicationHistoryV1.entries['1'].receiptSignature='A'.repeat(86);
+  modified.publicationHistoryV1.entries['s_1'].receiptSignature='A'.repeat(86);
   await seed(modified);
   const before=await get();
   const result=await atomic(newer);
@@ -169,5 +169,5 @@ test('object injection into approved public leaf fails closed and does not grow 
   assert.equal(res.committed,false);
   assert.equal(res.reason,'public-scalar-schema-corrupt');
   const state=await get();
-  assert.deepEqual(Object.keys(state.publicationHistoryV1.entries),['1']);
+  assert.deepEqual(Object.keys(state.publicationHistoryV1.entries),['s_1']);
 });
