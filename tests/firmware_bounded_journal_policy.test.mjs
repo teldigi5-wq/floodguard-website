@@ -274,3 +274,27 @@ test('R2 host-only thread owner enforces guarded read dispatch, never device act
   const active=sketch.slice(sketch.indexOf('void setup()'));
   assert.doesNotMatch(active,/HostOwnerReadDispatcher|std::thread|std::mutex|createExclusiveLocal\s*\(/);
 });
+
+test('R2 ESP8266 loop and flash evidence are compile-only and never authorize device writes',()=>{
+  const pump=readFileSync(dir+'CooperativeReadOnlyAuditPump.h','utf8');
+  const flash=readFileSync(dir+'ReviewFlashInventory.h','utf8');
+  const host=readFileSync('tests/firmware_cooperative_loop_flash_inventory.cpp','utf8');
+  const workflow=readFileSync('.github/workflows/nodemcu-no-truncation-storage.yml','utf8');
+  assert.match(sketch,/#include "CooperativeReadOnlyAuditPump.h"/);
+  assert.match(sketch,/#include "ReviewFlashInventory.h"/);
+  for(const name of ['getFlashChipRealSize','getFlashChipSize','getSketchSize','getFreeSketchSpace'])
+    assert.match(sketch,new RegExp('sizeof\\(ESP\\.'+name+'\\(\\)\\)'));
+  assert.match(pump,/queue_\.take\(ticket\)/);
+  assert.match(pump,/queue_\.complete\(ticket.requestId,ok\)/);
+  assert.match(pump,/bool mayWrite\(\) const \{ return false; \}/);
+  assert.match(pump,/bool mayOperateGate\(\) const \{ return false; \}/);
+  assert.match(flash,/FlashInventoryReview::RequiresPhysicalPartitionReview/);
+  for(const name of ['flashInventoryAuthorizesMount','flashInventoryAuthorizesWrite','flashInventoryAuthorizesFirmwareUpload'])
+    assert.match(flash,new RegExp('bool '+name+'\\(FlashInventoryReview\\)'));
+  assert.match(host,/nestedInvocationCannotUpgradeOutcome/);
+  assert.match(host,/flashEvidenceNeverAuthorizesAnything/);
+  assert.match(workflow,/firmware_cooperative_loop_flash_inventory\.cpp/);
+  assert.match(adapter,/bool writeNew\(uint8_t, const uint8_t \*,size_t\)\s*\{\s*return false;/);
+  const active=sketch.slice(sketch.indexOf('void setup()'));
+  assert.doesNotMatch(active,/CooperativeReadOnlyAuditPump|ReviewFlashInventory|inspectFlashInventory\s*\(|LittleFS\.begin\s*\(|createExclusiveLocal\s*\(/);
+});

@@ -30,6 +30,8 @@
 #include "ExclusiveCreateLifecycle.h"
 #include "JournalBootAudit.h"
 #include "ReadOnlyOwnerQueue.h"
+#include "CooperativeReadOnlyAuditPump.h"
+#include "ReviewFlashInventory.h"
 
 // Compile-check the strictly local typed future-write observation protocol.
 // No instance is constructed; no write API, direct core access or cloud ACK.
@@ -45,6 +47,22 @@ static_assert(sizeof(floodguard_retained_review::JournalBootAudit) > 0,
 // No owner task, filesystem action, credential or gate actuator is started.
 static_assert(sizeof(floodguard_retained_review::ReadOnlyOwnerQueue) > 0,
               "Portable review-only audit queue must compile on NodeMCU");
+
+// Actual pinned core 3.1.2 SDK declarations only; sizeof is unevaluated.
+// These checks do NOT read or measure the attached board's flash geometry.
+// Never log device identifiers, format, mount, or derive OTA/FS offsets here.
+static_assert(sizeof(ESP.getFlashChipRealSize()) == sizeof(uint32_t),
+              "Pinned core must expose detected flash byte count API");
+static_assert(sizeof(ESP.getFlashChipSize()) == sizeof(uint32_t),
+              "Pinned core must expose configured flash byte count API");
+static_assert(sizeof(ESP.getSketchSize()) == sizeof(uint32_t),
+              "Pinned core must expose compiled sketch size API");
+static_assert(sizeof(ESP.getFreeSketchSpace()) == sizeof(uint32_t),
+              "Pinned core must expose available sketch space API");
+static_assert(sizeof(floodguard_retained_review::FlashInventoryReview) > 0,
+              "Host-only geometry evidence classification must compile");
+static_assert(sizeof(floodguard_retained_review::CooperativeReadOnlyAuditPump) > 0,
+              "Single-loop read-only pump must compile, never activate");
 
 // Compile-only eight-slot journal; no filesystem mount, writes, ACK or uploads.
 // Do NOT flash as the working flood-warning controller.
