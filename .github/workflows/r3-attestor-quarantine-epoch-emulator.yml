@@ -1,0 +1,66 @@
+name: FloodGuard R3 attestor quarantine + epoch (Auth + RTDB Emulator ONLY)
+
+on:
+  push:
+    branches:
+      - test/r3-attestor-incident-quarantine-epoch-20261102
+  pull_request:
+    branches:
+      - test/r3-attestor-service-incident-fence-20261102
+    paths:
+      - 'docs/firebase/r3-attestor-quarantine-epoch-lab.rules.json'
+      - 'firebase.r3-attestor-quarantine-epoch-lab.json'
+      - 'tests/r3-attestor-quarantine-epoch-emulator.mjs'
+      - 'docs/firebase/R3_ATTESTOR_QUARANTINE_EPOCH_20261102.md'
+      - '.github/workflows/r3-attestor-quarantine-epoch-emulator.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quarantine-epoch-local-only:
+    name: Test scoped attestor quarantine and version epoch with real local Auth tokens
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout with no persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Pin Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Pin Java 17
+        uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install synthetic test dependencies (no lifecycle scripts)
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npm install --no-save --package-lock=false --ignore-scripts firebase-admin@14.5.0
+      - name: Verify local configuration and source syntax
+        run: |
+          set -euo pipefail
+          node --check tests/r3-attestor-quarantine-epoch-emulator.mjs
+          node --input-type=module - <<'NODE'
+          import {readFileSync} from 'node:fs';
+          import assert from 'node:assert/strict';
+          const c=JSON.parse(readFileSync('firebase.r3-attestor-quarantine-epoch-lab.json','utf8'));
+          assert.equal(c.database.rules,'docs/firebase/r3-attestor-quarantine-epoch-lab.rules.json');
+          assert.deepEqual(c.emulators.auth,{host:'127.0.0.1',port:9099});
+          assert.deepEqual(c.emulators.database,{host:'127.0.0.1',port:9000});
+          assert.deepEqual(c.emulators.ui,{enabled:false});
+          NODE
+      - name: Verify actual incident quarantine and epoch against Auth and RTDB Emulator
+        run: |
+          set -euo pipefail
+          npx --yes firebase-tools@14.18.0 emulators:exec \
+            --only auth,database \
+            --project demo-r3-attestor-quarantine-epoch \
+            --config firebase.r3-attestor-quarantine-epoch-lab.json \
+            "FG_R3_QUARANTINE_EPOCH_TEST=1 GCLOUD_PROJECT=demo-r3-attestor-quarantine-epoch node --test tests/r3-attestor-quarantine-epoch-emulator.mjs"
