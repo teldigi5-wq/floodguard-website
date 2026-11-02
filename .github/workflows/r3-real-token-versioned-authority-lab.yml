@@ -1,0 +1,50 @@
+name: FloodGuard R3 real Auth Emulator token + versioned RTDB boundaries (local only)
+
+on:
+  push:
+    branches:
+      - test/r3-real-emulator-token-versioned-authority-20261102
+  pull_request:
+    branches:
+      - security/r3-real-authority-cutover-preflight-20261102
+    paths:
+      - 'tests/r3-real-token-versioned-authority-emulator.mjs'
+      - 'firebase.r3-real-token-versioned-lab.json'
+      - '.github/workflows/r3-real-token-versioned-authority-lab.yml'
+      - 'docs/firebase/R3_REAL_TOKEN_VERSIONED_BOUNDARY_20261102.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scoped-auth-emulator-only:
+    name: Mint localhost Auth ID tokens and exercise versioned confirmation Rules
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout without credential persistence
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Pin Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Pin Java 17 for Firebase Emulator
+        uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install pinned test-only dependencies without lifecycle scripts
+        run: |
+          npm ci --ignore-scripts
+          npm install --no-save --package-lock=false --ignore-scripts firebase-admin@14.5.0
+      - name: Run isolated Auth and RTDB emulators only with synthetic identities
+        run: |
+          npx --yes firebase-tools@14.18.0 emulators:exec \
+            --only auth,database \
+            --project demo-r3-real-token-versioned \
+            --config firebase.r3-real-token-versioned-lab.json \
+            "FG_R3_REAL_TOKEN_VERSIONED_TEST=1 GCLOUD_PROJECT=demo-r3-real-token-versioned node --test tests/r3-real-token-versioned-authority-emulator.mjs"
