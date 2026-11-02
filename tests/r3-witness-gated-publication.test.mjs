@@ -102,12 +102,15 @@ test('tampered witness fields, replayed identity and unexpected fields fail clos
 });
 
 test('signature-verified but expired or future witness fails freshness bounds',()=>{
+  // Both claims are structurally signable: expiration or future clock alone
+  // must be denied at the verifier boundary.
   assert.equal(verify({...signedIncident({
-    issuedAtMs:now-11000,expiresAtMs:now-1})}),false);
+    issuedAtMs:now-14000,expiresAtMs:now-1})}),false);
   assert.equal(verify({...signedIncident({
     issuedAtMs:now+2500,expiresAtMs:now+8000})}),false);
-  assert.equal(verify({...signedIncident({
-    issuedAtMs:now-14000,expiresAtMs:now+5000})}),false);
+  // A period longer than 15 seconds must be rejected BEFORE signing.
+  assert.throws(()=>signedIncident({
+    issuedAtMs:now-14000,expiresAtMs:now+5000}));
 });
 
 test('stale and tampered independently signed attestation is still denied',()=>{
