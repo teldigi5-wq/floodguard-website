@@ -1,0 +1,50 @@
+name: FloodGuard R3 pinned incident journal + publisher denial (OFFLINE ONLY)
+
+on:
+  push:
+    branches:
+      - test/r3-externally-pinned-incident-journal-20261102
+  pull_request:
+    branches:
+      - test/r3-witness-gated-publication-20261102
+    paths:
+      - 'experiments/r3-anchored-incident-journal.mjs'
+      - 'experiments/r3-pinned-journal-publication.mjs'
+      - 'tests/r3-anchored-incident-journal.test.mjs'
+      - 'tests/r3-pinned-journal-publication.test.mjs'
+      - 'docs/firebase/R3_EXTERNALLY_PINNED_INCIDENT_JOURNAL_20261102.md'
+      - '.github/workflows/r3-externally-pinned-incident-journal.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-incident-checkpoint:
+    name: Verify signed append-only history and old-attestation denial offline
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Unprivileged checkout without persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Pin Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Syntax checks
+        run: |
+          set -euo pipefail
+          node --check experiments/r3-anchored-incident-journal.mjs
+          node --check experiments/r3-pinned-journal-publication.mjs
+          node --check tests/r3-anchored-incident-journal.test.mjs
+          node --check tests/r3-pinned-journal-publication.test.mjs
+      - name: Run synthetic only journal, downstream witness and inherited payload regressions
+        run: |
+          set -euo pipefail
+          node --test \
+            tests/r3-anchored-incident-journal.test.mjs \
+            tests/r3-pinned-journal-publication.test.mjs \
+            tests/r3-witness-gated-publication.test.mjs \
+            tests/r3-private-public-payload-audit.test.mjs
