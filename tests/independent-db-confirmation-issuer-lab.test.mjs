@@ -254,12 +254,12 @@ test('expiry, future accept time or invalid clock never confirm',()=>{
 test('no public API accepts databaseRecord, trusted issuer key or operator binding as an attestation request',()=>{
   fixture(h=>{
     h.db().put(h.record);
-    const r=h.issuer().attest({...h.request(),
-      databaseRecord:h.record,privileged:true,privateKey:'SYNTHETIC'});
-    // Extra fields are NOT interpreted by the implementation; an input
-    // object can never replace the separately read database record.
-    assert.equal(r.issued,true);
-    assert.deepEqual(r.databaseRecord,h.record);
+    deny(h.issuer().attest({...h.request(),
+      databaseRecord:h.record,privileged:true,privateKey:'SYNTHETIC'}),
+      'request-shape-invalid');
+    // Only receipt and its Stage8 signature can be provided. The issuer
+    // always obtains confirmation from its separately configured reader.
+    assert.deepEqual(h.issuer().attest(h.request()).databaseRecord,h.record);
   });
 });
 
