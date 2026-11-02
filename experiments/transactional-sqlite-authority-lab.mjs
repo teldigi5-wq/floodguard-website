@@ -83,7 +83,7 @@ export function createTransactionalSqliteAuthorityLab({
       try{
         db.exec('CREATE TABLE meta (id INTEGER PRIMARY KEY CHECK(id=1), version TEXT NOT NULL, receipt_fp TEXT NOT NULL, signer_fp TEXT NOT NULL) STRICT');
         db.exec('CREATE TABLE device (device_id TEXT PRIMARY KEY,epoch INTEGER NOT NULL,enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),public_spki TEXT NOT NULL,key_fp TEXT NOT NULL,last_sequence INTEGER NOT NULL,last_digest TEXT NOT NULL,revision INTEGER NOT NULL) STRICT');
-        db.exec('CREATE TABLE confirmed (device_id TEXT NOT NULL,epoch INTEGER NOT NULL,sequence INTEGER NOT NULL,digest TEXT NOT NULL,accepted_at_ms INTEGER NOT NULL,status TEXT NOT NULL CHECK(status="DATABASE_CONFIRMED"),PRIMARY KEY(device_id,epoch,sequence),FOREIGN KEY(device_id) REFERENCES device(device_id)) STRICT');
+        db.exec("CREATE TABLE confirmed (device_id TEXT NOT NULL,epoch INTEGER NOT NULL,sequence INTEGER NOT NULL,digest TEXT NOT NULL,accepted_at_ms INTEGER NOT NULL,status TEXT NOT NULL CHECK(status='DATABASE_CONFIRMED'),PRIMARY KEY(device_id,epoch,sequence),FOREIGN KEY(device_id) REFERENCES device(device_id)) STRICT");
         db.exec('CREATE TABLE issued (device_id TEXT NOT NULL,epoch INTEGER NOT NULL,sequence INTEGER NOT NULL,digest TEXT NOT NULL,accepted_at_ms INTEGER NOT NULL,confirmed_at_ms INTEGER NOT NULL,signature TEXT NOT NULL,PRIMARY KEY(device_id,epoch,sequence),FOREIGN KEY(device_id) REFERENCES device(device_id)) STRICT');
         db.prepare('INSERT INTO meta (id,version,receipt_fp,signer_fp) VALUES (1,?,?,?)')
           .run(VERSION,fingerprints[1],fingerprints[2]);
