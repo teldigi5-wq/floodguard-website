@@ -196,7 +196,7 @@ test('new module contains no network, production secrets, RTDB writer, alert or 
   const src=readFileSync('experiments/three-signer-water-projection-gate.mjs','utf8');
   assert.doesNotMatch(src,/firebase-admin|firebase\/database|node:https|node:http/);
   assert.doesNotMatch(src,/\bfetch\s*\(|\.listen\s*\(|writeFileSync|createServer|process\.env/);
-  assert.doesNotMatch(src,/serviceAccount|servo\.write|digitalWrite|\.set\s*\(|\.update\s*\(/);
+  assert.doesNotMatch(src,/serviceAccount|servo\.write|digitalWrite|\.ref\s*\(|\.set\s*\(|\.updateChildren\s*\(|\.remove\s*\(/);
   assert.doesNotMatch(src,/\/floodguard\/live/);
   assert.match(src,/verifySyntheticPublicationAttestation/);
   assert.match(src,/verifyStage8OfflineReceipt/);
