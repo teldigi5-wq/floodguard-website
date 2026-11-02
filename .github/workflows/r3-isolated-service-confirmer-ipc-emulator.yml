@@ -7,11 +7,14 @@ on:
       - security/r3-separate-provisioning-worker-20261102
       - security/r3-service-session-fence-20261102
       - test/r3-confirmation-precommit-revocation-races-20261102
+      - test/r3-independent-readonly-attestor-20261102
   pull_request:
     branches:
       - test/r3-service-confirmation-signatures-20261102
       - test/r3-isolated-service-confirmer-ipc-20261102
       - security/r3-separate-provisioning-worker-20261102
+      - security/r3-service-session-fence-20261102
+      - test/r3-confirmation-precommit-revocation-races-20261102
     paths:
       - 'experiments/r3-isolated-service-confirmer-worker.mjs'
       - 'tests/r3-isolated-service-confirmer-ipc-emulator.mjs'
@@ -21,6 +24,8 @@ on:
       - 'docs/firebase/r3-service-session-fence-lab.rules.json'
       - 'docs/firebase/R3_SERVICE_SESSION_FENCE_20261102.md'
       - 'docs/firebase/R3_PRECOMMIT_REVOCATION_RACES_20261102.md'
+      - 'experiments/r3-readonly-attestor-auth-emulator.mjs'
+      - 'docs/firebase/R3_INDEPENDENT_READONLY_ATTESTOR_20261102.md'
   workflow_dispatch:
 
 permissions:
@@ -56,4 +61,4 @@ jobs:
             --only auth,database \
             --project demo-r3-isolated-service-confirmer \
             --config firebase.r3-isolated-service-confirmer-ipc-lab.json \
-            "FG_R3_ISOLATED_SERVICE_HARNESS=1 GCLOUD_PROJECT=demo-r3-isolated-service-confirmer node --test tests/r3-isolated-service-confirmer-ipc-emulator.mjs"
+            "FG_R3_READONLY_ATTESTOR_TEST=1 FG_VERSIONED_CONFIRMATION_TEST=1 FG_R3_ISOLATED_SERVICE_HARNESS=1 GCLOUD_PROJECT=demo-r3-isolated-service-confirmer node --test tests/r3-isolated-service-confirmer-ipc-emulator.mjs"
