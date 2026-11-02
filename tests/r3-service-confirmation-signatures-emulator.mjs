@@ -211,7 +211,9 @@ test('staged-frame mismatch, missing signer approval, or device revocation refus
   assert.equal((await confirmer()(x)).ok,false);
   await ok(req(STAGE,'device','PUT',{...FRAME,distanceCm:99}));
   assert.equal((await confirmer()(x)).ok,false);
-  await ok(req(STAGE,'device','PUT',FRAME));
+  // A real device cannot overwrite a same-sequence frame; simulate a new
+  // validated staged observation using operator-only test fixture setup.
+  await seed(STAGE,FRAME);
   await seed(ROOT+'/confirmerLabAuthorization/confirmer-stage/enabled',false);
   assert.equal((await confirmer()(x)).ok,false);
   await seed(ROOT+'/confirmerLabAuthorization/confirmer-stage/enabled',true);
