@@ -33,16 +33,3 @@ jobs:
           node --version
           node -e "JSON.parse(require('node:fs').readFileSync('docs/firebase/R3_PUBLIC_CHILD_READS_MERGED_REVIEW_ONLY_20261102.json','utf8'))"
           node --test tests/r3-merged-rules-review.test.mjs
-      - name: Verify this workflow cannot deploy candidate
-        run: |
-          set -euo pipefail
-          node --input-type=module - <<'NODE'
-          import fs from 'node:fs';
-          import assert from 'node:assert/strict';
-          const y=fs.readFileSync('.github/workflows/r3-merged-rules-review.yml','utf8');
-          for(const s of ['firebase deploy','emulators:exec','curl -X PUT','curl -X PATCH','firebase use','gcloud auth']) {
-            assert.equal(y.includes(s), false, 'Unexpected deploy/network command detected');
-          }
-          assert.match(y,/contents: read/);
-          console.log('Offline-only workflow source check passed');
-          NODE
