@@ -273,5 +273,5 @@ test('unpublished Rules candidate changes only service confirmer read/write gran
   assert.equal(f.confirmedLab.records['$deviceId']['$sequence']['.write']
     .includes('auth.token.fg_confirm_ingest_v1 === true'),false);
   assert.equal(containment.rules['.write'],false);
-  assert.equal(f['.write'],false);
+  assert.equal(candidate.rules['.write'],false);
 });
