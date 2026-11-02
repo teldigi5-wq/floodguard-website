@@ -1,0 +1,49 @@
+name: FloodGuard R3 H1 source authority review
+
+on:
+  push:
+    branches:
+      - security/r3-h1-offline-authority-review-20261102
+  pull_request:
+    branches:
+      - test/r3-independent-readonly-attestor-20261102
+    paths:
+      - 'scripts/r3-real-authority-preflight.mjs'
+      - 'scripts/r3-h1b-authority-evidence-review.mjs'
+      - 'tests/r3-h1-read-cascade.test.mjs'
+      - 'tests/r3-h1b-authority-evidence-review.test.mjs'
+      - '.github/workflows/r3-h1-offline-authority-review.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-source-review:
+    name: Source preflight, tests, lint, types and build (NO-GO)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout without persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Verify strict offline preflight
+        run: |
+          node scripts/r3-real-authority-preflight.mjs
+          node --test tests/r3-real-authority-preflight.test.mjs tests/r3-h1-read-cascade.test.mjs tests/r3-h1b-authority-evidence-review.test.mjs
+      - name: Run website regression suite
+        run: npm run test
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build
+        run: npm run build

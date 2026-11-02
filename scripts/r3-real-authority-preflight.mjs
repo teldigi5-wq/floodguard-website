@@ -50,9 +50,37 @@ function reviewRules(ruleDoc){
     return Object.entries(node).every(([k,v])=>
       k.startsWith('.')||typeof v!=='object'||noWriteGrant(v));
   }
-  // Do not treat a local repo file as the effective deployed rules.
-  // Nested write grants could override the apparent root-wide deny.
-  if(!noWriteGrant(root))return false;
+  // Only these nine repository read grants are approved by this offline
+  // source contract. Firebase .read access cascades to descendants: a deeper
+  // ".read": false CANNOT revoke an ancestor's read grant. Also reject
+  // conditional grants here: evaluating their semantics needs the emulator
+  // and independently verified effective production rules/identities.
+  const expectedPublicReads=new Set([
+    '/floodguard/live/water',
+    '/floodguard/live/rain',
+    '/floodguard/live/gate',
+    '/floodguard/live/alarm',
+    '/floodguard/live/devices',
+    '/floodguard/live/system',
+    '/floodguard/live/esp8266/connection',
+    '/floodguard/live/esp8266/rssi',
+    '/floodguard/live/esp8266/status'
+  ]);
+  function noUnexpectedReadGrant(node,path=''){
+    if(!plain(node))return false;
+    if(Object.hasOwn(node,'.read')){
+      const grant=node['.read'];
+      if(grant!==false&&!(grant===true&&expectedPublicReads.has(path)))
+        return false;
+    }
+    return Object.entries(node).every(([key,value])=>
+      key.startsWith('.')||(plain(value)&&
+        noUnexpectedReadGrant(value,path+'/'+key)));
+  }
+  // Do not treat a local repo file as the effective deployed rules. A
+  // checked-in allowlisted parent still exposes any future descendants under
+  // that parent; privately inventory the actual stored data before cutover.
+  if(!noWriteGrant(root)||!noUnexpectedReadGrant(root))return false;
   const live=root.floodguard?.live;
   return live?.water?.['.read']===true&&
     live?.rain?.['.read']===true&&
