@@ -189,7 +189,7 @@ test('actual signed device frame + receipt passes scoped service verifier and im
   assert.equal(result.kind,'IMMUTABLE_EMULATOR_RECORD_ONLY');
   assert.deepEqual(await ok(req(CONFIRM,'attestor')),recordFor(x));
   assert.deepEqual(await ok(req(CONFIRM,'service')),recordFor(x));
-  assert.equal(await ok(req(PUB+'/checkpoint',null)),null);
+  await denied(req(PUB+'/checkpoint',null));
   await denied(req(PUB,'service','PUT',{}));
   await denied(req(CONFIRM,'clientConfirmer','PUT',recordFor(x)));
 });
