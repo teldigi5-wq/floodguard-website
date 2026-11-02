@@ -5,6 +5,8 @@ on:
     branches:
       - test/r3-isolated-service-confirmer-ipc-20261102
       - security/r3-separate-provisioning-worker-20261102
+      - security/r3-separate-provisioning-worker-20261102
+      - security/r3-service-session-fence-20261102
   pull_request:
     branches:
       - test/r3-service-confirmation-signatures-20261102
@@ -15,6 +17,8 @@ on:
       - 'firebase.r3-isolated-service-confirmer-ipc-lab.json'
       - '.github/workflows/r3-isolated-service-confirmer-ipc-emulator.yml'
       - 'docs/firebase/R3_ISOLATED_SERVICE_WORKER_BOUNDARY_20261102.md'
+      - 'docs/firebase/r3-service-session-fence-lab.rules.json'
+      - 'docs/firebase/R3_SERVICE_SESSION_FENCE_20261102.md'
   workflow_dispatch:
 
 permissions:
