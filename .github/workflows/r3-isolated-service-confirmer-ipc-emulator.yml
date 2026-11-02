@@ -61,4 +61,4 @@ jobs:
             --only auth,database \
             --project demo-r3-isolated-service-confirmer \
             --config firebase.r3-isolated-service-confirmer-ipc-lab.json \
-            "FG_R3_READONLY_ATTESTOR_TEST=1 FG_R3_ISOLATED_SERVICE_HARNESS=1 GCLOUD_PROJECT=demo-r3-isolated-service-confirmer node --test tests/r3-isolated-service-confirmer-ipc-emulator.mjs"
+            "FG_R3_READONLY_ATTESTOR_TEST=1 FG_VERSIONED_CONFIRMATION_TEST=1 FG_R3_ISOLATED_SERVICE_HARNESS=1 GCLOUD_PROJECT=demo-r3-isolated-service-confirmer node --test tests/r3-isolated-service-confirmer-ipc-emulator.mjs"
