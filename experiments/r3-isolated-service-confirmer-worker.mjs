@@ -4,7 +4,7 @@
 // field equipment, WhatsApp/SMS or production device/issuer credentials.
 // Important: a stolen service bearer token STILL bypasses optional Ed25519
 // application verification; process confinement is defense in depth only.
-import {createPublicKey,createHash} from 'node:crypto';
+import {createPublicKey,createHash,randomBytes} from 'node:crypto';
 import {createReadStream} from 'node:fs';
 import {createVersionedEmulatorConfirmer}
   from './versioned-confirmation-emulator.mjs';
@@ -32,6 +32,9 @@ if(process.env.FG_R3_ISOLATED_WORKER_TEST!=='1'||
   throw Error('Refusing execution outside pinned local IPC emulator harness');
 }
 let initialized=false,processing=false,confirm;
+// Synthetic test-only pause point immediately before the final RTDB PUT.
+// It is NEVER active for a normal worker and never bypasses Rules.
+let pendingCommitPermit=null,activeRequestId=null;
 // The service identity MUST be provisioned by a separate trusted operator
 // test harness. This process has NO Auth Admin SDK or create-user ability.
 // A one-use dedicated fd4 pipe carries only local emulator login material.
@@ -81,9 +84,30 @@ function tokenUrl(path) {
   return u;
 }
 let token; // Only held in the isolated worker's memory, never sent over IPC.
+async function waitForPrecommitRaceTestPermit(){
+  if(process.env.FG_R3_PRECOMMIT_RACE_TEST!=='1')return;
+  if(pendingCommitPermit!==null||!Number.isSafeInteger(activeRequestId))
+    throw Error('Precommit race test state invalid');
+  const nonce=randomBytes(16).toString('hex');
+  await new Promise((resolve,reject)=>{
+    const timeout=setTimeout(()=>{
+      if(pendingCommitPermit?.nonce===nonce)pendingCommitPermit=null;
+      reject(Error('Precommit test permit missing'));
+    },6000);
+    pendingCommitPermit=Object.freeze({nonce,id:activeRequestId,
+      release(){clearTimeout(timeout);pendingCommitPermit=null;resolve();}});
+    send({type:'test-precommit-paused',id:activeRequestId,nonce,
+      canPublish:false,canOperateGate:false,productionGo:false});
+  });
+}
 async function dbRequest(path,method='GET',value) {
   if(!ALLOWED_READ.has(path)||method!=='GET'&&!(method==='PUT'&&path===CONFIRM))
     throw Error('Database capability denied');
+  // Pause after signed evidence, operator, staging and existing-record checks,
+  // but before the actual RTDB commit. The emulator evaluates Rules afresh
+  // on the eventual write, including the service generation and revocation.
+  if(method==='PUT'&&path===CONFIRM)
+    await waitForPrecommitRaceTestPermit();
   const response=await fetch(tokenUrl(path),{
     method,headers:{'content-type':'application/json'},
     ...(value===undefined?{}:{body:JSON.stringify(value)}),
@@ -159,6 +183,7 @@ async function processMessage(message){
      !initialized||typeof confirm!=='function')
     return failure(message?.id??0,'request-invalid');
   try {
+    activeRequestId=message.id;
     const result=await confirm(message.evidence);
     if(result?.ok===true) {
       // No opaque error data or bearer credential escapes the process.
@@ -173,9 +198,21 @@ async function processMessage(message){
     }
   }catch {
     failure(message.id,'confirmation-unavailable');
+  }finally{
+    activeRequestId=null;
   }
 }
 process.on('message',message=>{
+  // This one-time nonce release exists ONLY in a synthetic emulator child.
+  // It is never an authorization or permission to write. Every RTDB rule
+  // is still evaluated at the eventual commit after release.
+  if(process.env.FG_R3_PRECOMMIT_RACE_TEST==='1'&&pendingCommitPermit&&
+     exact(message,['id','type','nonce'])&&
+     message.type==='test-resume-precommit'&&
+     message.id===pendingCommitPermit.id&&
+     message.nonce===pendingCommitPermit.nonce){
+    return pendingCommitPermit.release();
+  }
   if(processing)return failure(message?.id??0,'worker-busy-denied');
   processing=true;
   Promise.resolve().then(()=>initialized?processMessage(message):setup(message))

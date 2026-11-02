@@ -6,6 +6,7 @@ on:
       - test/r3-isolated-service-confirmer-ipc-20261102
       - security/r3-separate-provisioning-worker-20261102
       - security/r3-service-session-fence-20261102
+      - test/r3-confirmation-precommit-revocation-races-20261102
   pull_request:
     branches:
       - test/r3-service-confirmation-signatures-20261102
@@ -19,6 +20,7 @@ on:
       - 'docs/firebase/R3_ISOLATED_SERVICE_WORKER_BOUNDARY_20261102.md'
       - 'docs/firebase/r3-service-session-fence-lab.rules.json'
       - 'docs/firebase/R3_SERVICE_SESSION_FENCE_20261102.md'
+      - 'docs/firebase/R3_PRECOMMIT_REVOCATION_RACES_20261102.md'
   workflow_dispatch:
 
 permissions:
