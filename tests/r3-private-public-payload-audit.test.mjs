@@ -20,7 +20,7 @@ const sample=()=>({
     alarm:{active:false,type:'DAM_WARNING'},
     devices:{arduino:'ONLINE',gsm:'NOT_INSTALLED',microSD:'NOT_INSTALLED',
       rainGauge:'ONLINE',rtc:'ONLINE',servo:'ONLINE',ultrasonic:'ONLINE'},
-    system:{lastUpdate:1700000000000,overallRisk:'MODERATE',waterSensorToBottomCm:25},
+    system:{lastUpdate:1690000000000,overallRisk:'MODERATE',waterSensorToBottomCm:25},
     esp8266:{connection:'CONNECTED',rssi:-57,status:'ONLINE',
       ip:'SYNTHETIC_PRIVATE_CANARY_1',wifi:'SYNTHETIC_PRIVATE_CANARY_2'}
   },bot:{secret:'SYNTHETIC_PRIVATE_CANARY_3'}}
