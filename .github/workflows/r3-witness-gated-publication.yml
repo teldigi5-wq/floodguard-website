@@ -1,0 +1,39 @@
+name: FloodGuard R3 witness-gated publication contract (OFFLINE ONLY)
+
+on:
+  push:
+    branches:
+      - test/r3-witness-gated-publication-20261102
+  pull_request:
+    branches:
+      - test/r3-attestor-incident-quarantine-epoch-20261102
+    paths:
+      - 'experiments/r3-witness-gated-publication.mjs'
+      - 'tests/r3-witness-gated-publication.test.mjs'
+      - 'docs/firebase/R3_WITNESS_GATED_PUBLICATION_20261102.md'
+      - '.github/workflows/r3-witness-gated-publication.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  signed-incident-floor-contract:
+    name: Offline signed witness + anti-rollback tests (no secrets/no deploy)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out without persistent credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Pin Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Verify offline-only witness and existing private-audit regressions
+        run: |
+          set -euo pipefail
+          node --check experiments/r3-witness-gated-publication.mjs
+          node --check tests/r3-witness-gated-publication.test.mjs
+          node --test tests/r3-witness-gated-publication.test.mjs tests/r3-private-public-payload-audit.test.mjs
