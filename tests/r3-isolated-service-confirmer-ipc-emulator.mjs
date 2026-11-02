@@ -501,3 +501,126 @@ test('candidate changes only five service expressions and adds owner-only fence'
   assert.equal(candidate.rules['.write'],false);
   assert.equal(candidate.rules.floodguard.publicationLab.water['.write'],false);
 });
+
+// PR #86: deterministic local RTDB Rules evaluation races, NOT a deployed
+// transaction/authorization service. The pause occurs AFTER the independent
+// signed evidence and operator/staging checks but BEFORE the final RTDB PUT.
+// The database must refuse stale permissions at the actual write boundary.
+async function runPrecommitRace({change,expectSuccess=false,
+  expectedStored=null}){
+  const entry=fileURLToPath(new URL(
+    '../experiments/r3-isolated-service-confirmer-worker.mjs',import.meta.url));
+  const race=fork(entry,[],{
+    cwd:process.cwd(),execArgv:[],
+    stdio:['ignore','pipe','pipe','ipc','pipe'],
+    env:{
+      PATH:process.env.PATH,HOME:process.env.HOME,
+      FG_R3_ISOLATED_WORKER_TEST:'1',
+      FG_R3_PRECOMMIT_RACE_TEST:'1',
+      FG_VERSIONED_CONFIRMATION_TEST:'1',
+      GCLOUD_PROJECT:PROJECT,
+      FIREBASE_AUTH_EMULATOR_HOST:'127.0.0.1:9099',
+      FIREBASE_DATABASE_EMULATOR_HOST:'127.0.0.1:9000'
+    }
+  });
+  race.stdout.on('data',()=>{});
+  race.stderr.on('data',()=>{});
+  function receive(predicate){
+    return new Promise((resolve,reject)=>{
+      const timeout=setTimeout(()=>{
+        race.off('message',listener);
+        reject(Error('Synthetic precommit worker failed closed or timed out'));
+      },9000);
+      function listener(message){
+        if(predicate(message)){
+          clearTimeout(timeout);
+          race.off('message',listener);
+          resolve(message);
+        }
+      }
+      race.on('message',listener);
+    });
+  }
+  try{
+    // The separate trusted test harness already created this identity.
+    // Only the one-use credential bootstrap pipe has the test password.
+    race.stdio[4].end(JSON.stringify({
+      email:'service-confirm-stage@floodguard-lab.invalid',
+      password:serviceTestPassword
+    }));
+    const ready=receive(m=>m?.id===701);
+    race.send({id:701,type:'init',
+      deviceSpki:SPKI(DEVICE.publicKey),
+      receiptSpki:SPKI(RECEIPT.publicKey)});
+    const init=await ready;
+    assert.equal(init.ok,true,JSON.stringify(init));
+    assert.equal(init.productionGo,false);
+    await granted(db(STAGE,'device','PUT',FRAME));
+    const paused=receive(m=>m?.type==='test-precommit-paused'&&m?.id===702);
+    race.send({id:702,type:'confirm',evidence:signedEvidence()});
+    const pause=await paused;
+    assert.match(pause.nonce,/^[0-9a-f]{32}$/);
+    assert.equal(pause.productionGo,false);
+    assert.equal(JSON.stringify(pause).includes('idToken'),false);
+    // This mutation happens only AFTER the verifier's independent reads.
+    // Real RTDB Emulator Rules must re-evaluate at the eventual PUT.
+    await change();
+    const done=receive(m=>m?.id===702&&m?.type!=='test-precommit-paused');
+    race.send({id:702,type:'test-resume-precommit',nonce:pause.nonce});
+    const final=await done;
+    assert.equal(final.ok,expectSuccess,JSON.stringify(final));
+    assert.equal(final.canPublish,expectSuccess?false:undefined);
+    assert.equal(JSON.stringify(final).includes('idToken'),false);
+    assert.equal(JSON.stringify(final).includes('Bearer'),false);
+    const stored=await granted(db(RECORD,owner));
+    if(expectedStored===null)assert.equal(stored,null);
+    else if(expectedStored==='SIGNED'){
+      const digest=signedEvidence().receipt.digest;
+      assert.equal(stored.digest,digest);
+      assert.equal(stored.frame.risk,'WARNING');
+    }else assert.deepEqual(stored,expectedStored);
+    return final;
+  }finally{
+    if(race.connected)race.disconnect();
+    race.kill('SIGTERM');
+  }
+}
+test('precommit control: unchanged Rules accept signed record after test-only pause',async()=>{
+  const done=await runPrecommitRace({
+    change:async()=>{},expectSuccess:true,expectedStored:'SIGNED'
+  });
+  assert.equal(done.kind,'IMMUTABLE_EMULATOR_RECORD_ONLY');
+  assert.equal(done.sequence,2);
+  assert.equal(done.canOperateGate,false);
+});
+test('revoking service after signed verification but before commit denies final write',async()=>{
+  await runPrecommitRace({
+    change:()=>seed(ROOT+'/serviceWorkerAuthorization/service-confirm-stage/enabled',false)
+  });
+});
+test('rotating service generation after verification but before commit denies old token',async()=>{
+  await runPrecommitRace({
+    change:()=>seed(ROOT+'/serviceWorkerAuthorization/service-confirm-stage/generation',2)
+  });
+});
+test('revoking physical device authorization after verification denies stale commit',async()=>{
+  await runPrecommitRace({
+    change:()=>seed(ROOT+'/deviceAuthorization/'+ID+'/enabled',false)
+  });
+});
+test('advancing staged frame after verification denies stale sequence-2 commit',async()=>{
+  await runPrecommitRace({
+    change:()=>seed(STAGE,{...FRAME,sequence:3})
+  });
+});
+test('concurrent immutable record insert cannot be silently overwritten or reconciled',async()=>{
+  const other={
+    version:'floodguard-confirmed-record-v1',epoch:1,sequence:2,
+    digest:'d'.repeat(64),acceptedAtMs:NOW-100,
+    observedAtMs:NOW-400,frame:FRAME
+  };
+  const done=await runPrecommitRace({
+    change:()=>seed(RECORD,other),expectedStored:other
+  });
+  assert.equal(done.reason,'confirmed-record-conflict');
+});
