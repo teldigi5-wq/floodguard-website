@@ -134,8 +134,8 @@ test('never confuse a local repository candidate with effective production rules
 });
 test('preflight does not read cloud config, load runtime credentials or write files',()=>{
   const src=readFileSync('scripts/r3-real-authority-preflight.mjs','utf8');
-  const importedModules=src.split('\n').filter(line=>/^import\\s/.test(line)).join('\n');
-  assert.doesNotMatch(importedModules,/firebase-admin|firebase\\/database|node:http|node:https/);
+  const importedModules=src.match(/^import.*$/gm)?.join('\n')??'';
+  assert.doesNotMatch(importedModules,/firebase-admin|firebase\/database|node:https?/);
   assert.doesNotMatch(src,/\bfetch\s*\(|\.listen\s*\(|writeFileSync|\.set\s*\(/);
   assert.doesNotMatch(src,/process\.env|serviceAccountKey|databaseAuthVariableOverride/);
   assert.match(src,/localRulesCandidateReviewed:true/);
