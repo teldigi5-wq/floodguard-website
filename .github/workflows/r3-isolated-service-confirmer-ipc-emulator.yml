@@ -5,12 +5,12 @@ on:
     branches:
       - test/r3-isolated-service-confirmer-ipc-20261102
       - security/r3-separate-provisioning-worker-20261102
-      - security/r3-separate-provisioning-worker-20261102
       - security/r3-service-session-fence-20261102
   pull_request:
     branches:
       - test/r3-service-confirmation-signatures-20261102
       - test/r3-isolated-service-confirmer-ipc-20261102
+      - security/r3-separate-provisioning-worker-20261102
     paths:
       - 'experiments/r3-isolated-service-confirmer-worker.mjs'
       - 'tests/r3-isolated-service-confirmer-ipc-emulator.mjs'
