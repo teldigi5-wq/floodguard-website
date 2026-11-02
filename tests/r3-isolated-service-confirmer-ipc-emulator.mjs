@@ -39,7 +39,8 @@ if(process.env.FG_R3_ISOLATED_SERVICE_HARNESS!=='1'||
    process.env.FIREBASE_AUTH_EMULATOR_HOST!=='127.0.0.1:9099'||
    process.env.FIREBASE_DATABASE_EMULATOR_HOST!=='127.0.0.1:9000')
   throw Error('Pinned localhost-only isolated service integration required');
-let authApp,users,tokens,child,serial=0;
+let authApp,adminAuth,users,tokens,child,serial=0;
+let serviceTestPassword;
 const pending=new Map();
 const owner='__TEST_OWNER_ONLY__';
 function dbUrl(p,role) {
@@ -130,6 +131,7 @@ function ipc(message,timeoutMs=8000){
 before(async()=>{
   authApp=initializeApp({projectId:PROJECT},'r3-isolated-host-fixture');
   const auth=getAuth(authApp);
+  adminAuth=auth;
   users={};
   for(const [role,[uid,claim]] of Object.entries(ROLES)){
     const email=uid+'@floodguard-lab.invalid';
@@ -143,10 +145,11 @@ before(async()=>{
   // must not have the Admin Auth SDK or any user/role-creation capability.
   const serviceEmail='service-confirm-stage@floodguard-lab.invalid';
   const servicePassword=randomBytes(28).toString('base64url');
+  serviceTestPassword=servicePassword;
   await auth.createUser({uid:'service-confirm-stage',
     email:serviceEmail,password:servicePassword});
   await auth.setCustomUserClaims('service-confirm-stage',
-    {fg_server_confirm_v1:true});
+    {fg_server_confirm_v1:true,fg_service_generation:1});
   // Only a one-time anonymous fd4 pipe delivers the synthetic password;
   // the regular confirmation IPC, process arguments and env remain secretless.
   const entry=fileURLToPath(new URL(
@@ -199,6 +202,7 @@ before(async()=>{
   assert.equal(Object.values(child.spawnargs).some(x=>x.includes('serviceAccount')),false);
   const serviceAccount=await auth.getUser('service-confirm-stage');
   assert.equal(serviceAccount.customClaims.fg_server_confirm_v1,true);
+  assert.equal(serviceAccount.customClaims.fg_service_generation,1);
   assert.equal(child.stdio[4].writableEnded,true);
 });
 after(async()=>{
@@ -211,6 +215,9 @@ beforeEach(async()=>{
   for(const role of Object.keys(ROLES))tokens[role]=await signin(role);
   await seed(ROOT,{
     deviceAuthorization:{[ID]:{enabled:true,scope:'prototype-ingest-v1'}},
+    serviceWorkerAuthorization:{
+      'service-confirm-stage':{enabled:true,generation:1}
+    },
     confirmerLabAuthorization:{
       'confirmer-stage':{enabled:true,scope:'confirmer-ingest-v1',
         deviceId:ID,epoch:1,deviceKeyFingerprint:HASH}
@@ -391,4 +398,106 @@ test('service credential cannot be re-requested by confirm IPC or used as provis
     assert.equal(result.ok,false,JSON.stringify(result));
     assert.equal(JSON.stringify(result).includes('idToken'),false);
   }
+});
+
+async function issuedServiceToken(){
+  const r=await call(
+    AUTH+'/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-only',
+    'POST',{email:'service-confirm-stage@floodguard-lab.invalid',
+      password:serviceTestPassword,returnSecureToken:true});
+  assert.equal(r.status,200);
+  const jwt=r.data.idToken;
+  const c=JSON.parse(Buffer.from(jwt.split('.')[1],'base64url').toString());
+  assert.equal(c.user_id||c.sub,'service-confirm-stage');
+  assert.equal(c.aud,PROJECT);
+  assert.equal(c.fg_server_confirm_v1,true);
+  assert.ok(Number.isSafeInteger(c.fg_service_generation));
+  return {jwt,generation:c.fg_service_generation};
+}
+async function directServiceRequest(token,path,method='GET',body){
+  const u=dbUrl(path,null);
+  u.searchParams.set('auth',token);
+  return call(u,method,body);
+}
+function forgedRecord(){
+  return {
+    version:'floodguard-confirmed-record-v1',
+    epoch:1,sequence:2,digest:'c'.repeat(64),
+    acceptedAtMs:NOW-100,observedAtMs:NOW-400,frame:FRAME
+  };
+}
+test('active exact-generation service credential still bypasses Ed25519: OPEN security defect',async()=>{
+  await granted(db(STAGE,'device','PUT',FRAME));
+  const {jwt,generation}=await issuedServiceToken();
+  assert.equal(generation,1);
+  const forged=forgedRecord();
+  assert.deepEqual(await granted(directServiceRequest(jwt,RECORD,'PUT',forged)),forged);
+  assert.deepEqual(await granted(db(RECORD,owner)),forged);
+  const fromWorker=await ipc({type:'confirm',evidence:signedEvidence()});
+  assert.equal(fromWorker.ok,false);
+  assert.equal(fromWorker.productionGo,undefined);
+});
+test('operator disabling service fence denies already-issued token and isolated worker',async()=>{
+  await granted(db(STAGE,'device','PUT',FRAME));
+  const {jwt}=await issuedServiceToken();
+  await seed(ROOT+'/serviceWorkerAuthorization/service-confirm-stage/enabled',false);
+  await denied(directServiceRequest(jwt,RECORD,'PUT',forgedRecord()));
+  await denied(directServiceRequest(jwt,STAGE));
+  const reply=await ipc({type:'confirm',evidence:signedEvidence()});
+  assert.equal(reply.ok,false,JSON.stringify(reply));
+  assert.equal(await granted(db(RECORD,owner)),null);
+  await denied(db(ROOT+'/serviceWorkerAuthorization/service-confirm-stage','device'));
+  await denied(db(ROOT+'/serviceWorkerAuthorization/service-confirm-stage','ordinary'));
+  await denied(db(ROOT+'/serviceWorkerAuthorization/service-confirm-stage','device','PUT',{
+    enabled:true,generation:1
+  }));
+});
+test('raising generation denies old worker token even while service enabled; no auto-refresh',async()=>{
+  await granted(db(STAGE,'device','PUT',FRAME));
+  const stale=await issuedServiceToken();
+  assert.equal(stale.generation,1);
+  await seed(ROOT+'/serviceWorkerAuthorization/service-confirm-stage/generation',2);
+  await denied(directServiceRequest(stale.jwt,RECORD,'PUT',forgedRecord()));
+  const oldWorker=await ipc({type:'confirm',evidence:signedEvidence()});
+  assert.equal(oldWorker.ok,false);
+  assert.equal(await granted(db(RECORD,owner)),null);
+  // The operator can mint a new generation credential in the AUTH EMULATOR.
+  // Old worker is NOT given this new token. A compromised freshly rotated
+  // token still bypasses Ed25519: generation fencing is not cryptographic proof.
+  try {
+    await adminAuth.setCustomUserClaims('service-confirm-stage',{
+      fg_server_confirm_v1:true,fg_service_generation:2
+    });
+    const fresh=await issuedServiceToken();
+    assert.equal(fresh.generation,2);
+    assert.deepEqual(await granted(directServiceRequest(
+      fresh.jwt,RECORD,'PUT',forgedRecord())),forgedRecord());
+    assert.equal((await ipc({type:'confirm',evidence:signedEvidence()})).ok,false);
+  }finally{
+    await adminAuth.setCustomUserClaims('service-confirm-stage',{
+      fg_server_confirm_v1:true,fg_service_generation:1
+    });
+  }
+});
+test('candidate changes only five service expressions and adds owner-only fence',()=>{
+  const previous=JSON.parse(readFileSync(
+    'docs/firebase/r3-service-confirmation-lab.rules.json','utf8'));
+  const candidate=JSON.parse(readFileSync(
+    'docs/firebase/r3-service-session-fence-lab.rules.json','utf8'));
+  const old="auth != null && auth.uid === 'service-confirm-stage' && auth.token.fg_server_confirm_v1 === true";
+  const revised=old+" && auth.token.fg_service_generation === root.child('floodguard/serviceWorkerAuthorization/service-confirm-stage/generation').val() && root.child('floodguard/serviceWorkerAuthorization/service-confirm-stage/enabled').val() === true";
+  let changed=0;
+  function apply(node){
+    for(const [k,v] of Object.entries(node)){
+      if(typeof v==='string'&&['.read','.write'].includes(k)&&v.includes(old)){
+        node[k]=v.replaceAll(old,revised);changed++;
+      }else if(v&&typeof v==='object')apply(v);
+    }
+  }
+  apply(previous.rules.floodguard);
+  previous.rules.floodguard.serviceWorkerAuthorization={'.read':false,'.write':false};
+  assert.equal(changed,5);
+  assert.deepEqual(candidate,previous);
+  assert.equal(candidate.rules['.write'],false);
+  assert.equal(candidate.rules.floodguard.publicationLab.water['.write'],false);
 });
