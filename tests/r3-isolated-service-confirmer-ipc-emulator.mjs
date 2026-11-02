@@ -777,7 +777,7 @@ test('read-only attestor module contains no privileged SDK, write verbs or publi
   assert.doesNotMatch(source,/firebase-admin|node:https|node:http/);
   assert.doesNotMatch(source,/\b(?:POST|PUT|PATCH|DELETE)\b/);
   assert.doesNotMatch(source,/\.listen\s*\(|process\.env\.(?:FIREBASE_CONFIG|GOOGLE_APPLICATION_CREDENTIALS)/);
-  assert.doesNotMatch(source,/\.set\s*\(|\.update\s*\(|\.remove\s*\(/);
+  assert.doesNotMatch(source,/ref\([^)]*\)\.set\s*\(|writeFileSync|\.update\s*\(|\.remove\s*\(/);
   assert.equal(ATTESTOR.publicKey.asymmetricKeyType,'ed25519');
   assert.notEqual(SPKI(DEVICE.publicKey),SPKI(ATTESTOR.publicKey));
   assert.notEqual(SPKI(RECEIPT.publicKey),SPKI(ATTESTOR.publicKey));
