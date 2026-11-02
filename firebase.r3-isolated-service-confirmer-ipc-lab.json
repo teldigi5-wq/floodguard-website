@@ -1,6 +1,6 @@
 {
   "database": {
-    "rules": "docs/firebase/r3-service-confirmation-lab.rules.json"
+    "rules": "docs/firebase/r3-service-session-fence-lab.rules.json"
   },
   "emulators": {
     "auth": {
