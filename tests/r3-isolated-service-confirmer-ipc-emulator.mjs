@@ -12,6 +12,12 @@ import {initializeApp,deleteApp} from 'firebase-admin/app';
 import {getAuth} from 'firebase-admin/auth';
 import {canonicalOfflineEnvelope}
   from '../experiments/stage7-durable-ingress.mjs';
+import {createVersionedEmulatorAttestor}
+  from '../experiments/versioned-confirmation-emulator.mjs';
+import {createReadOnlyAttestorEmulatorDatabase}
+  from '../experiments/r3-readonly-attestor-auth-emulator.mjs';
+import {verifySyntheticPublicationAttestation}
+  from '../experiments/synthetic-publication-attestation.mjs';
 
 const PROJECT='demo-r3-isolated-service-confirmer';
 const AUTH='http://127.0.0.1:9099';
@@ -25,6 +31,7 @@ const NOW=1700000003500;
 const FRAME={sequence:2,distanceCm:16.5,levelCm:8.5,risk:'WARNING'};
 const DEVICE=generateKeyPairSync('ed25519');
 const RECEIPT=generateKeyPairSync('ed25519');
+const ATTESTOR=generateKeyPairSync('ed25519');
 const HASH=createHash('sha256')
   .update(DEVICE.publicKey.export({format:'der',type:'spki'}))
   .digest('hex');
@@ -623,4 +630,155 @@ test('concurrent immutable record insert cannot be silently overwritten or recon
     change:()=>seed(RECORD,other),expectedStored:other
   });
   assert.equal(done.reason,'confirmed-record-conflict');
+});
+
+// PR #87: independent READ-ONLY Auth Emulator ID token and Ed25519 key,
+// never the service confirmer's writer token. This proves a forged immutable
+// record is NOT an independent publication attestation.
+function readOnlyAttestor(role='attestor'){
+  const database=createReadOnlyAttestorEmulatorDatabase({idToken:tokens[role]});
+  return createVersionedEmulatorAttestor({
+    database,deviceId:ID,devicePublicKey:DEVICE.publicKey,
+    receiptPublicKey:RECEIPT.publicKey,
+    attestationPrivateKey:ATTESTOR.privateKey,clock:()=>NOW
+  });
+}
+async function signedConfirmedFixture(){
+  const signed=signedEvidence();
+  await granted(db(STAGE,'device','PUT',FRAME));
+  const confirmed=await ipc({type:'confirm',evidence:signed});
+  assert.equal(confirmed.ok,true,JSON.stringify(confirmed));
+  return signed;
+}
+test('separate read-only attestor signs matching immutable record after legitimate isolated worker',async()=>{
+  const signed=await signedConfirmedFixture();
+  const checked=await readOnlyAttestor()(signed);
+  assert.equal(checked.ok,true,JSON.stringify(checked));
+  assert.equal(checked.kind,'VERSIONED_EMULATOR_ATTESTATION_ONLY');
+  assert.equal(checked.attestation.databaseState,'DATABASE_CONFIRMED');
+  assert.equal(checked.attestation.deviceEnabled,true);
+  assert.equal(checked.attestation.sequence,2);
+  assert.equal(verifySyntheticPublicationAttestation({
+    attestation:checked.attestation,
+    signature:checked.attestationSignature,
+    publicKey:ATTESTOR.publicKey,
+    receipt:signed.receipt,nowMs:NOW
+  }),true);
+  assert.equal(JSON.stringify(checked).includes('idToken'),false);
+  assert.equal((await granted(db(PUBLIC+'/current',null))).status,'SAFE');
+  await denied(db(PUBLIC,'attestor','PUT',{}));
+});
+test('compromised confirmer service token can forge immutable record but separate attestor refuses signature',async()=>{
+  await granted(db(STAGE,'device','PUT',FRAME));
+  const {jwt}=await issuedServiceToken();
+  const forged=forgedRecord();
+  assert.deepEqual(await granted(directServiceRequest(jwt,RECORD,'PUT',forged)),forged);
+  const checked=await readOnlyAttestor()(signedEvidence());
+  assert.equal(checked.ok,false,JSON.stringify(checked));
+  assert.equal(checked.reason,'immutable-confirmation-unverified');
+  assert.equal(checked.attestationSignature,undefined);
+  assert.deepEqual(await granted(db(RECORD,owner)),forged);
+  await denied(db(PUBLIC,'attestor','PUT',{}));
+});
+test('correct hash alone does not authenticate a corrupted immutable confirmation',async()=>{
+  const signed=signedEvidence();
+  await granted(db(STAGE,'device','PUT',FRAME));
+  const raw={
+    version:'floodguard-confirmed-record-v1',
+    epoch:1,sequence:2,digest:signed.receipt.digest,
+    acceptedAtMs:NOW-100,observedAtMs:NOW-400,
+    frame:FRAME
+  };
+  for(const corrupted of [
+    {...raw,acceptedAtMs:NOW-101},
+    {...raw,frame:{...FRAME,risk:'DANGER'}},
+    {...raw,extra:'untrusted'},
+    {...raw,observedAtMs:NOW-401}
+  ]){
+    await seed(RECORD,corrupted); // privileged test fixture; never service
+    const checked=await readOnlyAttestor()(signed);
+    assert.equal(checked.ok,false,JSON.stringify(checked));
+    assert.equal(checked.attestationSignature,undefined);
+  }
+});
+test('attestor can read exact confirmed evidence only and has no database mutation method',async()=>{
+  const signed=await signedConfirmedFixture();
+  const dbOnly=createReadOnlyAttestorEmulatorDatabase({idToken:tokens.attestor});
+  assert.equal(typeof dbOnly.ref(RECORD).get,'function');
+  assert.equal(dbOnly.ref(RECORD).set,undefined);
+  for(const p of [
+    ROOT,ROOT+'/confirmedLab',ROOT+'/confirmedLab/records',
+    ROOT+'/staging/ingestV1/'+ID,PUBLIC,
+    ROOT+'/live/gate/angle',ROOT+'/live/esp8266/ip',
+    ROOT+'/serviceWorkerAuthorization/service-confirm-stage'
+  ])assert.throws(()=>dbOnly.ref(p),/Read-only attestor denied path/);
+  await denied(db(RECORD,'attestor','PUT',forgedRecord()));
+  await denied(db(PUBLIC,'attestor','PUT',{}));
+  await denied(db(ROOT+'/live/gate/angle','attestor','PUT',90));
+  assert.equal((await readOnlyAttestor()(signed)).ok,true);
+});
+test('revoked device and disabled attestor operator prevent signatures from historical record',async()=>{
+  const signed=await signedConfirmedFixture();
+  assert.equal((await readOnlyAttestor()(signed)).ok,true);
+  await seed(ROOT+'/deviceAuthorization/'+ID+'/enabled',false);
+  const revoked=await readOnlyAttestor()(signed);
+  assert.equal(revoked.ok,false);
+  await seed(ROOT+'/deviceAuthorization/'+ID+'/enabled',true);
+  await seed(ROOT+'/attestorLabAuthorization/attestor-stage/enabled',false);
+  const disabled=await readOnlyAttestor()(signed);
+  assert.equal(disabled.ok,false);
+  assert.deepEqual((await granted(db(RECORD,owner))).frame,FRAME);
+});
+test('signed attestation refuses tamper, wrong public key, other receipt and freshness replay',async()=>{
+  const signed=await signedConfirmedFixture();
+  const checked=await readOnlyAttestor()(signed);
+  assert.equal(checked.ok,true);
+  const verify=(changes={})=>verifySyntheticPublicationAttestation({
+    attestation:checked.attestation,signature:checked.attestationSignature,
+    publicKey:ATTESTOR.publicKey,receipt:signed.receipt,
+    nowMs:NOW,...changes
+  });
+  assert.equal(verify(),true);
+  assert.equal(verify({attestation:{...checked.attestation,digest:'f'.repeat(64)}}),false);
+  assert.equal(verify({signature:'A'.repeat(86)}),false);
+  assert.equal(verify({publicKey:DEVICE.publicKey}),false);
+  assert.equal(verify({receipt:{...signed.receipt,sequence:3}}),false);
+  assert.equal(verify({nowMs:NOW+6000}),false);
+});
+test('ordinary or device Auth ID token cannot read confirmed record through attestor adapter',async()=>{
+  await signedConfirmedFixture();
+  for(const role of ['ordinary','device']){
+    const checked=await readOnlyAttestor(role)(signedEvidence());
+    assert.equal(checked.ok,false);
+    assert.equal(checked.attestationSignature,undefined);
+  }
+});
+test('KNOWN LIMIT: service revocation alone does not revoke pre-existing verified attestor record',async()=>{
+  const signed=await signedConfirmedFixture();
+  await seed(ROOT+'/serviceWorkerAuthorization/service-confirm-stage/enabled',false);
+  // Actual Auth RTDB Rules for independent attestor do not inspect the
+  // confirmer service generation/fence. This is an explicit open policy gap:
+  // owner must decide whether incident revocation invalidates historical
+  // records and signed publication approvals.
+  const checked=await readOnlyAttestor()(signed);
+  assert.equal(checked.ok,true);
+  assert.equal(verifySyntheticPublicationAttestation({
+    attestation:checked.attestation,
+    signature:checked.attestationSignature,
+    publicKey:ATTESTOR.publicKey,receipt:signed.receipt,nowMs:NOW
+  }),true);
+  await denied(db(PUBLIC,'attestor','PUT',{}));
+});
+test('read-only attestor module contains no privileged SDK, write verbs or public listener',()=>{
+  const source=readFileSync(
+    'experiments/r3-readonly-attestor-auth-emulator.mjs','utf8');
+  assert.match(source,/ALLOWED=new Set/);
+  assert.match(source,/method:'GET'/);
+  assert.doesNotMatch(source,/firebase-admin|node:https|node:http/);
+  assert.doesNotMatch(source,/\b(?:POST|PUT|PATCH|DELETE)\b/);
+  assert.doesNotMatch(source,/\.listen\s*\(|process\.env\.(?:FIREBASE_CONFIG|GOOGLE_APPLICATION_CREDENTIALS)/);
+  assert.doesNotMatch(source,/\.set\s*\(|\.update\s*\(|\.remove\s*\(/);
+  assert.equal(ATTESTOR.publicKey.asymmetricKeyType,'ed25519');
+  assert.notEqual(SPKI(DEVICE.publicKey),SPKI(ATTESTOR.publicKey));
+  assert.notEqual(SPKI(RECEIPT.publicKey),SPKI(ATTESTOR.publicKey));
 });
