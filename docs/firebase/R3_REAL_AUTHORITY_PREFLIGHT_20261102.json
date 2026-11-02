@@ -1,0 +1,110 @@
+{
+  "schema": "floodguard-r3-operational-authority-preflight-v1",
+  "mode": "OFFLINE_DESIGN_REVIEW_ONLY",
+  "releaseDecision": "NO_GO",
+  "productionChangesAuthorized": false,
+  "deploymentTarget": "NONE",
+  "firebaseAdminCredentialAllowed": false,
+  "physicalDeviceAccessAuthorized": false,
+  "roles": [
+    {
+      "id": "sensor",
+      "operation": "HTTPS_SIGNED_INGRESS_ONLY",
+      "path": "/ingest/v1",
+      "trust": "DEVICE_KEY_NOT_VERIFIED",
+      "live": false
+    },
+    {
+      "id": "verifier",
+      "operation": "VERIFY_SIGNED_FRAME_ONLY",
+      "path": "/floodguard/staging/ingestV1/device-stage-a",
+      "trust": "INDEPENDENT_PROCESS_NOT_DEPLOYED",
+      "live": false
+    },
+    {
+      "id": "confirmer",
+      "operation": "READ_BACK_VERIFIED_CONFIRMATION_ONLY",
+      "path": "/floodguard/staging/ingestV1/device-stage-a",
+      "trust": "FIREBASE_CONFIRMATION_NOT_PROVEN",
+      "live": false
+    },
+    {
+      "id": "publisher",
+      "operation": "WRITE_5_EXACT_PUBLIC_LAB_SCALARS_ONLY",
+      "path": "/floodguard/publicTelemetryLabV1",
+      "trust": "SCOPED_WRITER_NOT_DEPLOYED",
+      "live": false
+    },
+    {
+      "id": "witness",
+      "operation": "MONOTONIC_CAS_NO_FIREBASE",
+      "path": "NONE",
+      "trust": "INDEPENDENT_DURABLE_WITNESS_MISSING",
+      "live": false
+    },
+    {
+      "id": "public-client",
+      "operation": "READ_ALLOWLISTED_CHILDREN_ONLY",
+      "path": "/floodguard/live",
+      "trust": "FRESHNESS_ONLY_NOT_SOURCE_AUTHENTICATION",
+      "live": false
+    }
+  ],
+  "mandatoryGates": [
+    {
+      "id": "effective-rtdb-rules-export-and-offline-backup",
+      "status": "UNVERIFIED",
+      "evidence": "NONE"
+    },
+    {
+      "id": "firebase-admin-iam-and-rules-scoped-credentials",
+      "status": "UNVERIFIED",
+      "evidence": "NONE"
+    },
+    {
+      "id": "authenticated-separate-issuer-and-witness-custody",
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "NONE"
+    },
+    {
+      "id": "independent-firebase-durable-confirmation",
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "NONE"
+    },
+    {
+      "id": "atomic-revocation-and-issuance-fencing",
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "NONE"
+    },
+    {
+      "id": "rollback-resistant-witness-and-recovery",
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "NONE"
+    },
+    {
+      "id": "field-esp8266-firmware-tls-provenance",
+      "status": "UNVERIFIED",
+      "evidence": "NONE"
+    },
+    {
+      "id": "field-flash-backup-brownout-and-reset",
+      "status": "UNVERIFIED",
+      "evidence": "NONE"
+    },
+    {
+      "id": "cross-client-stale-and-warning-delivery",
+      "status": "UNVERIFIED",
+      "evidence": "NONE"
+    },
+    {
+      "id": "operator-supervised-uno-gate-alarm",
+      "status": "UNVERIFIED",
+      "evidence": "NONE"
+    },
+    {
+      "id": "explicit-owner-release-approval",
+      "status": "NOT_GRANTED",
+      "evidence": "NONE"
+    }
+  ]
+}
