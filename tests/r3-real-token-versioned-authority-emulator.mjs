@@ -67,7 +67,7 @@ async function jsonRequest(url,method='GET',value){
   return {status:res.status,data};
 }
 function dbUrl(path,identity) {
-  if(typeof path!=='string'||!path.startsWith(ROOT+'/')||
+  if(typeof path!=='string'||!(path===ROOT||path.startsWith(ROOT+'/'))||
      path.includes('..')||path.includes('?')||path.includes('#'))
     throw Error('Attempted to escape synthetic RTDB root');
   const url=new URL(RTDB+path+'.json');
