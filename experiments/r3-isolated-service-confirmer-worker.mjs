@@ -133,7 +133,9 @@ async function setup(message){
     if(parts.length!==3)throw Error('Invalid emulator session');
     const claim=JSON.parse(Buffer.from(parts[1],'base64url').toString());
     if((claim.user_id||claim.sub)!=='service-confirm-stage'||
-       claim.aud!==PROJECT||claim.fg_server_confirm_v1!==true)
+       claim.aud!==PROJECT||claim.fg_server_confirm_v1!==true||
+       !Number.isSafeInteger(claim.fg_service_generation)||
+       claim.fg_service_generation<1||claim.fg_service_generation>10000)
       throw Error('Provisioned principal missing expected scoped role');
     token=data.idToken;
     // Do not return the token, password, or any private credential in any
