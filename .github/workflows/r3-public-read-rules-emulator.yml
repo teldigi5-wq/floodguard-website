@@ -1,0 +1,58 @@
+name: FloodGuard R3 anonymous telemetry read boundaries (RTDB Emulator only)
+
+on:
+  push:
+    branches:
+      - test/r3-public-read-rules-emulator-20261102
+  pull_request:
+    branches:
+      - review/r3-merged-public-child-rules-20261102
+    paths:
+      - 'tests/r3-public-read-rules-emulator.mjs'
+      - 'firebase.r3-public-read-rules-emulator.json'
+      - '.github/workflows/r3-public-read-rules-emulator.yml'
+      - 'docs/firebase/R3_PUBLIC_READ_RULES_EMULATOR_20261102.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  emulator-read-boundaries:
+    name: Verify synthetic public/private RTDB Rules on localhost
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout without persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Pin Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Pin Java 17 for Firebase Emulator
+        uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Require exact demo and localhost test configuration
+        run: |
+          set -euo pipefail
+          node --check tests/r3-public-read-rules-emulator.mjs
+          node --input-type=module - <<'NODE'
+          import assert from 'node:assert/strict';
+          import {readFileSync} from 'node:fs';
+          const config=JSON.parse(readFileSync('firebase.r3-public-read-rules-emulator.json','utf8'));
+          assert.equal(config.database.rules,'docs/firebase/R3_PUBLIC_CHILD_READS_MERGED_REVIEW_ONLY_20261102.json');
+          assert.deepEqual(config.emulators.database,{host:'127.0.0.1',port:9000});
+          assert.deepEqual(config.emulators.ui,{enabled:false});
+          NODE
+      - name: Evaluate actual REST read and denied-write permissions with synthetic data
+        run: |
+          set -euo pipefail
+          npx --yes firebase-tools@14.18.0 emulators:exec \
+            --only database \
+            --project demo-r3-public-read-rules \
+            --config firebase.r3-public-read-rules-emulator.json \
+            "FG_R3_PUBLIC_READ_EMULATOR_TEST=1 GCLOUD_PROJECT=demo-r3-public-read-rules node --test tests/r3-public-read-rules-emulator.mjs"
