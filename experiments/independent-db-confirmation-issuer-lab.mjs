@@ -58,8 +58,11 @@ export function createIndependentDbConfirmationIssuerLab({
     throw new TypeError('Distinct pinned Ed25519 issuer signing role required');
 
   return Object.freeze({
-    attest({receipt,receiptSignature}={}) {
+    attest(request={}) {
       try {
+        if(!exact(request,['receipt','receiptSignature']))
+          return reject('request-shape-invalid');
+        const {receipt,receiptSignature}=request;
         // No user-provided registry binding, DB status, signer or claimed
         // confirmedAtMs is accepted by this method.
         if(!exact(receipt,['version','deviceId','epoch','sequence','digest','acceptedAtMs'])||
