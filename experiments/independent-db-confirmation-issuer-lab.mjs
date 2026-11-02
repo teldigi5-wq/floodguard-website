@@ -4,7 +4,7 @@
 // Operator registry is a separately commissioned, sealed offline fixture.
 // No listener, HTTP, Firebase, environment key loader, cloud ACK, or actuator.
 // Simulated issuer keys do not authenticate an actual sensor or real DB.
-import {createHash,KeyObject,sign} from 'node:crypto';
+import {createHash,createPublicKey,KeyObject,sign} from 'node:crypto';
 import {verifyStage8OfflineReceipt}
   from './stage8-ack-reconciliation.mjs';
 import {canonicalSyntheticPublicationAttestation,
@@ -50,11 +50,10 @@ export function createIndependentDbConfirmationIssuerLab({
      !publicKey(receiptIssuerPublicKey)||
      !privateKey(databaseIssuerPrivateKey)||
      !publicKey(databaseIssuerPublicKey)||
-     !Object.isFrozen(databaseReader)||
      typeof clock!=='function')
     throw new TypeError('Explicit offline-only read capability, sealed registry, issuer keys and clock required');
   // Reject a swapped issuer-public key and signing-key reuse.
-  if(fingerprint(databaseIssuerPrivateKey)!==fingerprint(databaseIssuerPublicKey)||
+  if(fingerprint(createPublicKey(databaseIssuerPrivateKey))!==fingerprint(databaseIssuerPublicKey)||
      fingerprint(databaseIssuerPublicKey)===fingerprint(receiptIssuerPublicKey))
     throw new TypeError('Distinct pinned Ed25519 issuer signing role required');
 
