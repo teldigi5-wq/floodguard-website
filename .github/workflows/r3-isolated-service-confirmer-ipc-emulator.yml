@@ -6,7 +6,6 @@ on:
       - test/r3-isolated-service-confirmer-ipc-20261102
       - security/r3-separate-provisioning-worker-20261102
       - security/r3-service-session-fence-20261102
-      - security/r3-service-session-fence-20261102
       - test/r3-confirmation-precommit-revocation-races-20261102
   pull_request:
     branches:
