@@ -29,3 +29,36 @@ It retains all **11 exact `.validate` expressions** from the owner-provided depl
 **Deployment authorization: denied.** Retain an unchanged private rollback copy of effective Rules, inventory live public descendants (field names/types only), establish authenticated data ingestion and owner-approved fallback/rollback before proposing production rollout. Never grant reads to `/floodguard/live` or `/floodguard/live/esp8266` as an expedient fix.
 
 Rules semantics: https://firebase.google.com/docs/database/security/core-syntax and https://firebase.google.com/docs/database/security/rules-conditions
+
+## Historical ESP8266 writer sources recovered — private/offline evidence
+
+Earlier uploaded Arduino sketches were located and **examined privately**:
+- `FloodGuard_ESP8266_REAL_RAIN_FIREBASE_FINAL.ino` (454 extracted lines): uses ESP8266 HTTPS REST `PATCH` to the live database, and calls `WiFiClientSecure.setInsecure()`.
+- `FloodGuard_ESP8266_Firebase_Realtime_1s_FULL.ino` (449 extracted lines): uses ESP8266 HTTPS REST `PUT` to the live database, and calls `WiFiClientSecure.setInsecure()`.
+
+Neither reviewed file contained a clear Firebase REST authorization method or CA certificate validation call. **This is a static source observation, not a statement that the device runs either exact sketch or that every possible authorization path was exhaustively checked.** Raw sketches, credential strings, endpoint payloads and any device/ESP local network details have **not** been uploaded to GitHub.
+
+Historical hardware checkpoint: user reported the prototype's Arduino/ESP8266 switched off or disconnected during security containment on 1 November. The current physical power state and flashed firmware remain unverified.
+
+Owner's two timestamp reads on 2 November were `2026-08-25T14:30:41.226Z` approximately 16 seconds apart, while the nine public GET paths returned HTTP 200 and the four checked protected paths HTTP 401. Therefore the **last reported system update is stale**, and restored Firebase read access is not proof of live data.
+
+**Ingress mismatch:** the current deployed Rules shown by the owner deny ordinary client writes; the historical sketches expect direct, unauthenticated REST writes. Do not enable `.write:true` at any public ancestor or simply switch on actuators to make the dashboard appear live. A physical emergency gate must not be controlled by remote testing.
+
+### Local, privacy-preserving firmware preflight
+
+For a saved private sketch file, run this **on the user's authorized WSL machine** from a checked-out review branch:
+
+```bash
+node scripts/r3-private-firmware-ingress-preflight.mjs \
+  "/absolute/path/outside-git-to-your-private-sketch.ino"
+```
+
+Only fixed boolean indicators are printed. The script refuses symlinks, non-`.ino` files, empty/oversized files, never sends network requests, and deliberately exits **2 (NO_GO)** for every result. It cannot attest that the source was flashed, that credentials are valid, that the TLS identity is trustworthy, or that sensor readings represent the field. **Do not paste firmware sources, tokens, Wi-Fi settings, or secret diagnostics into public PRs or chat.**
+
+### Subsequent secure architecture gate
+
+Select an authorized, least-privilege ingestion identity and **cryptographically authenticated transport** that can be renewed/revoked; terminate sensitive verification in a trusted gateway or server environment rather than embedding a service-account private key or long-lived admin secret on an ESP8266. Firebase RTDB REST supports Firebase ID tokens or Google OAuth access tokens, with different privilege semantics; service-account Admin access can bypass RTDB Rules, so it requires especially tight storage and scope. Consider a protected server-side publisher that validates source identity, timestamp monotonicity, ranges/measurement provenance, and writes a sanitized public projection. Keep physical gate authority on the Arduino.
+
+Use the Firebase Realtime Database **Local Emulator Suite** for positive/negative permission tests and authorized mock writer tests before a supervised hardware test. Do not substitute local static tests for Emulator behavior. Avoid destructive live HTTP PUT/PATCH/POST tests.
+
+**Status: source findings recorded, local preflight CI pending, current writer identity and physical hardware unverified. Production NO_GO.**
