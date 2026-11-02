@@ -1,0 +1,51 @@
+name: FloodGuard R3 isolated IPC service confirmer Auth and RTDB Emulator
+
+on:
+  push:
+    branches:
+      - test/r3-isolated-service-confirmer-ipc-20261102
+  pull_request:
+    branches:
+      - test/r3-service-confirmation-signatures-20261102
+    paths:
+      - 'experiments/r3-isolated-service-confirmer-worker.mjs'
+      - 'tests/r3-isolated-service-confirmer-ipc-emulator.mjs'
+      - 'firebase.r3-isolated-service-confirmer-ipc-lab.json'
+      - '.github/workflows/r3-isolated-service-confirmer-ipc-emulator.yml'
+      - 'docs/firebase/R3_ISOLATED_SERVICE_WORKER_BOUNDARY_20261102.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-ipc-worker:
+    name: Confirm signatures in separate localhost-only process
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout unprivileged and without persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install pinned Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install Java 17 for local Firebase Emulator
+        uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install test-only dependencies without lifecycle scripts
+        run: |
+          npm ci --ignore-scripts
+          npm install --no-save --package-lock=false --ignore-scripts firebase-admin@14.5.0
+      - name: Run synthetic IPC and credential-containment tests in isolated Auth+RTDB Emulators
+        run: |
+          npx --yes firebase-tools@14.18.0 emulators:exec \
+            --only auth,database \
+            --project demo-r3-isolated-service-confirmer \
+            --config firebase.r3-isolated-service-confirmer-ipc-lab.json \
+            "FG_R3_ISOLATED_SERVICE_HARNESS=1 GCLOUD_PROJECT=demo-r3-isolated-service-confirmer node --test tests/r3-isolated-service-confirmer-ipc-emulator.mjs"
