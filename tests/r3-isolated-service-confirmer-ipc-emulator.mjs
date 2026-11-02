@@ -138,15 +138,23 @@ before(async()=>{
     if(claim)await auth.setCustomUserClaims(uid,{[claim]:true});
     users[role]={email,password};
   }
-  // Child has its own address space and generates its own ephemeral password.
-  // NEVER pass an Auth service bearer token, password, or Admin credential in
-  // argv, env, IPC bootstrap, imported module or response body.
+  // The operator fixture, OUTSIDE the child, exclusively provisions the
+  // synthetic service UID and grants its scoped custom claim. The worker
+  // must not have the Admin Auth SDK or any user/role-creation capability.
+  const serviceEmail='service-confirm-stage@floodguard-lab.invalid';
+  const servicePassword=randomBytes(28).toString('base64url');
+  await auth.createUser({uid:'service-confirm-stage',
+    email:serviceEmail,password:servicePassword});
+  await auth.setCustomUserClaims('service-confirm-stage',
+    {fg_server_confirm_v1:true});
+  // Only a one-time anonymous fd4 pipe delivers the synthetic password;
+  // the regular confirmation IPC, process arguments and env remain secretless.
   const entry=fileURLToPath(new URL(
     '../experiments/r3-isolated-service-confirmer-worker.mjs',import.meta.url));
   child=fork(entry,[],{
     cwd:process.cwd(),
     execArgv:[],
-    stdio:['ignore','pipe','pipe','ipc'],
+    stdio:['ignore','pipe','pipe','ipc','pipe'],
     env:{
       PATH:process.env.PATH,
       HOME:process.env.HOME,
@@ -157,6 +165,11 @@ before(async()=>{
       FIREBASE_DATABASE_EMULATOR_HOST:'127.0.0.1:9000'
     }
   });
+  // On-disk credential files are deliberately avoided: the pipe is consumed
+  // exactly once and closed. The trusted test harness necessarily knows the
+  // password; this is NOT OS-enforced secrecy from that harness.
+  child.stdio[4].end(JSON.stringify({email:serviceEmail,
+    password:servicePassword}));
   child.stdout.on('data',()=>{}); // no secret-bearing child stdout forwarded
   child.stderr.on('data',()=>{}); // ignore, do not echo credentials
   child.on('message',reply=>{
@@ -182,6 +195,11 @@ before(async()=>{
   assert.equal(ready.productionGo,false);
   assert.equal(child.pid!==process.pid,true);
   assert.equal(JSON.stringify(ready).includes('idToken'),false);
+  assert.equal(JSON.stringify(child.spawnargs).includes(servicePassword),false);
+  assert.equal(Object.values(child.spawnargs).some(x=>x.includes('serviceAccount')),false);
+  const serviceAccount=await auth.getUser('service-confirm-stage');
+  assert.equal(serviceAccount.customClaims.fg_server_confirm_v1,true);
+  assert.equal(child.stdio[4].writableEnded,true);
 });
 after(async()=>{
   if(child&&child.connected)child.disconnect();
@@ -280,6 +298,9 @@ test('source permits only exact four read paths and one immutable DB write targe
   assert.doesNotMatch(source,/firebase-admin\/database|serviceAccount|\.listen\s*\(/);
   assert.doesNotMatch(source,/process\.argv\[[0-9]+\]|process\.title\s*=/);
   assert.match(source,/process\.send/);
+  assert.match(source,/createReadStream\(null,\{fd:4,autoClose:true\}\)/);
+  assert.doesNotMatch(source,/from 'firebase-admin\/(?:auth|app|database)'/);
+  assert.doesNotMatch(source,/\bauth\.createUser\s*\(|\bsetCustomUserClaims\s*\(/);
 });
 test('an untrusted caller cannot impersonate child synthetic service identity with its own ID token',async()=>{
   const x=signedEvidence();
@@ -316,4 +337,58 @@ test('replayed signed evidence does not silently modify immutable confirmed row'
   assert.equal(record.sequence,2);
   assert.equal(record.digest,x.receipt.digest);
   assert.equal(record.frame.risk,'WARNING');
+});
+
+test('worker cannot bootstrap from missing or malformed operator-provisioned credentials',async()=>{
+  const entry=fileURLToPath(new URL(
+    '../experiments/r3-isolated-service-confirmer-worker.mjs',import.meta.url));
+  const badWorker=fork(entry,[],{
+    cwd:process.cwd(),execArgv:[],
+    stdio:['ignore','pipe','pipe','ipc','pipe'],
+    env:{
+      PATH:process.env.PATH,HOME:process.env.HOME,
+      FG_R3_ISOLATED_WORKER_TEST:'1',
+      FG_VERSIONED_CONFIRMATION_TEST:'1',
+      GCLOUD_PROJECT:PROJECT,
+      FIREBASE_AUTH_EMULATOR_HOST:'127.0.0.1:9099',
+      FIREBASE_DATABASE_EMULATOR_HOST:'127.0.0.1:9000'
+    }
+  });
+  badWorker.stdout.on('data',()=>{});
+  badWorker.stderr.on('data',()=>{});
+  try{
+    const answer=new Promise((resolve,reject)=>{
+      const timeout=setTimeout(()=>reject(Error('Missing bootstrap denial')),7000);
+      badWorker.once('message',x=>{clearTimeout(timeout);resolve(x);});
+    });
+    badWorker.stdio[4].end('{}'); // does not contain a valid provisioned identity
+    badWorker.send({id:1,type:'init',
+      deviceSpki:SPKI(DEVICE.publicKey),
+      receiptSpki:SPKI(RECEIPT.publicKey)});
+    const denied=await answer;
+    assert.equal(denied.ok,false);
+    assert.equal(denied.reason,'bootstrap-refused');
+    assert.equal(denied.id,1);
+    assert.equal(JSON.stringify(denied).includes('idToken'),false);
+  }finally{
+    if(badWorker.connected)badWorker.disconnect();
+    badWorker.kill('SIGTERM');
+  }
+});
+test('service credential cannot be re-requested by confirm IPC or used as provisioning API',async()=>{
+  for(const request of [
+    {type:'init',deviceSpki:SPKI(DEVICE.publicKey),
+      receiptSpki:SPKI(RECEIPT.publicKey)},
+    {type:'createUser',uid:'attacker',claim:'fg_server_confirm_v1'},
+    {type:'setCustomUserClaims',uid:'attacker',admin:true},
+    {type:'exportToken'},
+    {type:'confirm',evidence:{
+      serviceEmail:'service-confirm-stage@floodguard-lab.invalid',
+      password:'fake-password'
+    }}
+  ]){
+    const result=await ipc(request);
+    assert.equal(result.ok,false,JSON.stringify(result));
+    assert.equal(JSON.stringify(result).includes('idToken'),false);
+  }
 });

@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - test/r3-isolated-service-confirmer-ipc-20261102
+      - security/r3-separate-provisioning-worker-20261102
   pull_request:
     branches:
       - test/r3-service-confirmation-signatures-20261102
+      - test/r3-isolated-service-confirmer-ipc-20261102
     paths:
       - 'experiments/r3-isolated-service-confirmer-worker.mjs'
       - 'tests/r3-isolated-service-confirmer-ipc-emulator.mjs'
@@ -20,7 +22,7 @@ permissions:
 
 jobs:
   isolated-ipc-worker:
-    name: Confirm signatures in separate localhost-only process
+    name: Confirm signatures in separately provisioned localhost-only process
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:

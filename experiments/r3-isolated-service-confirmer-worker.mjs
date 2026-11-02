@@ -4,9 +4,8 @@
 // field equipment, WhatsApp/SMS or production device/issuer credentials.
 // Important: a stolen service bearer token STILL bypasses optional Ed25519
 // application verification; process confinement is defense in depth only.
-import {randomBytes,createPublicKey,createHash} from 'node:crypto';
-import {initializeApp,deleteApp} from 'firebase-admin/app';
-import {getAuth} from 'firebase-admin/auth';
+import {createPublicKey,createHash} from 'node:crypto';
+import {createReadStream} from 'node:fs';
 import {createVersionedEmulatorConfirmer}
   from './versioned-confirmation-emulator.mjs';
 
@@ -33,7 +32,29 @@ if(process.env.FG_R3_ISOLATED_WORKER_TEST!=='1'||
   throw Error('Refusing execution outside pinned local IPC emulator harness');
 }
 let initialized=false,processing=false,confirm;
-let app;
+// The service identity MUST be provisioned by a separate trusted operator
+// test harness. This process has NO Auth Admin SDK or create-user ability.
+// A one-use dedicated fd4 pipe carries only local emulator login material.
+let bootstrapConsumed=false;
+async function receiveProvisionedIdentity(){
+  if(bootstrapConsumed)throw Error('Provisioning may occur only once');
+  bootstrapConsumed=true;
+  const chunks=[];
+  let size=0;
+  for await(const part of createReadStream(null,{fd:4,autoClose:true})){
+    size+=part.length;
+    if(size>1024)throw Error('Bootstrap input too large');
+    chunks.push(part);
+  }
+  if(size===0)throw Error('Missing trusted bootstrap');
+  const data=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  if(!exact(data,['email','password'])||
+     data.email!=='service-confirm-stage@floodguard-lab.invalid'||
+     typeof data.password!=='string'||
+     !/^[A-Za-z0-9_-]{32,128}$/.test(data.password))
+    throw Error('Invalid operator-provisioned test identity');
+  return data;
+}
 function send(value) {
   if(process.connected)process.send(value);
 }
@@ -91,27 +112,29 @@ async function setup(message){
       x.export({format:'der',type:'spki'})).digest('hex');
     if(digest(deviceKey)===digest(receiptKey))
       return failure(message.id,'role-key-confusion');
-    // Creating synthetic user + role claims with Admin AUTH SDK is permitted
-    // only because the SDK is pointed at the local Auth Emulator. In a real
-    // service, identity provisioning must happen OUTSIDE its own runtime.
-    app=initializeApp({projectId:PROJECT},'r3-local-isolated-worker');
-    const auth=getAuth(app);
-    const password=randomBytes(28).toString('base64url');
-    const email='service-confirm-stage@floodguard-lab.invalid';
-    await auth.createUser({uid:'service-confirm-stage',email,password});
-    await auth.setCustomUserClaims('service-confirm-stage',
-      {fg_server_confirm_v1:true});
+    // The operator test harness has already created the service UID/role.
+    // The runtime cannot mint principals, change claims or grant itself scope.
+    // Only fd4 carries the ephemeral password once; ordinary IPC cannot ask
+    // for credentials, arbitrary URLs or writes.
+    const credentials=await receiveProvisionedIdentity();
     const res=await fetch(
       AUTH+'/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-only',
       {
         method:'POST',headers:{'content-type':'application/json'},
-        body:JSON.stringify({email,password,returnSecureToken:true}),
+        body:JSON.stringify({email:credentials.email,
+          password:credentials.password,returnSecureToken:true}),
         signal:AbortSignal.timeout(5000)
       });
     if(!res.ok)throw Error('Local Auth Emulator refused synthetic worker');
     const data=await res.json();
     if(typeof data.idToken!=='string'||data.idToken.length<50)
       throw Error('No local Auth ID token');
+    const parts=data.idToken.split('.');
+    if(parts.length!==3)throw Error('Invalid emulator session');
+    const claim=JSON.parse(Buffer.from(parts[1],'base64url').toString());
+    if((claim.user_id||claim.sub)!=='service-confirm-stage'||
+       claim.aud!==PROJECT||claim.fg_server_confirm_v1!==true)
+      throw Error('Provisioned principal missing expected scoped role');
     token=data.idToken;
     // Do not return the token, password, or any private credential in any
     // response, exception, log or process title.
@@ -159,6 +182,5 @@ process.on('message',message=>{
 });
 process.on('disconnect',async()=>{
   token=undefined;
-  try{if(app)await deleteApp(app);}catch{}
   process.exit(0);
 });
