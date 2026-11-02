@@ -1,0 +1,48 @@
+name: FloodGuard R3 merged Rules candidate - offline only
+
+on:
+  push:
+    branches:
+      - review/r3-merged-public-child-rules-20261102
+  pull_request:
+    branches:
+      - security/r3-h1-offline-authority-review-20261102
+    paths:
+      - 'docs/firebase/R3_PUBLIC_CHILD_READS_MERGED_REVIEW_ONLY_20261102.json'
+      - 'docs/firebase/R3_MERGED_READ_RULES_REVIEW_20261102.md'
+      - 'tests/r3-merged-rules-review.test.mjs'
+      - '.github/workflows/r3-merged-rules-review.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-rules-review:
+    name: Offline review of merged candidate (NO DEPLOY)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Checkout without persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Validate JSON and run offline no-write contract tests
+        run: |
+          set -euo pipefail
+          node --version
+          node -e "JSON.parse(require('node:fs').readFileSync('docs/firebase/R3_PUBLIC_CHILD_READS_MERGED_REVIEW_ONLY_20261102.json','utf8'))"
+          node --test tests/r3-merged-rules-review.test.mjs
+      - name: Verify this workflow cannot deploy candidate
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const y=fs.readFileSync('.github/workflows/r3-merged-rules-review.yml','utf8');
+          for(const s of ['firebase deploy','emulators:exec','curl -X PUT','curl -X PATCH','firebase use','gcloud auth']) {
+            assert.equal(y.includes(s), false, 'Unexpected deploy/network command detected');
+          }
+          assert.match(y,/contents: read/);
+          console.log('Offline-only workflow source check passed');
+          NODE
