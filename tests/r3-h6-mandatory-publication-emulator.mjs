@@ -2,6 +2,17 @@
 import {test,before,after,beforeEach} from 'node:test';
 import assert from 'node:assert/strict';
 import {fork} from 'node:child_process';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import {createH7OfflineWitness,canonicalH7OperatorEvent}
+  from '../experiments/r3-h7-external-witness-lab.mjs';
+import {createH7OfflineCoordinator}
+  from '../experiments/r3-h7-offline-coordinator.mjs';
+import {createH4OfflineAdmissionIssuer}
+  from '../experiments/r3-h4-signed-admission-issuer.mjs';
+import {createH8OfflineReadbackObserver}
+  from '../experiments/r3-h8-verified-readback-observer.mjs';
 import {fileURLToPath} from 'node:url';
 import {createHash,generateKeyPairSync,randomBytes,sign} from 'node:crypto';
 import {initializeApp,deleteApp} from 'firebase-admin/app';
@@ -298,4 +309,176 @@ test('KNOWN LIMIT: compromised privileged Emulator owner can bypass mandatory wo
   assert.equal(result.ok,false,'Worker refuses pre-replayed checkpoint');
   assert.deepEqual((await req(WATER,OWNER)).value,altered);
   // This is NOT evidence that production privileged credentials are secured.
+});
+
+
+// H8 actual RTDB readback witness: reuses the existing H6 signed worker, H4
+// verifier and H7 sealed ledger in one disposable CI process. Independence
+// of credential custody and failure domains is NOT demonstrated.
+function h8Context(signed,readOverride){
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'floodguard-h8-readback-'));
+  let anchor={revision:0,head:'0'.repeat(64)};
+  const externalAnchor=Object.freeze({
+    read:()=>({...anchor}),
+    compareAndAdvance:(prior,next)=>{
+      if(prior.revision!==anchor.revision||prior.head!==anchor.head)
+        return false;
+      anchor={...next};return true;
+    }
+  });
+  const operator=generateKeyPairSync('ed25519');
+  const acknowledgementSigner=generateKeyPairSync('ed25519');
+  const witness=createH7OfflineWitness({
+    directory,integrityKey:randomBytes(32),externalAnchor,
+    operatorPublicKey:operator.publicKey,
+    confirmationPublicKey:acknowledgementSigner.publicKey,
+    clock:()=>Date.now()
+  });
+  function incident(kind){
+    const prior=kind==='BOOTSTRAP'?null:witness.snapshot();
+    const event={
+      kind,deviceId:ID,epoch:prior?prior.epoch+1:1,
+      revision:prior?prior.revision+1:1,
+      sequence:prior?prior.sequence:1,digest:prior?prior.digest:A,
+      atMs:Date.now()
+    };
+    const signature=SIG(canonicalH7OperatorEvent(event),operator.privateKey);
+    return witness.operator(event,signature);
+  }
+  assert.equal(incident('BOOTSTRAP').ok,true);
+  const authority=Object.freeze({read:async()=>({
+    revision:1,issuer:{enabled:true,generation:1,scope:'lab-signed-admission-v1'},
+    publisher:{enabled:true,deviceId:ID,epoch:1,scope:'publication-lab-water-v1'},
+    incident:{blocked:false,epoch:1},
+    sourceBinding:{deviceId:ID,epoch:1,enabled:true,scope:'prototype-ingest-v1',
+      publicKey:DEVICE.publicKey},
+    trustedReceiptKey:RECEIPT.publicKey,
+    trustedDatabaseIssuerKey:ATTESTOR.publicKey,
+    lastPublished:{initialized:true,epoch:1,sequence:1,digest:A}
+  })});
+  const issuer=createH4OfflineAdmissionIssuer({authority,clock:()=>Date.now()});
+  const coordinator=createH7OfflineCoordinator({issuer,witness});
+  let reservation=null;
+  const candidate=project(signed);
+  const readPublication=readOverride??(async()=>{
+    const response=await req(WATER,null);
+    if(response.status!==200)throw Error('Emulator publication unavailable');
+    return response.value;
+  });
+  const observer=createH8OfflineReadbackObserver({
+    witness,readPublication,acknowledgerPrivateKey:acknowledgementSigner.privateKey,
+    clock:()=>Date.now()
+  });
+  return {
+    witness,coordinator,observer,candidate,incident,
+    reserve:async()=>{
+      reservation=await coordinator.prepare(signed);
+      assert.equal(reservation.ok,true,JSON.stringify(reservation));
+      return reservation;
+    },
+    inspect:()=>observer.inspect({reservation,candidate}),
+    cleanup:()=>fs.rmSync(directory,{recursive:true,force:true})
+  };
+}
+test('H8 actual RTDB readback after signed H6 commit authorizes H7 witness acknowledgement once',async()=>{
+  const e=evidence(),x=h8Context(e);
+  try{
+    await x.reserve();
+    assert.equal(x.witness.snapshot().pending.sequence,2);
+    assert.equal((await ipc({type:'commit',evidence:e})).ok,true);
+    const proof=await x.inspect();
+    assert.equal(proof.attested,true,JSON.stringify(proof));
+    assert.equal(proof.releaseDecision,'NO_GO');
+    assert.equal(proof.canPublish,false);
+    assert.equal(x.witness.acknowledge(proof.acknowledgement,proof.signature).ok,true);
+    assert.equal(x.witness.snapshot().sequence,2);
+    assert.equal(x.witness.snapshot().pending,null);
+    assert.deepEqual((await req(WATER,null)).value,x.candidate);
+    assert.equal((await x.inspect()).attested,false);
+  }finally{x.cleanup();}
+});
+test('H8 refuses to acknowledge worker intent before actual database commit',async()=>{
+  const e=evidence(),x=h8Context(e);
+  try{
+    await x.reserve();
+    const proof=await x.inspect(); // NO H6 commit executed
+    assert.equal(proof.attested,false);
+    assert.equal(proof.reason,'actual-database-readback-does-not-match');
+    assert.equal(x.witness.snapshot().sequence,1);
+    assert.notEqual(x.witness.snapshot().pending,null);
+  }finally{x.cleanup();}
+});
+test('H8 mismatched privileged SAFE rewrite after H6 commit is detected, not blessed',async()=>{
+  const e=evidence(),x=h8Context(e);
+  try{
+    await x.reserve();
+    assert.equal((await ipc({type:'commit',evidence:e})).ok,true);
+    const altered={...x.candidate,
+      current:{...x.candidate.current,status:'SAFE'}};
+    await seed(WATER,altered); // attack simulated solely by test owner
+    const proof=await x.inspect();
+    assert.equal(proof.attested,false);
+    assert.equal(proof.reason,'actual-database-readback-does-not-match');
+    assert.equal(x.witness.snapshot().sequence,1);
+    assert.ok(x.witness.snapshot().pending);
+  }finally{x.cleanup();}
+});
+test('H8 quarantine after successful commit but before independent readback prevents signing',async()=>{
+  const e=evidence(),x=h8Context(e);
+  try{
+    await x.reserve();
+    assert.equal((await ipc({type:'commit',evidence:e})).ok,true);
+    assert.equal(x.incident('QUARANTINE').ok,true);
+    assert.equal(x.witness.snapshot().quarantined,true);
+    const proof=await x.inspect();
+    assert.equal(proof.attested,false);
+    assert.equal(x.witness.snapshot().sequence,1);
+    assert.notEqual(x.witness.snapshot().pending,null);
+  }finally{x.cleanup();}
+});
+test('H8 witness state change DURING readback prevents post-read acknowledgement',async()=>{
+  const e=evidence();
+  let instance;
+  const x=h8Context(e,async()=>{
+    const row=await req(WATER,null);
+    if(row.status!==200)throw Error('Emulator unavailable');
+    assert.equal(instance.incident('QUARANTINE').ok,true);
+    return row.value;
+  });
+  instance=x;
+  try{
+    await x.reserve();
+    assert.equal((await ipc({type:'commit',evidence:e})).ok,true);
+    const proof=await x.inspect();
+    assert.equal(proof.attested,false);
+    assert.equal(proof.reason,'incident-or-anchor-changed-after-readback');
+    assert.ok(x.witness.snapshot().pending);
+  }finally{x.cleanup();}
+});
+test('H8 failure to read Firebase must leave witness pending and cannot sign',async()=>{
+  const e=evidence(),x=h8Context(e,async()=>{throw Error('synthetic network outage');});
+  try{
+    await x.reserve();
+    assert.equal((await ipc({type:'commit',evidence:e})).ok,true);
+    const proof=await x.inspect();
+    assert.equal(proof.attested,false);
+    assert.equal(proof.reason,'observer-unavailable-or-uncertain');
+    assert.equal(x.witness.snapshot().sequence,1);
+    assert.ok(x.witness.snapshot().pending);
+  }finally{x.cleanup();}
+});
+test('H8 observer can independently reconcile committed record when H6 worker is later unavailable',async()=>{
+  // This models a lost worker acknowledgement AFTER commit; it does NOT
+  // force a deterministic crash between the PUT and its HTTP response.
+  const e=evidence(),x=h8Context(e);
+  try{
+    await x.reserve();
+    assert.equal((await ipc({type:'commit',evidence:e})).ok,true);
+    worker.kill('SIGTERM'); // last integration test; only demo process
+    const proof=await x.inspect();
+    assert.equal(proof.attested,true,JSON.stringify(proof));
+    assert.equal(x.witness.acknowledge(proof.acknowledgement,proof.signature).ok,true);
+    assert.equal(x.witness.snapshot().sequence,2);
+    assert.equal(x.witness.snapshot().pending,null);
+  }finally{x.cleanup();}
 });
