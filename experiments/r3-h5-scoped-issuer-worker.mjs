@@ -158,6 +158,19 @@ async function initialize(message){
     send(message.id,false,'bootstrap-refused');
   }
 }
+// RTDB JSON responses can reorder object keys. Compare exact key SET and
+// scalar values, never JSON.stringify order. Reject missing/extra keys.
+const TICKET_FIELDS=Object.freeze([
+  'enabled','deviceId','epoch','sequence','digest','observedAtMs',
+  'distanceCm','levelCm','status','issuedAtMs','expiresAtMs'
+]);
+function sameTicket(actual,expected){
+  return actual!==null&&typeof actual==='object'&&
+    !Array.isArray(actual)&&
+    Object.keys(actual).length===TICKET_FIELDS.length&&
+    TICKET_FIELDS.every(k=>Object.hasOwn(actual,k)&&
+      Object.hasOwn(expected,k)&&actual[k]===expected[k]);
+}
 async function issue(message){
   if(!initialized||!exact(message,['id','type','evidence'])||
      message.type!=='issue'||!Number.isSafeInteger(message.id)||
@@ -168,10 +181,10 @@ async function issue(message){
        prepared.canPublish!==false||prepared.canWriteFirebase!==false)
       return send(message.id,false,'signed-evidence-or-authority-denied');
     const wrote=await request(PATHS.ticket,'PUT',prepared.ticket);
-    if(JSON.stringify(wrote)!==JSON.stringify(prepared.ticket))
+    if(!sameTicket(wrote,prepared.ticket))
       return send(message.id,false,'write-outcome-unknown');
     const persisted=await request(PATHS.ticket,'GET');
-    if(JSON.stringify(persisted)!==JSON.stringify(prepared.ticket))
+    if(!sameTicket(persisted,prepared.ticket))
       return send(message.id,false,'readback-mismatch');
     // Never export a token, the raw ticket, private key or arbitrary DB data.
     send(message.id,true,'SYNTHETIC_TICKET_STORED_NOT_PUBLISHED',{
