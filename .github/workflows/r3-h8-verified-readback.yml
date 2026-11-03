@@ -1,0 +1,83 @@
+name: FloodGuard R3 H8 verified publication readback (NO DEPLOY)
+
+on:
+  push:
+    branches:
+      - security/r3-h8-independent-readback-reconciliation-20261103
+  pull_request:
+    branches:
+      - security/r3-h7-offline-independent-witness-20261103
+    paths:
+      - 'experiments/r3-h8-verified-readback-observer.mjs'
+      - 'tests/r3-h8-verified-readback-observer.test.mjs'
+      - 'tests/r3-h6-mandatory-publication-emulator.mjs'
+      - 'docs/firebase/R3_H8_VERIFIED_PUBLICATION_READBACK_20261103.md'
+      - '.github/workflows/r3-h8-verified-readback.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-readback:
+    name: H8 signed readback, H7 rollback and inherited crypto checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Run isolated observer and exact inherited source checks
+        run: |
+          set -euo pipefail
+          node --check experiments/r3-h8-verified-readback-observer.mjs
+          node --check tests/r3-h8-verified-readback-observer.test.mjs
+          node --check tests/r3-h6-mandatory-publication-emulator.mjs
+          node --test \
+            tests/r3-h8-verified-readback-observer.test.mjs \
+            tests/r3-h7-external-witness.test.mjs \
+            tests/r3-h6-mandatory-publication-rules.test.mjs \
+            tests/r3-h5-scoped-issuer-rules.test.mjs \
+            tests/r3-h4-signed-admission-issuer.test.mjs \
+            tests/three-signer-water-projection-gate.test.mjs
+
+  integrated-auth-rtdb:
+    name: Actual H6 signed commit, H8 readback and H7 witness acknowledgment
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      GCLOUD_PROJECT: demo-r3-h6-publication
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install disposable test-only dependencies
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npm install --no-save --package-lock=false --ignore-scripts firebase-admin@14.5.0
+      - name: Pin Auth+RTDB Emulator and reject non-demo project
+        run: |
+          set -euo pipefail
+          test "$GCLOUD_PROJECT" = 'demo-r3-h6-publication'
+          node --check tests/r3-h6-mandatory-publication-emulator.mjs
+          node -e "const c=require('./firebase.r3-h6-mandatory-publication-lab.json');if(c.database.rules!=='docs/firebase/r3-h6-mandatory-publication-lab.rules.json'||c.emulators.database.host!=='127.0.0.1'||c.emulators.database.port!==9000||c.emulators.auth.host!=='127.0.0.1'||c.emulators.auth.port!==9099||c.emulators.singleProjectMode!==true)process.exit(1)"
+      - name: Exercise actual RTDB readback and signed witness after H6 worker commit
+        run: |
+          set -euo pipefail
+          npx --yes firebase-tools@14.18.0 emulators:exec \
+            --only auth,database \
+            --project demo-r3-h6-publication \
+            --config firebase.r3-h6-mandatory-publication-lab.json \
+            "GCLOUD_PROJECT=demo-r3-h6-publication node --test tests/r3-h6-mandatory-publication-emulator.mjs"
