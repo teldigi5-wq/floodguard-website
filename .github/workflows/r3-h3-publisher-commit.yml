@@ -1,0 +1,73 @@
+name: FloodGuard R3 H3 publisher commit boundary (NO DEPLOY)
+
+on:
+  push:
+    branches:
+      - security/r3-h3-publisher-commit-fence-20261103
+  pull_request:
+    branches:
+      - security/r3-h2-incident-quarantine-lab-20261103
+    paths:
+      - 'docs/firebase/r3-h3-publisher-commit-fence-lab.rules.json'
+      - 'firebase.r3-h3-publisher-commit-lab.json'
+      - 'tests/r3-h3-publisher-commit-emulator.mjs'
+      - 'tests/r3-h3-publisher-commit-rules.test.mjs'
+      - 'docs/firebase/R3_H3_PUBLISHER_COMMIT_BOUNDARY_20261103.md'
+      - '.github/workflows/r3-h3-publisher-commit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rules-delta:
+    name: Exact H3 source scope and no production access
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Verify pure source-delta constraints
+        run: |
+          set -euo pipefail
+          node --check tests/r3-h3-publisher-commit-rules.test.mjs
+          node --test tests/r3-h3-publisher-commit-rules.test.mjs
+
+  emulator-boundary:
+    name: Actual Auth+RTDB Emulator publish denial and single commit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      GCLOUD_PROJECT: demo-r3-h3-publisher
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install synthetic fixture libraries (no scripts)
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npm install --no-save --package-lock=false --ignore-scripts firebase-admin@14.5.0
+      - name: Refuse changed test target
+        run: |
+          set -euo pipefail
+          test "$GCLOUD_PROJECT" = 'demo-r3-h3-publisher'
+          node --check tests/r3-h3-publisher-commit-emulator.mjs
+          node -e "const f=require('./firebase.r3-h3-publisher-commit-lab.json');if(f.database.rules!=='docs/firebase/r3-h3-publisher-commit-fence-lab.rules.json'||f.emulators.database.host!=='127.0.0.1'||f.emulators.database.port!==9000||f.emulators.auth.host!=='127.0.0.1'||f.emulators.auth.port!==9099||f.emulators.singleProjectMode!==true)process.exit(1)"
+      - name: Execute synthetic publisher commit and negative path tests
+        run: |
+          set -euo pipefail
+          npx --yes firebase-tools@14.18.0 emulators:exec \
+            --only auth,database \
+            --project demo-r3-h3-publisher \
+            --config firebase.r3-h3-publisher-commit-lab.json \
+            "GCLOUD_PROJECT=demo-r3-h3-publisher node --test tests/r3-h3-publisher-commit-emulator.mjs"
