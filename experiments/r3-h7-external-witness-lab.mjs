@@ -193,11 +193,13 @@ export function createH7OfflineWitness({
       if(state!==null||event.epoch!==1)
         return stop('explicit-bootstrap-refused');
       const next={
-        epoch:1,quarantined:true,sequence:event.sequence,
+        // A signed, exact BOOTSTRAP is explicit operator clearance; absent
+        // bootstrap remains uninitialized and always fails closed.
+        epoch:1,quarantined:false,sequence:event.sequence,
         digest:event.digest,pending:null
       };
       mutate(state,anchor,next);
-      return Object.freeze({ok:true,action:kind,quarantined:true,
+      return Object.freeze({ok:true,action:kind,quarantined:false,
         releaseDecision:'NO_GO'});
     }
     if(!state||event.epoch!==state.epoch+1||
