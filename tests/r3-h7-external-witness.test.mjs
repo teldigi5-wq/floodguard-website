@@ -127,7 +127,9 @@ function setup(){
   return {dir,witness,bootstrap,incident,frame,acknowledge,
     operator,witnessSigner,integrityKey,externalAnchor,options,cleanup,
     setAdvance:v=>{allowAdvance=v;},setRead:v=>{allowRead=v;},
-    anchorSnapshot:()=>({...anchorState})};
+    anchorSnapshot:()=>({...anchorState}),
+    // Synthetic attacker model: not a real independently protected anchor.
+    forceAnchorRollback:v=>{anchorState={...v};}};
 }
 test('no implicit enrollment: unsigned/wrong operator events cannot bootstrap',()=>{
   const x=setup();try{
@@ -311,5 +313,40 @@ test('rotated MAC key or equal operator/confirmation key fails closed',()=>{
     assert.throws(()=>createH7OfflineWitness({
       ...x.options,confirmationPublicKey:x.operator.publicKey
     }),TypeError);
+  }finally{x.cleanup();}
+});
+
+
+test('EXPECTED OPEN DEFECT: matching rollback of both local journal and external test anchor goes undetected',async()=>{
+  const x=setup();try{
+    x.bootstrap();
+    const saved=fs.readFileSync(path.join(x.dir,'r3-h7-synthetic-witness.json'));
+    const previousAnchor=x.anchorSnapshot();
+    const f=x.frame();
+    const c=createH7OfflineCoordinator({issuer:f.issuer,witness:x.witness});
+    assert.equal((await c.prepare(f.signedEvidence)).ok,true);
+    assert.equal(x.witness.snapshot().revision,2);
+    // Full compromise of both trust domains defeats this rehearsal.
+    fs.writeFileSync(path.join(x.dir,'r3-h7-synthetic-witness.json'),saved);
+    x.forceAnchorRollback(previousAnchor);
+    const rolled=x.witness.snapshot();
+    assert.equal(rolled.revision,1);
+    assert.equal(rolled.pending,null);
+    // This test is a KNOWN vulnerability demonstration, never a release pass.
+  }finally{x.cleanup();}
+});
+
+test('EXPECTED OPEN DEFECT: syntactically signed acknowledgement does not prove an actual H6 Firebase commit',async()=>{
+  const x=setup();try{
+    x.bootstrap();const f=x.frame();
+    const c=createH7OfflineCoordinator({issuer:f.issuer,witness:x.witness});
+    const reservation=await c.prepare(f.signedEvidence);
+    assert.equal(reservation.ok,true);
+    // No Firebase emulator or publication worker was ever contacted.
+    // An attestor with the signing key can assert a fictional success.
+    const proof=x.acknowledge(reservation);
+    assert.equal(x.witness.acknowledge(proof.ack,proof.signature).ok,true);
+    assert.equal(x.witness.snapshot().sequence,2);
+    // Production must bind attestation to independently witnessed DB state.
   }finally{x.cleanup();}
 });
