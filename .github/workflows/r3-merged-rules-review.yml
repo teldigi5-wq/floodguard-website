@@ -55,13 +55,17 @@ jobs:
         run: |
           set -euo pipefail
           node --version
-          java -version
+          test -x "${JAVA_HOME_21_X64:?}/bin/java"
+          "$JAVA_HOME_21_X64/bin/java" -version
           test "$GCLOUD_PROJECT" = "demo-floodguard-r3"
           node -e "const c=require('./r3-firebase-emulator.json');if(c.database.rules!=='docs/firebase/R3_PUBLIC_CHILD_READS_MERGED_REVIEW_ONLY_20261102.json'||c.emulators.database.host!=='127.0.0.1'||c.emulators.database.port!==19001||c.emulators.singleProjectMode!==true)process.exit(1)"
           node --check tests/r3-firebase-emulator.test.mjs
       - name: Run Firebase RTDB Emulator only (synthetic data; NO DEPLOY)
         run: |
           set -euo pipefail
+          export JAVA_HOME="${JAVA_HOME_21_X64:?}"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          java -version
           npx --yes firebase-tools@15.34.2 emulators:exec \
             --only database \
             --project demo-floodguard-r3 \
