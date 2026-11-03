@@ -22,7 +22,7 @@ import {createH7OfflineCoordinator}
 import {createH8OfflineReadbackObserver}
   from '../experiments/r3-h8-verified-readback-observer.mjs';
 
-const PROJECT='demo-r3-h10-atomic',BASE='http://127.0.0.1:9000';
+const PROJECT='demo-r3-h10-canonical',BASE='http://127.0.0.1:9000';
 const AUTH='http://127.0.0.1:9099',NS=PROJECT+'-default-rtdb';
 const ROOT='/floodguard',ID='device-stage-a';
 const NODE=ROOT+'/atomicPublicationLab/'+ID;
@@ -112,7 +112,7 @@ function project(e){
 }
 async function child(){
   const p=fork(fileURLToPath(new URL(
-    '../experiments/r3-h10-single-node-worker.mjs',import.meta.url)),[],{
+    '../experiments/r3-h10-canonical-authority-worker.mjs',import.meta.url)),[],{
     cwd:process.cwd(),execArgv:[],
     stdio:['ignore','pipe','pipe','ipc','pipe'],
     env:{
@@ -275,10 +275,10 @@ beforeEach(async()=>{
     },
     publisherLabAuthorization:{
       'publisher-water-stage':{
-        enabled:true,deviceId:ID,epoch:1,scope:'publication-lab-water-v1'
+        enabled:false,deviceId:ID,epoch:1,scope:'publication-lab-water-v1'
       }
     },
-    deviceAuthorization:{[ID]:{enabled:true,scope:'prototype-ingest-v1'}},
+    deviceAuthorization:{[ID]:{enabled:false,scope:'prototype-ingest-v1'}},
     atomicPublicationLab:{[ID]:{
       control:structuredClone(CANONICAL_CONTROL),
       current:{distanceCm:20,levelCm:5,status:'SAFE',
