@@ -4,7 +4,13 @@ import {test,before,after,beforeEach} from 'node:test';
 import assert from 'node:assert/strict';
 import {initializeApp,deleteApp} from 'firebase-admin/app';
 import {getAuth} from 'firebase-admin/auth';
-import {randomBytes} from 'node:crypto';
+import {randomBytes,createHash,generateKeyPairSync,sign} from 'node:crypto';
+import {canonicalOfflineEnvelope}
+  from '../experiments/stage7-durable-ingress.mjs';
+import {canonicalSyntheticPublicationAttestation}
+  from '../experiments/synthetic-publication-attestation.mjs';
+import {createH4OfflineAdmissionIssuer}
+  from '../experiments/r3-h4-signed-admission-issuer.mjs';
 
 const PROJECT='demo-r3-h3-publisher';
 const RTDB='http://127.0.0.1:9000';
@@ -204,4 +210,95 @@ test('admission authorizer cannot be impersonated via publisher credentials',asy
   ])await denied(db(path,'publisher','PUT',false));
   assert.equal((await db(TICKET,OWNER)).data.enabled,true);
   assert.equal((await db(ROOT+'/incidentQuarantine/'+ID+'/blocked',OWNER)).data,false);
+});
+
+
+// H4 composes preexisting three-signature verification with the H3 Rules
+// evaluator. All identities and evidence here are synthetic; the disposable
+// owner fixture is not a deployable signature-verifying admission service.
+function signedH4Fixture(){
+  const now=Date.now();
+  const device=generateKeyPairSync('ed25519');
+  const receiptSigner=generateKeyPairSync('ed25519');
+  const attestor=generateKeyPairSync('ed25519');
+  const envelope={
+    version:'floodguard-offline-envelope-v1',deviceId:ID,epoch:1,
+    observedAtMs:now-1000,
+    frame:{sequence:2,distanceCm:16.5,levelCm:8.5,risk:'WARNING'}
+  };
+  const data=canonicalOfflineEnvelope(envelope);
+  const digest=createHash('sha256').update(data).digest('hex');
+  const receipt={version:'floodguard-offline-receipt-v1',
+    deviceId:ID,epoch:1,sequence:2,digest,acceptedAtMs:now-250};
+  const attestation={
+    version:'floodguard-synthetic-persisted-attestation-v1',
+    deviceId:ID,epoch:1,sequence:2,digest,
+    acceptedAtMs:now-250,confirmedAtMs:now-100,
+    scope:'prototype-ingest-v1',deviceEnabled:true,databaseState:'DATABASE_CONFIRMED'
+  };
+  const sig=(value,k)=>sign(null,Buffer.from(value),k).toString('base64url');
+  return {
+    signed:{
+      envelope,deviceSignature:sig(data,device.privateKey),
+      receipt,receiptSignature:sig(JSON.stringify(receipt),receiptSigner.privateKey),
+      attestation,attestationSignature:sig(
+        canonicalSyntheticPublicationAttestation(attestation),attestor.privateKey),
+      databaseRecord:{deviceId:ID,epoch:1,sequence:2,digest,
+        acceptedAtMs:now-250,status:'DATABASE_CONFIRMED'}
+    },
+    authority:{
+      revision:1,issuer:{enabled:true,generation:1,scope:'lab-signed-admission-v1'},
+      publisher:{enabled:true,deviceId:ID,epoch:1,scope:'publication-lab-water-v1'},
+      incident:{blocked:false,epoch:1},
+      sourceBinding:{deviceId:ID,epoch:1,enabled:true,scope:'prototype-ingest-v1',
+        publicKey:device.publicKey},
+      trustedReceiptKey:receiptSigner.publicKey,
+      trustedDatabaseIssuerKey:attestor.publicKey,
+      lastPublished:{initialized:true,epoch:1,sequence:1,digest:DIGEST_OLD}
+    }
+  };
+}
+function h4Issuer(snapshot){
+  return createH4OfflineAdmissionIssuer({
+    authority:Object.freeze({read:async()=>snapshot}),
+    clock:()=>Date.now()
+  });
+}
+test('H4 verified three signatures issue private fixture ticket; H3 Rules commit exact candidate',async()=>{
+  const x=signedH4Fixture();
+  const result=await h4Issuer(x.authority).issue(x.signed);
+  assert.equal(result.issued,true,JSON.stringify(result));
+  assert.equal(result.canPublish,false);
+  assert.equal(result.ticket.digest,x.signed.receipt.digest);
+  await seed(TICKET,result.ticket); // synthetic fixture ONLY
+  assert.equal((await db(WATER,'publisher','PUT',result.candidate)).status,200);
+  assert.deepEqual((await db(WATER+'/current',null)).data,result.candidate.current);
+  assert.equal((await db(WATER+'/checkpoint',OWNER)).data.digest,x.signed.receipt.digest);
+  await denied(db(WATER,'publisher','PUT',result.candidate));
+});
+test('H4 signed admission cannot be forged from a database claim or token alone',async()=>{
+  const x=signedH4Fixture();
+  await seed(TICKET,null);
+  const forged=await h4Issuer(x.authority).issue({
+    ...x.signed,attestationSignature:'A'.repeat(86)
+  });
+  assert.equal(forged.issued,false);
+  assert.equal(forged.ticket,undefined);
+  await denied(db(WATER,'publisher','PUT',{
+    current:{distanceCm:16.5,levelCm:8.5,status:'WARNING',
+      observedAtMs:x.signed.envelope.observedAtMs,overallRisk:'UNKNOWN'},
+    checkpoint:{initialized:true,deviceId:ID,epoch:1,sequence:2,
+      digest:x.signed.receipt.digest,
+      observedAtMs:x.signed.envelope.observedAtMs}
+  }));
+});
+test('H4 valid signed ticket becomes unusable when incident is quarantined before H3 commit',async()=>{
+  const x=signedH4Fixture();
+  const result=await h4Issuer(x.authority).issue(x.signed);
+  assert.equal(result.issued,true);
+  await seed(TICKET,result.ticket);
+  await seed(ROOT+'/incidentQuarantine/'+ID+'/blocked',true);
+  await denied(db(WATER,'publisher','PUT',result.candidate));
+  assert.equal((await db(WATER+'/checkpoint',OWNER)).data.sequence,1);
+  assert.deepEqual((await db(TICKET,OWNER)).data,result.ticket);
 });
