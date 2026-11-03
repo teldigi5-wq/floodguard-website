@@ -10,6 +10,9 @@ on:
     paths:
       - 'experiments/r3-h8-verified-readback-observer.mjs'
       - 'tests/r3-h8-verified-readback-observer.test.mjs'
+      - 'docs/firebase/r3-h8-readback-observer-lab.rules.json'
+      - 'firebase.r3-h8-readback-lab.json'
+      - 'tests/r3-h8-readback-observer-rules.test.mjs'
       - 'tests/r3-h6-mandatory-publication-emulator.mjs'
       - 'docs/firebase/R3_H8_VERIFIED_PUBLICATION_READBACK_20261103.md'
       - '.github/workflows/r3-h8-verified-readback.yml'
@@ -37,6 +40,7 @@ jobs:
           node --check tests/r3-h6-mandatory-publication-emulator.mjs
           node --test \
             tests/r3-h8-verified-readback-observer.test.mjs \
+            tests/r3-h8-readback-observer-rules.test.mjs \
             tests/r3-h7-external-witness.test.mjs \
             tests/r3-h6-mandatory-publication-rules.test.mjs \
             tests/r3-h5-scoped-issuer-rules.test.mjs \
@@ -72,12 +76,12 @@ jobs:
           set -euo pipefail
           test "$GCLOUD_PROJECT" = 'demo-r3-h6-publication'
           node --check tests/r3-h6-mandatory-publication-emulator.mjs
-          node -e "const c=require('./firebase.r3-h6-mandatory-publication-lab.json');if(c.database.rules!=='docs/firebase/r3-h6-mandatory-publication-lab.rules.json'||c.emulators.database.host!=='127.0.0.1'||c.emulators.database.port!==9000||c.emulators.auth.host!=='127.0.0.1'||c.emulators.auth.port!==9099||c.emulators.singleProjectMode!==true)process.exit(1)"
+          node -e "const c=require('./firebase.r3-h8-readback-lab.json');if(c.database.rules!=='docs/firebase/r3-h8-readback-observer-lab.rules.json'||c.emulators.database.host!=='127.0.0.1'||c.emulators.database.port!==9000||c.emulators.auth.host!=='127.0.0.1'||c.emulators.auth.port!==9099||c.emulators.singleProjectMode!==true)process.exit(1)"
       - name: Exercise actual RTDB readback and signed witness after H6 worker commit
         run: |
           set -euo pipefail
           npx --yes firebase-tools@14.18.0 emulators:exec \
             --only auth,database \
             --project demo-r3-h6-publication \
-            --config firebase.r3-h6-mandatory-publication-lab.json \
+            --config firebase.r3-h8-readback-lab.json \
             "GCLOUD_PROJECT=demo-r3-h6-publication node --test tests/r3-h6-mandatory-publication-emulator.mjs"
