@@ -21,6 +21,8 @@ import {createH7OfflineCoordinator}
   from '../experiments/r3-h7-offline-coordinator.mjs';
 import {createH8OfflineReadbackObserver}
   from '../experiments/r3-h8-verified-readback-observer.mjs';
+import {createH11LabCertifier,createH11LabConsumer}
+  from '../experiments/r3-h11-certified-read-boundary.mjs';
 
 const PROJECT='demo-r3-h10-canonical',BASE='http://127.0.0.1:9000';
 const AUTH='http://127.0.0.1:9099',NS=PROJECT+'-default-rtdb';
@@ -234,7 +236,7 @@ function witnessFixture(){
       return {current:v.data.current,checkpoint:v.data.checkpoint};
     }
   });
-  return {witness,coordinator,observer,
+  return {witness,coordinator,observer,issuer,
     cleanup:()=>fs.rmSync(dir,{recursive:true,force:true})};
 }
 before(async()=>{
@@ -496,4 +498,104 @@ test('H10 historical separate auth rows do not re-enable disabled canonical auth
     assert.equal((await w.send({type:'commit',mode:'normal',evidence:signed()}).promise).ok,false);
     assert.equal((await db(NODE,'owner')).data.checkpoint.sequence,1);
   }finally{await w.kill();}
+});
+
+
+// H11 puts a signed verification boundary AFTER the already-tested H10
+// mandatory publication and H7/H8 acknowledgement. The signer and anchor
+// still coexist inside disposable CI: independent custody remains UNPROVEN.
+function h11Boundary(f){
+  const signer=generateKeyPairSync('ed25519');
+  const observed=async()=>{
+    const r=await db(NODE,'observer');
+    if(r.status!==200)throw Error('Observer read refused');
+    return r.data; // whole atomic node, never anonymous public-only leaves
+  };
+  let signerEnabled=true;
+  const trusted=async()=>({
+    witness:f.witness.snapshot(),
+    signer:{enabled:signerEnabled,generation:1,scope:'h11-signed-readback-v1'}
+  });
+  return {
+    certifier:createH11LabCertifier({
+      issuer:f.issuer,readPublication:observed,
+      signerPrivateKey:signer.privateKey,clock:()=>Date.now()
+    }),
+    consumer:createH11LabConsumer({
+      verifierPublicKey:signer.publicKey,
+      readPublication:observed,readIndependentAnchor:trusted,
+      clock:()=>Date.now()
+    }),
+    disableSigner:()=>{signerEnabled=false;}
+  };
+}
+test('H11 verified H10 signed commit, H8 ack and H7 witness allows only non-physical lab evidence',async()=>{
+  const w=await child(),f=witnessFixture();
+  try{
+    const e=signed(),reservation=await f.coordinator.prepare(e);
+    assert.equal(reservation.ok,true);
+    assert.equal((await w.send({type:'commit',mode:'normal',evidence:e}).promise).ok,true);
+    const proof=await f.observer.inspect({reservation,candidate:project(e)});
+    assert.equal(proof.attested,true);
+    assert.equal(f.witness.acknowledge(proof.acknowledgement,proof.signature).ok,true);
+    const h11=h11Boundary(f);
+    const certified=await h11.certifier.certify(e);
+    assert.equal(certified.certified,true,JSON.stringify(certified));
+    const verified=await h11.consumer.inspect({
+      certificate:certified.certificate,signature:certified.signature
+    });
+    assert.equal(verified.verified,true,JSON.stringify(verified));
+    assert.equal(verified.signedStatus,'WARNING');
+    assert.equal(verified.canDeclareSafe,false);
+    assert.equal(verified.canOperateGate,false);
+    assert.equal(verified.physicalSourceVerified,false);
+
+    // A compromised privileged owner changes SAFE after a valid certificate.
+    const forged=(await db(NODE,'owner')).data;
+    forged.current.status='SAFE';
+    forged.current.distanceCm=20;
+    await seed(NODE,forged);
+    const refused=await h11.consumer.inspect({
+      certificate:certified.certificate,signature:certified.signature
+    });
+    assert.equal(refused.verified,false,'Forged SAFE must never be certified');
+    assert.equal((await h11.certifier.certify(e)).certified,undefined);
+  }finally{await w.kill();f.cleanup();}
+});
+test('H11 signed H10 publication is still untrusted before independent H7 checkpoint acknowledgement',async()=>{
+  const w=await child(),f=witnessFixture();
+  try{
+    const e=signed(),reservation=await f.coordinator.prepare(e);
+    assert.equal(reservation.ok,true);
+    assert.equal((await w.send({type:'commit',mode:'normal',evidence:e}).promise).ok,true);
+    const h11=h11Boundary(f);
+    const c=await h11.certifier.certify(e);
+    assert.equal(c.certified,true,JSON.stringify(c));
+    const view=await h11.consumer.inspect({
+      certificate:c.certificate,signature:c.signature
+    });
+    assert.equal(view.verified,false);
+    assert.equal(view.reason,'independent-witness-or-key-refused');
+    assert.equal(f.witness.snapshot().pending.reservationId,reservation.reservationId);
+  }finally{await w.kill();f.cleanup();}
+});
+test('H11 signed certificate becomes unusable on signer disable even if Firebase record stays unchanged',async()=>{
+  const w=await child(),f=witnessFixture();
+  try{
+    const e=signed(),reservation=await f.coordinator.prepare(e);
+    assert.equal(reservation.ok,true);
+    assert.equal((await w.send({type:'commit',mode:'normal',evidence:e}).promise).ok,true);
+    const ack=await f.observer.inspect({reservation,candidate:project(e)});
+    assert.equal(ack.attested,true);
+    assert.equal(f.witness.acknowledge(ack.acknowledgement,ack.signature).ok,true);
+    const h11=h11Boundary(f);
+    const c=await h11.certifier.certify(e);
+    assert.equal(c.certified,true);
+    h11.disableSigner();
+    const view=await h11.consumer.inspect({
+      certificate:c.certificate,signature:c.signature
+    });
+    assert.equal(view.verified,false);
+    assert.equal(view.canDeclareSafe,false);
+  }finally{await w.kill();f.cleanup();}
 });
