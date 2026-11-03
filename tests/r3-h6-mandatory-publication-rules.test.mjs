@@ -30,8 +30,8 @@ test('all client ticket, water, root and live writes stay denied',()=>{
 test('client private network reads and admission secrecy remain as before',()=>{
   assert.equal(root.publicationAdmission['device-stage-a']['.read'],
     old.rules.floodguard.publicationAdmission['device-stage-a']['.read']);
-  assert.equal(root.live.esp8266.ip['.read'],undefined);
-  assert.equal(root.live.esp8266.wifi['.read'],undefined);
+  assert.equal(root.live.esp8266.ip['.read'],false);
+  assert.equal(root.live.esp8266.wifi['.read'],false);
   assert.equal(root.live['.read'],false);
   assert.equal(root.live.esp8266['.read'],false);
 });
