@@ -389,12 +389,14 @@ function h8Context(signed,readOverride){
     cleanup:()=>fs.rmSync(directory,{recursive:true,force:true})
   };
 }
-test('H8 observer role reads only complete publication snapshot, never gates, private metadata or writes',async()=>{
+test('H8 observer accesses protected full publication, not private metadata or any writes',async()=>{
   assert.equal((await req(WATER,'observer')).status,200);
   assert.equal((await req(WATER,null)).status,401);
   assert.equal((await req(WATER+'/checkpoint',null)).status,401);
+  // Gate status is an ALREADY-public telemetry read, not a confidential field.
+  assert.equal((await req(ROOT+'/live/gate','observer')).status,200);
   for(const path of [
-    ROOT,ROOT+'/live/esp8266/ip',ROOT+'/live/gate',
+    ROOT,ROOT+'/live/esp8266/ip',
     ROOT+'/incidentQuarantine/'+ID,
     ROOT+'/publicationObserverAuthorization/readback-observer-stage'
   ])await denied(req(path,'observer'));
@@ -424,7 +426,7 @@ test('H8 actual RTDB readback after signed H6 commit authorizes H7 witness ackno
     assert.equal(x.witness.acknowledge(proof.acknowledgement,proof.signature).ok,true);
     assert.equal(x.witness.snapshot().sequence,2);
     assert.equal(x.witness.snapshot().pending,null);
-    assert.deepEqual((await req(WATER,null)).value,x.candidate);
+    assert.deepEqual((await req(WATER,'observer')).value,x.candidate);
     assert.equal((await x.inspect()).attested,false);
   }finally{x.cleanup();}
 });
