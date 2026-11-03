@@ -222,6 +222,7 @@ beforeEach(async()=>{
   for(const role of Object.keys(ROLES))tokens[role]=await signin(role);
   await seed(ROOT,{
     deviceAuthorization:{[ID]:{enabled:true,scope:'prototype-ingest-v1'}},
+    incidentQuarantine:{[ID]:{blocked:false}},
     serviceWorkerAuthorization:{
       'service-confirm-stage':{enabled:true,generation:1}
     },
@@ -781,4 +782,58 @@ test('read-only attestor module contains no privileged SDK, write verbs or publi
   assert.equal(ATTESTOR.publicKey.asymmetricKeyType,'ed25519');
   assert.notEqual(SPKI(DEVICE.publicKey),SPKI(ATTESTOR.publicKey));
   assert.notEqual(SPKI(RECEIPT.publicKey),SPKI(ATTESTOR.publicKey));
+});
+
+
+// R3 H2: a separately controlled per-device incident gate blocks new
+// attestor signatures. It does NOT remove an existing confirmation, invalidate
+// previously issued signatures retroactively, or auto-resolve an incident.
+test('operator quarantine blocks fresh attestation even for an unchanged valid confirmed record',async()=>{
+  const signed=await signedConfirmedFixture();
+  assert.equal((await readOnlyAttestor()(signed)).ok,true);
+  await seed(ROOT+'/incidentQuarantine/'+ID+'/blocked',true);
+  await denied(db(RECORD,'attestor'));
+  await denied(db(ROOT+'/deviceAuthorization/'+ID,'attestor'));
+  await denied(db(ROOT+'/attestorLabAuthorization/attestor-stage','attestor'));
+  const withheld=await readOnlyAttestor()(signed);
+  assert.equal(withheld.ok,false);
+  assert.equal(withheld.attestationSignature,undefined);
+  assert.deepEqual((await granted(db(RECORD,owner))).frame,FRAME);
+  assert.equal((await granted(db(PUBLIC+'/current',null))).status,'SAFE');
+  await denied(db(PUBLIC,'attestor','PUT',{}));
+});
+
+test('missing incident authority fails closed instead of silently assuming a device is cleared',async()=>{
+  const signed=await signedConfirmedFixture();
+  await seed(ROOT+'/incidentQuarantine/'+ID,null);
+  const withheld=await readOnlyAttestor()(signed);
+  assert.equal(withheld.ok,false);
+  assert.equal(withheld.attestationSignature,undefined);
+  await denied(db(RECORD,'attestor'));
+  assert.deepEqual((await granted(db(RECORD,owner))).frame,FRAME);
+});
+
+test('revoked confirmer token plus operator quarantine blocks otherwise historically valid attestation',async()=>{
+  const signed=await signedConfirmedFixture();
+  await seed(ROOT+'/serviceWorkerAuthorization/service-confirm-stage/enabled',false);
+  // Existing policy permits historical attestation if the operator has not
+  // separately quarantined it. This is deliberately NOT an automatic cascade.
+  assert.equal((await readOnlyAttestor()(signed)).ok,true);
+  await seed(ROOT+'/incidentQuarantine/'+ID+'/blocked',true);
+  assert.equal((await readOnlyAttestor()(signed)).ok,false);
+  await denied(db(RECORD,'attestor'));
+  assert.deepEqual((await granted(db(RECORD,owner))).frame,FRAME);
+});
+
+test('device, ordinary and attestor Auth tokens cannot mutate or inspect incident control',async()=>{
+  await signedConfirmedFixture();
+  const path=ROOT+'/incidentQuarantine/'+ID+'/blocked';
+  for(const role of ['device','ordinary','attestor']){
+    await denied(db(path,role));
+    await denied(db(path,role,'PUT',false));
+    await denied(db(path,role,'DELETE'));
+  }
+  const {jwt}=await issuedServiceToken();
+  await denied(directServiceRequest(jwt,path,'PUT',false));
+  assert.equal(await granted(db(path,owner)),false);
 });
