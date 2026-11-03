@@ -1,0 +1,73 @@
+name: FloodGuard R3 merged Rules candidate - offline only
+
+on:
+  push:
+    branches:
+      - review/r3-merged-public-child-rules-20261102
+  pull_request:
+    branches:
+      - security/r3-h1-offline-authority-review-20261102
+    paths:
+      - 'docs/firebase/R3_PUBLIC_CHILD_READS_MERGED_REVIEW_ONLY_20261102.json'
+      - 'docs/firebase/R3_MERGED_READ_RULES_REVIEW_20261102.md'
+      - 'tests/r3-merged-rules-review.test.mjs'
+      - 'tests/r3-firebase-emulator.test.mjs'
+      - 'r3-firebase-emulator.json'
+      - 'tests/r3-private-firmware-ingress-preflight.test.mjs'
+      - 'scripts/r3-private-firmware-ingress-preflight.mjs'
+      - '.github/workflows/r3-merged-rules-review.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-rules-review:
+    name: Offline review of merged candidate (NO DEPLOY)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Checkout without persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Validate JSON and run offline no-write contract tests
+        run: |
+          set -euo pipefail
+          node --version
+          node -e "JSON.parse(require('node:fs').readFileSync('docs/firebase/R3_PUBLIC_CHILD_READS_MERGED_REVIEW_ONLY_20261102.json','utf8'))"
+          node --test tests/r3-merged-rules-review.test.mjs
+          node --test tests/r3-private-firmware-ingress-preflight.test.mjs
+
+  emulator-integration:
+    name: Local RTDB emulator permission checks (NO DEPLOY)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GCLOUD_PROJECT: demo-floodguard-r3
+      CI: 'true'
+    steps:
+      - name: Checkout review branch without persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Verify local-only test setup
+        run: |
+          set -euo pipefail
+          node --version
+          test -x "${JAVA_HOME_21_X64:?}/bin/java"
+          "$JAVA_HOME_21_X64/bin/java" -version
+          test "$GCLOUD_PROJECT" = "demo-floodguard-r3"
+          node -e "const c=require('./r3-firebase-emulator.json');if(c.database.rules!=='docs/firebase/R3_PUBLIC_CHILD_READS_MERGED_REVIEW_ONLY_20261102.json'||c.emulators.database.host!=='127.0.0.1'||c.emulators.database.port!==19001||c.emulators.singleProjectMode!==true)process.exit(1)"
+          node --check tests/r3-firebase-emulator.test.mjs
+      - name: Run Firebase RTDB Emulator only (synthetic data; NO DEPLOY)
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="${JAVA_HOME_21_X64:?}"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          java -version
+          npx --yes firebase-tools@15.34.2 emulators:exec \
+            --only database \
+            --project demo-floodguard-r3 \
+            --config r3-firebase-emulator.json \
+            "node --test tests/r3-firebase-emulator.test.mjs"
