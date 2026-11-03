@@ -9,7 +9,7 @@
     },
     "ui": {
       "enabled": false
-    }
-  },
-  "singleProjectMode": true
+    },
+    "singleProjectMode": true
+  }
 }
