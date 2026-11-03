@@ -68,3 +68,23 @@ Use the Firebase Realtime Database **Local Emulator Suite** for positive/negativ
 A further earlier-uploaded `FloodGuard_ESP8266_FIREBASE_FINAL_v6.ino` (519 extracted lines) was inspected privately. It also contains `WiFiClientSecure.setInsecure()`, direct HTTPS REST `PATCH` targeting the Firebase live path, and Arduino serial ingest indicators, without a clear Firebase REST authentication/CA-validation mechanism. A separate `FloodGuard_ESP8266_FINAL_FIREBASE.ino` (352 extracted lines) shows the same static indicators. These matches strengthen the **historical source-design finding only**; none identifies the version currently flashed. They do not establish that hardware is currently powered or whether the network is accessible.
 
 Static preflight outcome: the dedicated GitHub workflow on this draft branch passed **11/11 synthetic/offline tests** at `261bdfa59b5c6f9d837c8611d0741d6e2c9c6c93` (5 merged Rules source checks and 6 firmware preflight checks), including no-credential-output regressions. This is not a Firebase Emulator or on-device test and never overrides `NO_GO`.
+
+
+## 2026-11-03 — Firebase Realtime Database Emulator acceptance (offline only)
+
+**Evidence:** GitHub Actions https://github.com/teldigi5-wq/floodguard-website/actions/runs/41621812265 at commit 0818e63962dc3b5e78dfa63337dc4b71ba83ca17. All jobs completed successfully with Firebase CLI 15.34.2, Java 21, a fixed loopback host 127.0.0.1:19001, the disposable demo-floodguard-r3 project, and the review-only Rules candidate. No production credentials or device commands were used.
+
+- **7/7 Firebase Rules Emulator tests passed:** fixed local environment; synthetic, deliberately stale local fixture via emulator-only owner bearer; nine approved unauthenticated child reads; protected ESP/parent/test/bot read denials; PUT denied at nine public children and protected paths; PATCH/DELETE denied; synthetic fixture readable afterward. The literal owner bearer is solely an emulator fixture mechanism, not production authorization.
+- **5/5 static Rules source tests passed**, including exact 11 historical validators.
+- **6/6 private firmware preflight tests passed**, including credential-redaction behavior.
+- **Total 18/18 passing checks**, no test failures in the final exact-head run.
+
+Two earlier runs did fail: one due to default Java 17 (Firebase CLI requires 21), another due to a mistaken emulator-only seeding credential syntax. Both were corrected without changing Rules; the final exact-head run is green. Do not describe the earlier failures as successes.
+
+To reenact safely from an authorized checked-out copy with Node 22+ and Java 21:
+
+    GCLOUD_PROJECT=demo-floodguard-r3 npx --yes firebase-tools@15.34.2 emulators:exec --only database --project demo-floodguard-r3 --config r3-firebase-emulator.json "node --test tests/r3-firebase-emulator.test.mjs"
+
+The test hard-codes local 127.0.0.1:19001 and a demo project. Never redirect it to a production endpoint, use private datasets as fixtures, or equate an emulator-only owner bypass with a deployable credential.
+
+**Remaining blocking gates:** exact deployed Rules provenance/rollback; complete public-child descendants privacy inventory; authenticated revocable device ingestion; replay/monotonic clock validation; fresh physical sensor verification; fail-closed on-device safety and gate control. The owner-observed system.lastUpdate remains 2026-08-25T14:30:41.226Z. **Production NO_GO.** PR draft/unmerged, no Firebase production deployment and no hardware changes.
