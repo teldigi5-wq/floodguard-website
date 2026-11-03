@@ -1,0 +1,86 @@
+name: FloodGuard R3 H9 atomic incident CAS and crash recovery (NO DEPLOY)
+
+on:
+  push:
+    branches:
+      - security/r3-h9-atomic-incident-crash-lab-20261103
+  pull_request:
+    branches:
+      - security/r3-h8-independent-readback-reconciliation-20261103
+    paths:
+      - 'docs/firebase/r3-h9-atomic-incident-lab.rules.json'
+      - 'firebase.r3-h9-atomic-incident-lab.json'
+      - 'experiments/r3-h9-single-node-worker.mjs'
+      - 'tests/r3-h9-atomic-incident-crash-emulator.mjs'
+      - 'tests/r3-h9-atomic-incident-rules.test.mjs'
+      - 'docs/firebase/R3_H9_ATOMIC_INCIDENT_CRASH_20261103.md'
+      - '.github/workflows/r3-h9-atomic-incident.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  source-and-inherited:
+    name: H9 exact scope, H8/H7 witness, and three-signer security checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: H9 syntax and scoped synthetic security regressions
+        run: |
+          set -euo pipefail
+          node --check experiments/r3-h9-single-node-worker.mjs
+          node --check tests/r3-h9-atomic-incident-crash-emulator.mjs
+          node --test \
+            tests/r3-h9-atomic-incident-rules.test.mjs \
+            tests/r3-h8-verified-readback-observer.test.mjs \
+            tests/r3-h8-readback-observer-rules.test.mjs \
+            tests/r3-h7-external-witness.test.mjs \
+            tests/r3-h6-mandatory-publication-rules.test.mjs \
+            tests/r3-h5-scoped-issuer-rules.test.mjs \
+            tests/r3-h4-signed-admission-issuer.test.mjs \
+            tests/three-signer-water-projection-gate.test.mjs
+
+  atomic-emulator:
+    name: Actual H9 CAS, incident revocation, deterministic worker kill and H7/H8 recovery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CI: 'true'
+      GCLOUD_PROJECT: demo-r3-h9-atomic
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install disposable test libraries (no lifecycle hooks)
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npm install --no-save --package-lock=false --ignore-scripts firebase-admin@14.5.0
+      - name: Fail on unexpected project, network host, or source
+        run: |
+          set -euo pipefail
+          test "$GCLOUD_PROJECT" = 'demo-r3-h9-atomic'
+          node --check tests/r3-h9-atomic-incident-crash-emulator.mjs
+          node -e "const c=require('./firebase.r3-h9-atomic-incident-lab.json');if(c.database.rules!=='docs/firebase/r3-h9-atomic-incident-lab.rules.json'||c.emulators.database.host!=='127.0.0.1'||c.emulators.database.port!==9000||c.emulators.auth.host!=='127.0.0.1'||c.emulators.auth.port!==9099||c.emulators.singleProjectMode!==true)process.exit(1)"
+      - name: Run deterministic pre/post-commit fault injection with real Auth+RTDB Emulators
+        run: |
+          set -euo pipefail
+          npx --yes firebase-tools@14.18.0 emulators:exec \
+            --only auth,database \
+            --project demo-r3-h9-atomic \
+            --config firebase.r3-h9-atomic-incident-lab.json \
+            "GCLOUD_PROJECT=demo-r3-h9-atomic node --test tests/r3-h9-atomic-incident-crash-emulator.mjs"
