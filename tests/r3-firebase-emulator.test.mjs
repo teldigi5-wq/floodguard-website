@@ -33,7 +33,6 @@ function emulatorURL(path, privileged = false) {
   const normalized = path.replace(/^\/+|\/+$/g, '');
   const url = new URL(BASE + '/' + (normalized ? normalized + '.json' : '.json'));
   url.searchParams.set('ns', NAMESPACE);
-  if (privileged) url.searchParams.set('auth', 'owner'); // Emulator-only bypass.
   return url;
 }
 async function status(method, path, payload, privileged = false) {
@@ -41,10 +40,11 @@ async function status(method, path, payload, privileged = false) {
     method,
     redirect: 'error',
     signal: AbortSignal.timeout(8000),
-    ...(payload === undefined ? {} : {
-      headers: {'content-type': 'application/json'},
-      body: JSON.stringify(payload),
-    }),
+    headers: {
+      ...(privileged ? {authorization: 'Bearer owner'} : {}), // Emulator-only.
+      ...(payload === undefined ? {} : {'content-type': 'application/json'}),
+    },
+    ...(payload === undefined ? {} : {body: JSON.stringify(payload)}),
   });
   await response.arrayBuffer(); // Never print response bodies in CI logs.
   return response.status;
