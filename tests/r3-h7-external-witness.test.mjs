@@ -295,8 +295,10 @@ test('independent anchor advanced but ledger missing cannot be treated as a new 
     x.bootstrap();
     fs.unlinkSync(path.join(x.dir,'r3-h7-synthetic-witness.json'));
     assert.throws(()=>x.witness.snapshot(),/rollback or missing local state/);
+    // A lost journal plus an advanced external anchor is a hard failure;
+    // even a new signed bootstrap cannot silently replace the missing state.
     const op=x.incident('BOOTSTRAP',{revision:2,epoch:1});
-    assert.equal(x.witness.operator(op.event,op.signature).ok,false);
+    assert.throws(()=>x.witness.operator(op.event,op.signature),/rollback or missing local state/);
   }finally{x.cleanup();}
 });
 test('rotated MAC key or equal operator/confirmation key fails closed',()=>{
