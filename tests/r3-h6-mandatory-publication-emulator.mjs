@@ -467,6 +467,20 @@ test('H8 failure to read Firebase must leave witness pending and cannot sign',as
     assert.ok(x.witness.snapshot().pending);
   }finally{x.cleanup();}
 });
+test('H8 signed readback cannot clear witness after quarantine occurs before acknowledgement',async()=>{
+  const e=evidence(),x=h8Context(e);
+  try{
+    await x.reserve();
+    assert.equal((await ipc({type:'commit',evidence:e})).ok,true);
+    const proof=await x.inspect();
+    assert.equal(proof.attested,true);
+    assert.equal(x.incident('QUARANTINE').ok,true);
+    assert.equal(x.witness.acknowledge(proof.acknowledgement,proof.signature).ok,false);
+    assert.equal(x.witness.snapshot().quarantined,true);
+    assert.equal(x.witness.snapshot().sequence,1);
+    assert.ok(x.witness.snapshot().pending);
+  }finally{x.cleanup();}
+});
 test('H8 observer can independently reconcile committed record when H6 worker is later unavailable',async()=>{
   // This models a lost worker acknowledgement AFTER commit; it does NOT
   // force a deterministic crash between the PUT and its HTTP response.
