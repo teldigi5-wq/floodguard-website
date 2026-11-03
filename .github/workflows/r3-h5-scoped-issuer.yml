@@ -1,0 +1,77 @@
+name: FloodGuard R3 H5 scoped signed admission issuer (NO DEPLOY)
+
+on:
+  push:
+    branches:
+      - security/r3-h5-scoped-issuer-worker-20261103
+  pull_request:
+    branches:
+      - security/r3-h4-signed-admission-issuer-20261103
+    paths:
+      - 'docs/firebase/r3-h5-scoped-issuer-lab.rules.json'
+      - 'firebase.r3-h5-scoped-issuer-lab.json'
+      - 'experiments/r3-h5-scoped-issuer-worker.mjs'
+      - 'tests/r3-h5-scoped-issuer-worker-emulator.mjs'
+      - 'tests/r3-h5-scoped-issuer-rules.test.mjs'
+      - '.github/workflows/r3-h5-scoped-issuer.yml'
+      - 'docs/firebase/R3_H5_SCOPED_ISSUER_20261103.md'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-scope:
+    name: H5 scope, previous H4 crypto, and no live write gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Run static security gates and prior three-signer regression
+        run: |
+          set -euo pipefail
+          node --check experiments/r3-h5-scoped-issuer-worker.mjs
+          node --check tests/r3-h5-scoped-issuer-worker-emulator.mjs
+          node --test tests/r3-h5-scoped-issuer-rules.test.mjs \
+            tests/r3-h4-signed-admission-issuer.test.mjs \
+            tests/three-signer-water-projection-gate.test.mjs
+
+  auth-rtdb:
+    name: Scoped worker and expected stolen-token negative (DEMO EMULATORS ONLY)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CI: 'true'
+      GCLOUD_PROJECT: demo-r3-h5-issuer
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install disposable test dependencies with no lifecycle scripts
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npm install --no-save --package-lock=false --ignore-scripts firebase-admin@14.5.0
+      - name: Verify emulator and demo project are fixed
+        run: |
+          set -euo pipefail
+          test "$GCLOUD_PROJECT" = "demo-r3-h5-issuer"
+          node --check tests/r3-h5-scoped-issuer-worker-emulator.mjs
+          node -e "const c=require('./firebase.r3-h5-scoped-issuer-lab.json');if(c.database.rules!=='docs/firebase/r3-h5-scoped-issuer-lab.rules.json'||c.emulators.database.host!=='127.0.0.1'||c.emulators.database.port!==9000||c.emulators.auth.host!=='127.0.0.1'||c.emulators.auth.port!==9099||c.emulators.singleProjectMode!==true)process.exit(1)"
+      - name: Run real localhost Auth+RTDB Emulator authorization checks
+        run: |
+          set -euo pipefail
+          npx --yes firebase-tools@14.18.0 emulators:exec \
+            --only auth,database \
+            --project demo-r3-h5-issuer \
+            --config firebase.r3-h5-scoped-issuer-lab.json \
+            "GCLOUD_PROJECT=demo-r3-h5-issuer node --test tests/r3-h5-scoped-issuer-worker-emulator.mjs"
