@@ -127,9 +127,10 @@ function ipc(message,timeoutMs=9000){
 before(async()=>{
   admin=initializeApp({projectId:PROJECT},'h6-synthetic-operator-only');
   const auth=getAuth(admin);
-  for(const role of ['publisher','issuer','ordinary']){
+  for(const role of ['publisher','issuer','ordinary','observer']){
     const uid=role==='publisher'?'publisher-water-stage':
-      role==='issuer'?'admission-issuer-stage':'ordinary-stage';
+      role==='issuer'?'admission-issuer-stage':
+      role==='observer'?'readback-observer-stage':'ordinary-stage';
     const password=randomBytes(28).toString('base64url');
     const email=uid+'@floodguard-lab.invalid';
     await auth.createUser({uid,email,password});
@@ -138,6 +139,9 @@ before(async()=>{
     if(role==='issuer')
       await auth.setCustomUserClaims(uid,{
         fg_issue_admission_v1:true,fg_issuer_generation:1});
+    if(role==='observer')
+      await auth.setCustomUserClaims(uid,{
+        fg_readback_v1:true,fg_readback_generation:1});
     const res=await fetch(AUTH+
       '/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-only',{
         method:'POST',headers:{'content-type':'application/json'},
@@ -193,6 +197,11 @@ beforeEach(async()=>{
     admissionIssuerAuthorization:{
       'admission-issuer-stage':{enabled:true,generation:1,revision:1,
         scope:'lab-signed-admission-v1'}
+    },
+    publicationObserverAuthorization:{
+      'readback-observer-stage':{
+        enabled:true,generation:1,scope:'publication-readback-v1'
+      }
     },
     publisherLabAuthorization:{
       'publisher-water-stage':{enabled:true,deviceId:ID,epoch:1,
@@ -361,7 +370,7 @@ function h8Context(signed,readOverride){
   let reservation=null;
   const candidate=project(signed);
   const readPublication=readOverride??(async()=>{
-    const response=await req(WATER,null);
+    const response=await req(WATER,'observer');
     if(response.status!==200)throw Error('Emulator publication unavailable');
     return response.value;
   });
@@ -380,6 +389,28 @@ function h8Context(signed,readOverride){
     cleanup:()=>fs.rmSync(directory,{recursive:true,force:true})
   };
 }
+test('H8 observer role reads only complete publication snapshot, never gates, private metadata or writes',async()=>{
+  assert.equal((await req(WATER,'observer')).status,200);
+  assert.equal((await req(WATER,null)).status,401);
+  assert.equal((await req(WATER+'/checkpoint',null)).status,401);
+  for(const path of [
+    ROOT,ROOT+'/live/esp8266/ip',ROOT+'/live/gate',
+    ROOT+'/incidentQuarantine/'+ID,
+    ROOT+'/publicationObserverAuthorization/readback-observer-stage'
+  ])await denied(req(path,'observer'));
+  for(const path of [
+    WATER,WATER+'/checkpoint',ROOT+'/live/gate',
+    ROOT+'/publicationObserverAuthorization/readback-observer-stage'
+  ])await denied(req(path,'observer','PUT',{}));
+  await seed(ROOT+'/publicationObserverAuthorization/readback-observer-stage/generation',2);
+  await denied(req(WATER,'observer'));
+});
+test('H8 missing or disabled observer authorization fails closed with existing ID token',async()=>{
+  await seed(ROOT+'/publicationObserverAuthorization/readback-observer-stage/enabled',false);
+  await denied(req(WATER,'observer'));
+  await seed(ROOT+'/publicationObserverAuthorization/readback-observer-stage',null);
+  await denied(req(WATER,'observer'));
+});
 test('H8 actual RTDB readback after signed H6 commit authorizes H7 witness acknowledgement once',async()=>{
   const e=evidence(),x=h8Context(e);
   try{
@@ -440,7 +471,7 @@ test('H8 witness state change DURING readback prevents post-read acknowledgement
   const e=evidence();
   let instance;
   const x=h8Context(e,async()=>{
-    const row=await req(WATER,null);
+    const row=await req(WATER,'observer');
     if(row.status!==200)throw Error('Emulator unavailable');
     assert.equal(instance.incident('QUARANTINE').ok,true);
     return row.value;
