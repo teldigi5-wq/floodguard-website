@@ -4,24 +4,34 @@ import { AlertTriangle, Cpu, Database, Gauge, Radio, ShieldCheck } from "lucide-
 import { useLive } from "@/hooks/use-live";
 import { PageHero, StatePanel } from "@/components/page-kit";
 import { ageLabel, fmt, label, lastSeenLabel } from "@/components/ui";
+import { describeRiskObservation,describeWaterObservation } from "@/lib/dashboard-water-observation.mjs";
+import { describeGateObservation } from "@/lib/gate-observation-view.mjs";
+import { reconcileDisplayedAlarmState } from "@/lib/telemetry-safety.mjs";
 
 export default function Diagnostics() {
   const { data, freshness, age, lastUpdateMs, databaseConnected, error } = useLive();
+  const riskView=describeRiskObservation({reportedRisk:data?.system?.overallRisk,freshness});
+  const waterView=describeWaterObservation({water:data?.water,freshness});
+  const gateView=describeGateObservation({gate:data?.gate,freshness});
+  const alarmState=reconcileDisplayedAlarmState({active:data?.alarm?.active,freshness});
+  const alarmDisplay=alarmState==="CLEAR"?"REPORTED OFF · UNVERIFIED":alarmState==="ACTIVE"?"REPORTED ACTIVE · UNVERIFIED":alarmState==="LAST ACTIVE"?"LAST REPORTED ACTIVE · NOT CURRENT":"UNAVAILABLE";
+  const espStatus=label(data?.esp8266?.status??data?.esp8266?.connection);
+  const espDisplay=freshness==="live"?"REPORTED "+espStatus+" · UNVERIFIED":"LAST RECORDED "+espStatus+" · NOT CURRENT";
   const groups = [
-    { title:"Water level", path:"water", available:data?.water !== undefined,
-      value:fmt(data?.water?.levelCm, "cm") },
+    { title:"Water observation", path:"water", available:data?.water !== undefined,
+      value:waterView.reportStatusLabel+" · "+(freshness==="live"?fmt(waterView.currentLevel,"cm"):"NOT CURRENT") },
     { title:"Collector rainfall", path:"rain", available:data?.rain !== undefined,
-      value:fmt(data?.rain?.currentMm, "mm") },
-    { title:"Gate state", path:"gate", available:data?.gate !== undefined,
-      value:label(data?.gate?.status) },
+      value:freshness==="live"?"REPORTED "+fmt(data?.rain?.currentMm,"mm")+" · UNVERIFIED":"LAST RECORDED · NOT CURRENT" },
+    { title:"Gate observation", path:"gate", available:data?.gate !== undefined,
+      value:gateView.displayLabel },
     { title:"Alarm report", path:"alarm", available:data?.alarm !== undefined,
-      value:data?.alarm?.active === true?"Reported active":data?.alarm?.active === false?"Reported clear":"Unavailable" },
+      value:alarmDisplay },
     { title:"Devices", path:"devices", available:data?.devices !== undefined,
       value:data?.devices?"Status records present":"Unavailable" },
     { title:"Controller update", path:"system", available:data?.system !== undefined,
       value:lastSeenLabel(lastUpdateMs) },
     { title:"ESP8266 telemetry", path:"esp8266/{connection,rssi,status}", available:data?.esp8266 !== undefined,
-      value:label(data?.esp8266?.status??data?.esp8266?.connection) },
+      value:espDisplay },
   ];
   const streamCount=groups.filter(group=>group.available).length;
 
@@ -60,9 +70,9 @@ export default function Diagnostics() {
         </header>
         <div className="diag-lead">
           <article className="diag-panel"><Cpu aria-hidden="true"/><small>Reported risk</small>
-            <strong>{label(data?.system?.overallRisk)}</strong><p>Historical classification when field data is stale.</p></article>
+            <strong>{riskView.currentPhysicalRisk}</strong><p>{riskView.reportedRiskLabel}. No LOW or SAFE all-clear is authenticated.</p></article>
           <article className="diag-panel"><ShieldCheck aria-hidden="true"/><small>Reported gate</small>
-            <strong>{label(data?.gate?.status)}</strong><p>Last recorded actuator position; not remote-control access.</p></article>
+            <strong>{gateView.displayLabel}</strong><p>Unsigned controller report; physical movement is not verified.</p></article>
           <article className="diag-panel"><AlertTriangle aria-hidden="true"/><small>Subscription status</small>
             <strong>{error?"Read warning":"No reported read error"}</strong><p>{error??"Absence of a read error is not proof of working field hardware."}</p></article>
         </div>
@@ -75,7 +85,7 @@ export default function Diagnostics() {
         <div className="diag-streams">
           {groups.map(group=><article className="diag-stream" key={group.title}>
             <b>{group.title}</b>
-            <span>{group.available?"Last report available":"No usable report"}</span>
+            <span>{group.available?"Retained database report · source unverified":"No usable report"}</span>
             <strong>{group.value}</strong>
             <code>floodguard/live/{group.path}</code>
           </article>)}
