@@ -127,6 +127,21 @@ test('CLI reads only a distinct, bounded, regular private file and redacts outpu
   assert.equal(linked.status,2,'a symlink to the repo file is forbidden');
   assert.equal(JSON.parse(linked.stdout).repoCandidateMatchesExport,false);
 }));
+test('a hard link to the repository candidate is not separate operator evidence',()=>tmp(dir=>{
+  // Keep both fixture files on the same filesystem to exercise inode aliasing
+  // without writing to the repository or assuming /tmp shares its mount.
+  const candidate=path.join(dir,'local-repo-candidate.json');
+  const hardlink=path.join(dir,'fake-operator-export.json');
+  fs.writeFileSync(candidate,JSON.stringify(source));
+  fs.linkSync(candidate,hardlink);
+  assert.notEqual(fs.realpathSync(candidate),fs.realpathSync(hardlink));
+  assert.equal(fs.statSync(candidate).ino,fs.statSync(hardlink).ino);
+  assert.equal(fs.statSync(hardlink).nlink,2);
+  const r=inspectExportFromFile(hardlink,{candidateFile:candidate,manifestFile});
+  assert.equal(r.reason,'OPERATOR_EXPORT_UNAVAILABLE_OR_MALFORMED');
+  assert.equal(r.repoCandidateMatchesExport,false);
+  noGo(r);
+}));
 test('CLI without export fails closed without opening a cloud connection',()=>{
   const proc=spawnSync(process.execPath,[
     path.join(root,'scripts/r3-effective-rules-export-review.mjs')

@@ -47,12 +47,15 @@ function readPrivateFile(fileName){
   try{
     // Refuse symbolic links; never read files from implicit default paths.
     const info=fs.lstatSync(fileName);
-    if(!info.isFile()||info.size<2||info.size>MAX_EXPORT_BYTES)
+    // A hard link to firebase.rules.json has another pathname but the same
+    // inode. Treat any multiply-linked file as untrusted export evidence.
+    if(!info.isFile()||info.nlink!==1||
+       info.size<2||info.size>MAX_EXPORT_BYTES)
       throw Error('invalid-file');
     fd=fs.openSync(fileName,constants.O_RDONLY|
       (constants.O_NOFOLLOW||0));
     const current=fs.fstatSync(fd);
-    if(!current.isFile()||current.size<2||
+    if(!current.isFile()||current.nlink!==1||current.size<2||
        current.size>MAX_EXPORT_BYTES||
        current.dev!==info.dev||current.ino!==info.ino)
       throw Error('changed-file');

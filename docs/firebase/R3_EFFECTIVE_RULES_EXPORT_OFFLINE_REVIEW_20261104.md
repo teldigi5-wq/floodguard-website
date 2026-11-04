@@ -24,7 +24,7 @@ The Firebase documentation also describes authenticated read-only retrieval via 
 
 ## What the offline test exercises
 
-- Bounded input (maximum 128 KiB); regular file only, symbolic links refused.
+- Bounded input (maximum 128 KiB); regular, single-link file only; symbolic links and hard links refused as operator-export evidence.
 - Exact structural comparison to the checked-in Rules candidate; a false parent read, broader private reads, hidden descendant write or missing approved nine child reads is rejected by the inherited source review.
 - Rejects supplying the repository candidate itself as evidence of deployed state, malformed JSON, unauthorized extra fields, and Rules drift.
 - Output contains only fixed status codes and booleans: never prints input paths, Rules contents, Firebase origin, access tokens, node IDs, hostnames or parse errors.
