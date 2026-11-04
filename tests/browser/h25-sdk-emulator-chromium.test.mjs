@@ -174,3 +174,64 @@ test('real SDK active alarm remains unsigned; stale active alarm becomes histori
     assert.match(await banner.innerText(),/notification delivery unverified/);
   }finally{await finish(c);}
 });
+
+
+test('H26: real SDK refuses ESP ONLINE when optional inventory reports installed=false',async()=>{
+  const sample=fixture();
+  sample.devices.esp8266={installed:false,status:'ONLINE'};
+  await adminPut('floodguard/live',sample);
+  const c=await visit('/devices/');
+  try{
+    await settled(c.page,'.status-dock','Recent DB record');
+    await settled(c.page,'.network dl','UNKNOWN · SOURCE UNVERIFIED');
+    assert.doesNotMatch(await c.page.locator('.network dl').innerText(),
+      /REPORTED ONLINE|-62 dBm/);
+
+    // Reinstalling a device without independently reported connectivity
+    // cannot establish ONLINE just because installed:true is present.
+    await adminPut('floodguard/live/devices/esp8266',{installed:true});
+    await settled(c.page,'.network dl','UNKNOWN · SOURCE UNVERIFIED');
+    assert.doesNotMatch(await c.page.locator('.network dl').innerText(),/-62 dBm/);
+
+    // Agreement among the two ESP children AND explicit inventory status
+    // permits a reported, unsigned ONLINE state and its signal again.
+    await adminPut('floodguard/live/devices/esp8266',{installed:true,status:'ONLINE'});
+    await settled(c.page,'.network dl','REPORTED ONLINE · UNVERIFIED');
+    assert.match(await c.page.locator('.network dl').innerText(),/-62 dBm/);
+
+    // A later explicit uninstall vetoes the cached positive report.
+    await adminPut('floodguard/live/devices/esp8266',{installed:false,status:'ONLINE'});
+    await settled(c.page,'.network dl','UNKNOWN · SOURCE UNVERIFIED');
+    assert.doesNotMatch(await c.page.locator('.network dl').innerText(),
+      /REPORTED ONLINE|-62 dBm/);
+  }finally{await finish(c);}
+});
+
+test('H26: real SDK rain gauge installed=false vetoes NORMAL and numeric zero, then recovers',async()=>{
+  const sample=fixture();
+  sample.devices.rainGauge={installed:false,status:'ONLINE'};
+  await adminPut('floodguard/live',sample);
+  const c=await visit('/rainfall/');
+  try{
+    await settled(c.page,'.status-dock','Recent DB record');
+    await settled(c.page,'.rainfall-page','SENSOR UNAVAILABLE · MEASUREMENTS WITHHELD');
+    const metric=c.page.locator('.metric').filter({hasText:'Current rainfall report'}).first();
+    assert.doesNotMatch(await metric.innerText(),/0\.0 mm/i);
+    assert.match(await metric.innerText(),/Unavailable/i);
+
+    await adminPut('floodguard/live/devices/rainGauge',{installed:true});
+    await settled(c.page,'.rainfall-page','SENSOR UNAVAILABLE · MEASUREMENTS WITHHELD');
+    assert.doesNotMatch(await metric.innerText(),/0\.0 mm/i);
+
+    await adminPut('floodguard/live/devices/rainGauge',{installed:true,status:'ONLINE'});
+    await c.page.waitForFunction(()=>
+      [...document.querySelectorAll('.metric')].some(m=>
+        m.textContent?.includes('Current rainfall report') && m.textContent?.includes('0.0 mm')),
+      {timeout:15000});
+    assert.match(await metric.innerText(),/0\.0 mm/i);
+
+    await adminPut('floodguard/live/devices/rainGauge',{installed:false,status:'ONLINE'});
+    await settled(c.page,'.rainfall-page','SENSOR UNAVAILABLE · MEASUREMENTS WITHHELD');
+    assert.doesNotMatch(await metric.innerText(),/0\.0 mm/i);
+  }finally{await finish(c);}
+});
