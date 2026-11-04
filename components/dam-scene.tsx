@@ -125,15 +125,14 @@ export default function DamScene({angle=null,rain=0,waterDistance=null}:{angle?:
    if(typeof window.matchMedia!=="function")return;
    const query=window.matchMedia("(prefers-reduced-motion: reduce)");
    const onChange=(event:MediaQueryListEvent)=>setReducedMotion(event.matches);
-   setReducedMotion(query.matches);
    query.addEventListener("change",onChange);
    return()=>query.removeEventListener("change",onChange);
  },[]);
  useEffect(()=>{
-   if(!availability.render3D){setAnimate(false);return;}
+   if(!availability.render3D)return;
    const node=host.current;
    if(!node)return;
-   if(typeof IntersectionObserver==="undefined"){setAnimate(true);return;}
+   if(typeof IntersectionObserver==="undefined")return;
    const observer=new IntersectionObserver(([entry])=>setAnimate(entry.isIntersecting),{rootMargin:"140px"});
    observer.observe(node);
    return()=>observer.disconnect();
