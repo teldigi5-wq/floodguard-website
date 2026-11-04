@@ -1,0 +1,89 @@
+name: FloodGuard H23 offline real Chromium acceptance (NO DEPLOY)
+
+on:
+  push:
+    branches:
+      - test/r3-h23-offline-chromium-acceptance-20261104
+  pull_request:
+    branches:
+      - safety/r3-h22-global-shell-provenance-20261104
+
+permissions:
+  contents: read
+
+jobs:
+  offline-source-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    steps:
+      - name: Checkout with no persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up supported Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Install locked dependencies without scripts
+        run: npm ci --ignore-scripts
+      - name: All inherited offline safety checks
+        run: npm test
+      - name: TypeScript
+        run: npm run typecheck
+      - name: ESLint
+        run: npm run lint
+      - name: Non-deploy static export
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build
+
+  chromium-unavailable-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout with no persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked production build dependencies without scripts
+        run: npm ci --ignore-scripts
+      - name: Export preview-free static website without Firebase credentials
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+          NEXT_PUBLIC_FIREBASE_DATABASE_URL: ''
+        run: npm run build
+      - name: Install disposable exact-version Playwright library
+        run: npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.64.1
+      - name: Install disposable Chromium and Linux dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Start loopback-only static server and check readiness
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory out > /tmp/fg-h23-http.log 2>&1 &
+          echo "$!" > /tmp/fg-h23-http.pid
+          for i in {1..30}; do
+            if curl --silent --show-error --fail http://127.0.0.1:4173/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/fg-h23-http.log
+          exit 1
+      - name: Execute actual browser navigation, safety and reduced-motion checks
+        run: node --test tests/browser/h23-readonly-chromium.test.mjs
+      - name: Stop loopback server
+        if: always()
+        run: |
+          if test -f /tmp/fg-h23-http.pid; then
+            kill "$(cat /tmp/fg-h23-http.pid)" || true
+          fi
