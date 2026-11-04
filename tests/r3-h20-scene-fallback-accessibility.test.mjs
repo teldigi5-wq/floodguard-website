@@ -53,6 +53,19 @@ test('reduced-motion preference disables Canvas even with present inputs',()=>{
   assert.match(x.gateLabel,/REPORTED 45° · UNVERIFIED/);
   assert.match(x.waterLabel,/UNVERIFIED/);
 });
+test('reduced-motion explanation remains accessible when gate and water are missing',()=>{
+  for(const input of [
+    {reducedMotion:true},
+    {angle:null,waterDistance:null,reducedMotion:true},
+    {angle:90,waterDistance:null,reducedMotion:true},
+    {angle:null,waterDistance:23,reducedMotion:true}
+  ]) {
+    const x=describeSceneAvailability(input);
+    denied(x);
+    assert.equal(x.mode,'reduced-motion');
+    assert.equal(x.render3D,false);
+  }
+});
 test('actual scene has no raw Firebase input fallback and no 3D for unknown state',()=>{
   const scene=readFileSync('components/dam-scene.tsx','utf8');
   const home=readFileSync('app/page.tsx','utf8');
