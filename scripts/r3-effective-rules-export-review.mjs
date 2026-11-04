@@ -132,7 +132,11 @@ function readPrivateFile(fileName){
     if(fd!==undefined)fs.closeSync(fd);
   }
 }
-export function inspectExportFromFile(fileName,{candidateFile,manifestFile}={}){
+// Optional privateEvidenceDirectory permits in-memory/test clients to supply
+// a disposable fixture root. The actual CLI always pins this to the repository
+// root's Git-ignored .floodguard-private-evidence directory.
+export function inspectExportFromFile(fileName,{candidateFile,manifestFile,
+  privateEvidenceDirectory}={}){
   try{
     if(typeof fileName!=='string'||!fileName.trim()||
        typeof candidateFile!=='string'||typeof manifestFile!=='string')
@@ -140,6 +144,16 @@ export function inspectExportFromFile(fileName,{candidateFile,manifestFile}={}){
     const candidatePath=fs.realpathSync(candidateFile);
     const inputPath=fs.realpathSync(fileName);
     if(inputPath===candidatePath) return safeResult('REPO_CANDIDATE_IS_NOT_OPERATOR_EXPORT');
+    if(privateEvidenceDirectory!==undefined){
+      // Canonical paths reject ../ escapes and symlinked ancestors. Enforce
+      // an actual, non-symlinked private directory and a DIRECT child file;
+      // nested, tracked, temp, or arbitrarily symlinked external locations
+      // are not acceptable operator evidence for the CLI.
+      const privateInfo=fs.lstatSync(privateEvidenceDirectory);
+      if(!privateInfo.isDirectory()||privateInfo.isSymbolicLink()||
+         path.dirname(inputPath)!==fs.realpathSync(privateEvidenceDirectory))
+        return safeResult('OPERATOR_EXPORT_OUTSIDE_PRIVATE_DIRECTORY');
+    }
     const operatorExport=readPrivateFile(fileName);
     const candidate=JSON.parse(fs.readFileSync(candidateFile,'utf8'));
     const manifest=JSON.parse(fs.readFileSync(manifestFile,'utf8'));
@@ -151,7 +165,8 @@ if(calledFrom){
   const result=process.argv.length===3?
     inspectExportFromFile(process.argv[2],{
       candidateFile:'firebase.rules.json',
-      manifestFile:'docs/firebase/R3_REAL_AUTHORITY_PREFLIGHT_20261102.json'
+      manifestFile:'docs/firebase/R3_REAL_AUTHORITY_PREFLIGHT_20261102.json',
+      privateEvidenceDirectory:'.floodguard-private-evidence'
     }):safeResult('OPERATOR_EXPORT_INPUT_MISSING');
   // Only finite, fixed codes and booleans: never echo input data, paths,
   // tokens, Rules expressions, private network fields or parse errors.

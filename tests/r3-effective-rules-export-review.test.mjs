@@ -31,9 +31,23 @@ const tmp=fn=>{
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),'fg-effective-rules-'));
   try{return fn(directory)}finally{fs.rmSync(directory,{recursive:true,force:true});}
 };
-const run=file=>spawnSync(process.execPath,[
+const run=(file,{cwd=root}={})=>spawnSync(process.execPath,[
   path.join(root,'scripts/r3-effective-rules-export-review.mjs'),file
-],{cwd:root,encoding:'utf8',timeout:3000,maxBuffer:65536});
+],{cwd,encoding:'utf8',timeout:3000,maxBuffer:65536});
+
+// An isolated synthetic checkout tests the *real CLI* without writing a
+// secret or even a synthetic export into the source repository. The production
+// CLI's evidence root stays fixed, never configured from untrusted arguments.
+const cliFixture=dir=>{
+  const cwd=path.join(dir,'synthetic-checkout');
+  const evidence=path.join(cwd,'.floodguard-private-evidence');
+  fs.mkdirSync(evidence,{recursive:true,mode:0o700});
+  fs.mkdirSync(path.join(cwd,'docs/firebase'),{recursive:true});
+  fs.writeFileSync(path.join(cwd,'firebase.rules.json'),JSON.stringify(source));
+  fs.writeFileSync(path.join(cwd,'docs/firebase/R3_REAL_AUTHORITY_PREFLIGHT_20261102.json'),
+    JSON.stringify(manifest));
+  return {cwd,evidence};
+};
 
 test('matching synthetic local Rules is an UNATTESTED snapshot, never release authority',()=>{
   const r=assessOperatorRulesExport(copy(source),source,manifest);
@@ -99,12 +113,13 @@ test('CLI refuses the repository candidate itself as a false operator export',()
   assert.equal(JSON.parse(p.stdout).repoCandidateMatchesExport,false);
 });
 test('CLI reads only a distinct, bounded, regular private file and redacts output',()=>tmp(dir=>{
-  const location=path.join(dir,'rules-export.json');
+  const {cwd,evidence}=cliFixture(dir);
+  const location=path.join(evidence,'rules-export.json');
   fs.writeFileSync(location,JSON.stringify(source));
   const r=inspectExportFromFile(location,options);
   assert.equal(r.repoCandidateMatchesExport,true);
   noGo(r);
-  const p=run(location);
+  const p=run(location,{cwd});
   assert.equal(p.status,0,p.stderr);
   assert.equal(p.stderr,'');
   const result=JSON.parse(p.stdout);
@@ -113,17 +128,17 @@ test('CLI reads only a distinct, bounded, regular private file and redacts outpu
   assert.doesNotMatch(p.stdout, /floodguard\/live|rules-export|private|access_token|\.read/);
 
   fs.writeFileSync(location,'{invalid-json "auth=DO_NOT_LEAK"');
-  const invalid=run(location);
+  const invalid=run(location,{cwd});
   assert.equal(invalid.status,2);
   assert.doesNotMatch(invalid.stdout,/DO_NOT_LEAK/);
   fs.writeFileSync(location,'X'.repeat(128*1024+1));
-  const huge=run(location);
+  const huge=run(location,{cwd});
   assert.equal(huge.status,2);
   assert.equal(JSON.parse(huge.stdout).repoCandidateMatchesExport,false);
 
-  const link=path.join(dir,'link.json');
+  const link=path.join(evidence,'link.json');
   fs.symlinkSync(candidateFile,link);
-  const linked=run(link);
+  const linked=run(link,{cwd});
   assert.equal(linked.status,2,'a symlink to the repo file is forbidden');
   assert.equal(JSON.parse(linked.stdout).repoCandidateMatchesExport,false);
 }));
@@ -207,6 +222,86 @@ test('H29 permits repeated property names in independent JSON object scopes',()=
   assert.equal(r.repoCandidateMatchesExport,true);
   assert.equal(r.reason,'MATCHES_REPO_CANDIDATE_BUT_CLOUD_PROVENANCE_UNVERIFIED');
   noGo(r);
+}));
+
+
+test('H30 refuses Rules snapshots copied to a tracked checkout path or unrelated /tmp',()=>tmp(dir=>{
+  const {cwd,evidence}=cliFixture(dir);
+  const tracked=path.join(cwd,'operator-rules-export.json');
+  fs.writeFileSync(tracked,JSON.stringify(source));
+  const report=run(tracked,{cwd});
+  assert.equal(report.status,2);
+  assert.equal(report.stderr,'');
+  assert.equal(JSON.parse(report.stdout).reason,'OPERATOR_EXPORT_OUTSIDE_PRIVATE_DIRECTORY');
+  const checked=inspectExportFromFile(tracked,{...options,privateEvidenceDirectory:evidence});
+  assert.equal(checked.reason,'OPERATOR_EXPORT_OUTSIDE_PRIVATE_DIRECTORY');
+  noGo(checked);
+
+  const another=path.join(dir,'outside-snapshot.json');
+  fs.writeFileSync(another,JSON.stringify(source));
+  const denied=run(another,{cwd});
+  assert.equal(denied.status,2);
+  assert.equal(JSON.parse(denied.stdout).operatorExportProvided,false);
+  assert.doesNotMatch(denied.stdout,/operator-rules-export|outside-snapshot|\.read|floodguard\/live/);
+}));
+
+test('H30 accepts only a directly contained private child, never a nested or ../ escaped file',()=>tmp(dir=>{
+  const {cwd,evidence}=cliFixture(dir);
+  const nested=path.join(evidence,'sub');
+  fs.mkdirSync(nested);
+  const nestedFile=path.join(nested,'snapshot.json');
+  fs.writeFileSync(nestedFile,JSON.stringify(source));
+  const denied=run(nestedFile,{cwd});
+  assert.equal(denied.status,2);
+  assert.equal(JSON.parse(denied.stdout).reason,'OPERATOR_EXPORT_OUTSIDE_PRIVATE_DIRECTORY');
+
+  const valid=path.join(evidence,'operator-snapshot.json');
+  fs.writeFileSync(valid,JSON.stringify(source));
+  const ok=run(valid,{cwd});
+  assert.equal(ok.status,0,ok.stderr);
+  const outcome=JSON.parse(ok.stdout);
+  assert.equal(outcome.repoCandidateMatchesExport,true);
+  assert.equal(outcome.effectiveFirebaseRulesVerified,false);
+  assert.equal(outcome.releaseDecision,'NO_GO');
+  assert.equal(outcome.mayDeploy,false);
+  assert.equal(outcome.maySendAlert,false);
+}));
+
+test('H30 rejects symlinked private evidence root and symlinked evidence files',()=>tmp(dir=>{
+  const {cwd,evidence}=cliFixture(dir);
+  const alternate=path.join(cwd,'untrusted-alias');
+  fs.renameSync(evidence,alternate);
+  fs.symlinkSync(alternate,evidence,'dir');
+  const fromAlias=path.join(evidence,'operator.json');
+  fs.writeFileSync(path.join(alternate,'operator.json'),JSON.stringify(source));
+  const denied=run(fromAlias,{cwd});
+  assert.equal(denied.status,2);
+  assert.equal(JSON.parse(denied.stdout).reason,'OPERATOR_EXPORT_OUTSIDE_PRIVATE_DIRECTORY');
+  fs.unlinkSync(evidence);
+  fs.renameSync(alternate,evidence);
+
+  const outside=path.join(cwd,'outside.json');
+  fs.writeFileSync(outside,JSON.stringify(source));
+  const alias=path.join(evidence,'external-symlink.json');
+  fs.symlinkSync(outside,alias);
+  const deniedLink=run(alias,{cwd});
+  assert.equal(deniedLink.status,2);
+  assert.equal(deniedLink.stderr,'');
+  assert.equal(JSON.parse(deniedLink.stdout).repoCandidateMatchesExport,false);
+}));
+
+test('H30 original source candidate and private hardlinks still fail with fixed redacted NO-GO',()=>tmp(dir=>{
+  const {cwd,evidence}=cliFixture(dir);
+  const candidate=path.join(cwd,'firebase.rules.json');
+  const same=run(candidate,{cwd});
+  assert.equal(same.status,2);
+  assert.equal(JSON.parse(same.stdout).reason,'REPO_CANDIDATE_IS_NOT_OPERATOR_EXPORT');
+  const hard=path.join(evidence,'hardlink-to-candidate.json');
+  fs.linkSync(candidate,hard);
+  const denied=run(hard,{cwd});
+  assert.equal(denied.status,2);
+  assert.equal(JSON.parse(denied.stdout).repoCandidateMatchesExport,false);
+  assert.doesNotMatch(denied.stdout,/hardlink-to-candidate|firebase.rules.json|\.read/);
 }));
 
 test('CLI without export fails closed without opening a cloud connection',()=>{
