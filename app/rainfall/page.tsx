@@ -2,78 +2,67 @@
 
 import { CloudRain, Droplets, Gauge, Radio, Ruler, ShieldCheck } from "lucide-react";
 import { useLive } from "@/hooks/use-live";
-import { ageLabel, fmt, label } from "@/components/ui";
+import { ageLabel, fmt } from "@/components/ui";
 import { Metric, PageHero, StatePanel } from "@/components/page-kit";
+import { describePublicRainObservation } from "@/lib/public-health-observation.mjs";
 
 function categoryNote(status: string) {
   switch (status) {
-    case "HEAVY_RAIN": return "Heavy accumulated rainfall";
-    case "FLOOD_WARNING": return "Flood-warning rainfall range";
-    case "EXTREME": return "Extreme accumulated rainfall";
-    case "CRITICAL": return "Critical accumulated rainfall";
-    case "NORMAL": return "Rainfall remains in the normal range";
-    default: return "Waiting for a trustworthy rain measurement";
+    case "HEAVY_RAIN": return "Possible heavy accumulated rainfall · source unverified";
+    case "FLOOD_WARNING": return "Possible flood-warning rainfall · source unverified";
+    case "EXTREME": return "Possible extreme accumulated rainfall · source unverified";
+    case "CRITICAL": return "Possible critical accumulated rainfall · source unverified";
+    case "NORMAL": return "Reported normal category is not an all-clear";
+    default: return "Rain sensor health or measurements are unavailable; no all-clear";
   }
 }
 
 export default function Rainfall() {
   const { data, freshness, age } = useLive();
-  const rain = data?.rain;
-  const sensor = data?.devices?.rainGauge;
-  let deviceStatus: string | undefined;
-  if (typeof sensor === "string") deviceStatus = sensor;
-  else if (typeof sensor === "boolean") deviceStatus = sensor ? "ONLINE" : "OFFLINE";
-  else if (sensor) {
-    deviceStatus = sensor.status ?? sensor.state ??
-      (sensor.installed === false ? "NOT_INSTALLED" :
-        sensor.online === true ? "ONLINE" :
-        sensor.online === false ? "OFFLINE" : undefined);
-  }
-  const device = label(deviceStatus);
-  const category = label(rain?.status);
-  const installed = device === "ONLINE" || label(rain?.sensorStatus) === "ONLINE";
-  const limited = rain?.calibrationLimited === true;
+  const view = describePublicRainObservation({
+    rain:data?.rain,device:data?.devices?.rainGauge,freshness
+  });
 
   return (
     <main className="page rainfall-page">
       <PageHero
-        eyebrow="Field collector rain gauge"
+        eyebrow="Unsigned collector observation"
         title="Rainfall monitoring"
-        copy="Real rainfall is calculated from the physical collector water depth. Missing fields stay unavailable; FloodGuard does not invent load-cell weight or historical rain values."
+        copy="Reported rainfall comes from the prototype collector model. Unsigned Firebase numbers do not verify the installed sensor, physical calibration, actual rainfall, or flood safety. Missing or contradictory health fields withhold measurements."
       />
       <StatePanel />
 
       <section className="command-overview">
         <div className="overview-copy">
           <span className={"status-pulse " + freshness} />
-          <div><small>Rain-gauge sensor</small><b>{freshness==="live"&&installed?"Sensor reporting":installed?"Last reported ONLINE · current state unverified":"Sensor state unavailable"}</b></div>
+          <div><small>Rain-gauge sensor</small><b>{view.gaugeLabel}</b></div>
         </div>
         <dl>
-          <div><dt>Category</dt><dd>{category}</dd></div>
-          <div><dt>Field update</dt><dd>{ageLabel(age)}</dd></div>
-          <div><dt>Calibration</dt><dd>{!rain?"UNAVAILABLE":limited?"LIMITED":"REPORTED"}</dd></div>
+          <div><dt>Category</dt><dd>{view.categoryLabel}</dd></div>
+          <div><dt>Database update</dt><dd>{ageLabel(age)} · timestamp unverified</dd></div>
+          <div><dt>Calibration</dt><dd>{view.calibrationLabel}</dd></div>
         </dl>
       </section>
 
       <section className="metric-grid">
-        <Metric icon={<CloudRain />} title="Current rainfall" value={fmt(rain?.currentMm, "mm")} note={categoryNote(category)} />
-        <Metric icon={<Gauge />} title="Accumulated rainfall" value={fmt(rain?.dailyMm, "mm")} note="Real collector accumulation; no synthetic history" />
-        <Metric icon={<Ruler />} title="Collector water depth" value={fmt(rain?.waterDepthCm, "cm")} note="Measured from the direct A0 depth sensor" />
-        <Metric icon={<Radio />} title="Sensor ADC" value={fmt(rain?.rawValue, "", 0)} note="Raw Arduino A0 reading" />
-        <Metric icon={<ShieldCheck />} title="Rain gauge" value={device} note={label(rain?.sensorStatus)} />
-        <Metric icon={<Droplets />} title="Gauge weight" value={fmt(rain?.weightGrams, "g")} note="Unavailable by design — current gauge does not use HX711" />
+        <Metric icon={<CloudRain />} title="Current rainfall report" value={fmt(view.currentMm, "mm")} note={categoryNote(view.category)} />
+        <Metric icon={<Gauge />} title="Accumulated rainfall report" value={fmt(view.dailyMm, "mm")} note={view.categoryLabel+" · cannot establish a physical all-clear"} />
+        <Metric icon={<Ruler />} title="Collector water-depth report" value={fmt(view.waterDepthCm, "cm")} note="Unsigned A0 collector estimate · calibration unverified" />
+        <Metric icon={<Radio />} title="Reported sensor ADC" value={fmt(view.adcValue, "", 0)} note="Unsigned Arduino A0 report · not independently calibrated" />
+        <Metric icon={<ShieldCheck />} title="Rain gauge" value={view.gaugeLabel} note={view.sensorLabel} />
+        <Metric icon={<Droplets />} title="Gauge weight" value={fmt(view.gaugeWeightGrams, "g")} note="Unavailable by design — current prototype does not use HX711" />
       </section>
 
-      {limited && (
+      {view.calibrationLimited && (
         <section className="honesty">
-          <h2>Calibration limit reached</h2>
-          <p>The collector has reached the highest currently calibrated sensor range. FloodGuard keeps the last calibrated value instead of extrapolating a fake rainfall depth. Add more physical calibration points before trusting higher depths.</p>
+          <h2>Reported calibration limit reached</h2>
+          <p>The unsigned collector report indicates a calibration boundary. It is not independently verified; do not extrapolate a physical rainfall depth without reviewed hardware calibration evidence.</p>
         </section>
       )}
 
       <section className="honesty">
-        <h2>Measurement method</h2>
-        <p>The current prototype uses collector water depth rather than load-cell weight. Rainfall is derived from the real collector geometry and calibrated A0 sensor readings. Historical charts remain unavailable until timestamped history is actually stored.</p>
+        <h2>Prototype measurement method</h2>
+        <p>The proposed collector design estimates rainfall from water depth and an A0 reading rather than load-cell weight. These public reports are not field-authenticated, and historical charts remain unavailable without real timestamped measurements.</p>
       </section>
     </main>
   );
