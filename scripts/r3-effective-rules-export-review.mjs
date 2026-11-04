@@ -10,6 +10,71 @@ import {pathToFileURL} from 'node:url';
 import {assessAuthorityPreflight} from './r3-real-authority-preflight.mjs';
 
 const MAX_EXPORT_BYTES=128*1024;
+
+// JSON.parse silently retains the *last* duplicate property. For a privately
+// supplied Rules snapshot that is unacceptable: two different parsers could
+// interpret the same bytes differently. Scan every object scope before
+// allowing a "matching candidate" result. JSON.parse has already validated
+// the entire syntax; parseString reuses it to decode \u escapes in key names.
+// Never include duplicate keys, paths or source bytes in errors or output.
+function requireUniqueObjectKeys(raw){
+  let i=0;
+  const space=()=>{while(i<raw.length&&
+    (raw[i]===' '||raw[i]==='\t'||raw[i]==='\r'||raw[i]==='\n'))i++;};
+  function quoted(){
+    const begin=i++;
+    while(i<raw.length){
+      if(raw[i]==='\\'){i+=2;continue;}
+      if(raw[i]==='"'){
+        i++;
+        return JSON.parse(raw.slice(begin,i));
+      }
+      i++;
+    }
+    throw Error('invalid-json');
+  }
+  function value(){
+    space();
+    if(raw[i]==='{'){
+      i++;
+      space();
+      const keys=new Set();
+      if(raw[i]==='}'){i++;return;}
+      for(;;){
+        space();
+        if(raw[i]!=='"')throw Error('invalid-json');
+        const key=quoted();
+        if(keys.has(key))throw Error('duplicate-json-key');
+        keys.add(key);
+        space();
+        if(raw[i++]!==':')throw Error('invalid-json');
+        value();
+        space();
+        if(raw[i]==='}'){i++;return;}
+        if(raw[i++]!==',')throw Error('invalid-json');
+      }
+    }
+    if(raw[i]==='['){
+      i++;
+      space();
+      if(raw[i]===']'){i++;return;}
+      for(;;){
+        value();
+        space();
+        if(raw[i]===']'){i++;return;}
+        if(raw[i++]!==',')throw Error('invalid-json');
+      }
+    }
+    if(raw[i]==='"'){quoted();return;}
+    const begin=i;
+    while(i<raw.length&&![' ', '\t','\r','\n',',',']','}'].includes(raw[i]))i++;
+    if(i===begin)throw Error('invalid-json');
+  }
+  value();
+  space();
+  if(i!==raw.length)throw Error('invalid-json');
+}
+
 const deny=(reason,candidateMatches=false,reviewed=false)=>Object.freeze({
   reason,
   releaseDecision:'NO_GO',
@@ -59,7 +124,10 @@ function readPrivateFile(fileName){
        current.size>MAX_EXPORT_BYTES||
        current.dev!==info.dev||current.ino!==info.ino)
       throw Error('changed-file');
-    return JSON.parse(fs.readFileSync(fd,'utf8'));
+    const raw=fs.readFileSync(fd,'utf8');
+    const parsed=JSON.parse(raw);
+    requireUniqueObjectKeys(raw);
+    return parsed;
   }finally{
     if(fd!==undefined)fs.closeSync(fd);
   }
