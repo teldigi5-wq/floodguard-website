@@ -1,0 +1,53 @@
+name: FloodGuard H16 dashboard water source assurance (NO DEPLOY)
+
+on:
+  push:
+    branches:
+      - safety/r3-h16-dashboard-water-trust-20261104
+  pull_request:
+    branches:
+      - safety/r3-h15-gate-ui-observation-only-20261104
+    paths:
+      - 'app/dashboard/page.tsx'
+      - 'app/water/page.tsx'
+      - 'lib/dashboard-water-observation.mjs'
+      - 'tests/r3-h16-dashboard-water-assurance.test.mjs'
+      - '.github/workflows/r3-h16-dashboard-water.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  unsigned-source-interface:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout without retained Git credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Setup Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install pinned lockfile dependencies
+        run: npm ci
+      - name: Offline UI safety tests, including inherited H15 and shared policy tests
+        run: |
+          set -euo pipefail
+          node --check lib/dashboard-water-observation.mjs
+          node --check tests/r3-h16-dashboard-water-assurance.test.mjs
+          node --test \
+            tests/r3-h16-dashboard-water-assurance.test.mjs \
+            tests/r3-h15-gate-visual-assurance.test.mjs \
+            tests/public-observation-provenance.test.mjs \
+            tests/telemetry-safety.test.mjs
+      - name: Strict TypeScript analysis
+        run: npm run typecheck
+      - name: ESLint
+        run: npm run lint
+      - name: Production-mode build without deployment
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build
