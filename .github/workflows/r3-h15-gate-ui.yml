@@ -1,0 +1,52 @@
+name: FloodGuard H15 actual gate UI safety contract (NO DEPLOY)
+
+on:
+  push:
+    branches:
+      - safety/r3-h15-gate-ui-observation-only-20261104
+  pull_request:
+    branches:
+      - security/r3-effective-rules-export-review-20261104
+    paths:
+      - 'app/gate/page.tsx'
+      - 'components/dam-scene.tsx'
+      - 'lib/gate-observation-view.mjs'
+      - 'tests/r3-h15-gate-visual-assurance.test.mjs'
+      - '.github/workflows/r3-h15-gate-ui.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  gate-ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout without retained credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install pinned dependencies (no secrets)
+        run: npm ci
+      - name: Offline physical-uncertainty and existing source tests
+        run: |
+          set -euo pipefail
+          node --check lib/gate-observation-view.mjs
+          node --check tests/r3-h15-gate-visual-assurance.test.mjs
+          node --test \
+            tests/r3-h15-gate-visual-assurance.test.mjs \
+            tests/telemetry-safety.test.mjs \
+            tests/public-observation-provenance.test.mjs
+      - name: Next.js typecheck
+        run: npm run typecheck
+      - name: ESLint
+        run: npm run lint
+      - name: Production build (artifact NOT deployed)
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build
