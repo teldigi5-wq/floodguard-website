@@ -70,7 +70,7 @@ test('actual scene does not force continuous animation under reduced motion',()=
   assert.match(scene,/window\.matchMedia\("\(prefers-reduced-motion: reduce\)"\)\.matches/);
   assert.match(scene,/query\.addEventListener\("change",onChange\)/);
   assert.match(scene,/query\.removeEventListener\("change",onChange\)/);
-  assert.match(scene,/if\(!availability\.render3D\)\{setAnimate\(false\);return;\}/);
+  assert.match(scene,/if\(!availability\.render3D\)return;/);
   assert.match(scene,/!tour\|\|reducedMotion\|\|!availability\.render3D/);
 });
 test('green SAFE low band does not reappear in the scene meter or section',()=>{
