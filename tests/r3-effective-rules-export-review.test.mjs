@@ -142,6 +142,73 @@ test('a hard link to the repository candidate is not separate operator evidence'
   assert.equal(r.repoCandidateMatchesExport,false);
   noGo(r);
 }));
+
+test('H29 rejects top-level duplicate rules even when JSON.parse would match candidate',()=>tmp(dir=>{
+  const location=path.join(dir,'ambiguous-top-level.json');
+  const raw='{"rules":{"floodguard":{"live":{".read":true}}},"rules":'+
+    JSON.stringify(source.rules)+'}';
+  assert.deepEqual(JSON.parse(raw),source,'last duplicate wins in JSON.parse');
+  fs.writeFileSync(location,raw);
+  const r=inspectExportFromFile(location,options);
+  assert.equal(r.reason,'OPERATOR_EXPORT_UNAVAILABLE_OR_MALFORMED');
+  assert.equal(r.repoCandidateMatchesExport,false);
+  noGo(r);
+  const cli=run(location);
+  assert.equal(cli.status,2);
+  assert.equal(cli.stderr,'');
+  assert.doesNotMatch(cli.stdout,/live|rules|ambiguous-top-level|\.read/);
+}));
+
+test('H29 rejects duplicate nested permission keys that would disappear on parsing',()=>tmp(dir=>{
+  const location=path.join(dir,'ambiguous-nested.json');
+  const normal=JSON.stringify(source);
+  const raw=normal.replace('".read":false','".read":true,".read":false');
+  assert.notEqual(raw,normal);
+  assert.deepEqual(JSON.parse(raw),source);
+  fs.writeFileSync(location,raw);
+  const r=inspectExportFromFile(location,options);
+  assert.equal(r.reason,'OPERATOR_EXPORT_UNAVAILABLE_OR_MALFORMED');
+  noGo(r);
+}));
+
+test('H29 decodes escaped property names when checking duplicates',()=>tmp(dir=>{
+  const location=path.join(dir,'unicode-alias.json');
+  const normal=JSON.stringify(source);
+  // The JSON property name "\u002eread" is decoded as ".read"; treating
+  // raw spellings as different keys would incorrectly accept this snapshot.
+  const raw=normal.replace('".read":false',String.raw.`'`".read":true,"\u002eread":false`'`);
+  assert.notEqual(raw,normal);
+  assert.deepEqual(JSON.parse(raw),source);
+  fs.writeFileSync(location,raw);
+  const r=inspectExportFromFile(location,options);
+  assert.equal(r.repoCandidateMatchesExport,false);
+  assert.equal(r.reason,'OPERATOR_EXPORT_UNAVAILABLE_OR_MALFORMED');
+  noGo(r);
+}));
+
+test('H29 rejects duplicate nested ESP node even when last value is restrictive',()=>tmp(dir=>{
+  const location=path.join(dir,'ambiguous-esp.json');
+  const normal=JSON.stringify(source);
+  const raw=normal.replace('"esp8266":',
+    '"esp8266":{"ip":{".read":true}},"esp8266":');
+  assert.notEqual(raw,normal);
+  assert.deepEqual(JSON.parse(raw),source);
+  fs.writeFileSync(location,raw);
+  const r=inspectExportFromFile(location,options);
+  assert.equal(r.repoCandidateMatchesExport,false);
+  assert.equal(r.reason,'OPERATOR_EXPORT_UNAVAILABLE_OR_MALFORMED');
+  noGo(r);
+}));
+
+test('H29 permits repeated property names in independent JSON object scopes',()=>tmp(dir=>{
+  const location=path.join(dir,'distinct-sibling-permissions.json');
+  fs.writeFileSync(location,JSON.stringify(source));
+  const r=inspectExportFromFile(location,options);
+  assert.equal(r.repoCandidateMatchesExport,true);
+  assert.equal(r.reason,'MATCHES_REPO_CANDIDATE_BUT_CLOUD_PROVENANCE_UNVERIFIED');
+  noGo(r);
+}));
+
 test('CLI without export fails closed without opening a cloud connection',()=>{
   const proc=spawnSync(process.execPath,[
     path.join(root,'scripts/r3-effective-rules-export-review.mjs')
