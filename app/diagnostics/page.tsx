@@ -3,10 +3,12 @@
 import { AlertTriangle, Cpu, Database, Gauge, Radio, ShieldCheck } from "lucide-react";
 import { useLive } from "@/hooks/use-live";
 import { PageHero, StatePanel } from "@/components/page-kit";
-import { ageLabel, fmt, label, lastSeenLabel } from "@/components/ui";
+import { ageLabel, fmt, lastSeenLabel } from "@/components/ui";
 import { describeRiskObservation,describeWaterObservation } from "@/lib/dashboard-water-observation.mjs";
 import { describeGateObservation } from "@/lib/gate-observation-view.mjs";
 import { reconcileDisplayedAlarmState } from "@/lib/telemetry-safety.mjs";
+import { describePublicMonitorView } from "@/lib/public-monitor-view.mjs";
+import { describePublicRainObservation } from "@/lib/public-health-observation.mjs";
 
 export default function Diagnostics() {
   const { data, freshness, age, lastUpdateMs, databaseConnected, error } = useLive();
@@ -15,13 +17,21 @@ export default function Diagnostics() {
   const gateView=describeGateObservation({gate:data?.gate,freshness});
   const alarmState=reconcileDisplayedAlarmState({active:data?.alarm?.active,freshness});
   const alarmDisplay=alarmState==="CLEAR"?"REPORTED OFF · UNVERIFIED":alarmState==="ACTIVE"?"REPORTED ACTIVE · UNVERIFIED":alarmState==="LAST ACTIVE"?"LAST REPORTED ACTIVE · NOT CURRENT":"UNAVAILABLE";
-  const espStatus=label(data?.esp8266?.status??data?.esp8266?.connection);
-  const espDisplay=freshness==="live"?"REPORTED "+espStatus+" · UNVERIFIED":"LAST RECORDED "+espStatus+" · NOT CURRENT";
+  // Diagnostics is not allowed to bypass H21–H26 source qualification.
+  // Disagreeing or physically uninstalled inventory vetoes ESP ONLINE/RSSI
+  // and normal rain numerics, even if unsigned children report otherwise.
+  const monitor=describePublicMonitorView({data,freshness});
+  const rainView=describePublicRainObservation({
+    rain:data?.rain,device:data?.devices?.rainGauge,freshness
+  });
+  const rainDisplay=rainView.currentMm !== null
+    ? "REPORTED "+fmt(rainView.currentMm,"mm")+" · UNVERIFIED"
+    : rainView.categoryLabel;
   const groups = [
     { title:"Water observation", path:"water", available:data?.water !== undefined,
       value:waterView.reportStatusLabel+" · "+(freshness==="live"?fmt(waterView.currentLevel,"cm"):"NOT CURRENT") },
     { title:"Collector rainfall", path:"rain", available:data?.rain !== undefined,
-      value:freshness==="live"?"REPORTED "+fmt(data?.rain?.currentMm,"mm")+" · UNVERIFIED":"LAST RECORDED · NOT CURRENT" },
+      value:rainDisplay },
     { title:"Gate observation", path:"gate", available:data?.gate !== undefined,
       value:gateView.displayLabel },
     { title:"Alarm report", path:"alarm", available:data?.alarm !== undefined,
@@ -31,7 +41,7 @@ export default function Diagnostics() {
     { title:"Controller update", path:"system", available:data?.system !== undefined,
       value:lastSeenLabel(lastUpdateMs) },
     { title:"ESP8266 telemetry", path:"esp8266/{connection,rssi,status}", available:data?.esp8266 !== undefined,
-      value:espDisplay },
+      value:monitor.espLabel },
   ];
   const streamCount=groups.filter(group=>group.available).length;
 
@@ -80,7 +90,7 @@ export default function Diagnostics() {
       <section aria-labelledby="diag-streams">
         <header className="diag-section-heading">
           <h2 id="diag-streams">Allowlisted telemetry groups</h2>
-          <p>The browser subscribes only to permitted Firebase child paths. IP addresses, Wi-Fi details, credentials and actuator commands are not accessed by this view.</p>
+          <p>The browser subscribes only to permitted Firebase child paths. IP addresses, Wi-Fi details, credentials and actuator commands are not accessed by this view. ESP reports require coherent status, connection and inventory. Faulted or uninstalled rain gauges suppress measurements; unsigned reports never establish physical safety.</p>
         </header>
         <div className="diag-streams">
           {groups.map(group=><article className="diag-stream" key={group.title}>
