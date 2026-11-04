@@ -60,7 +60,8 @@ function readPrivateFile(fileName){
     const current=fs.fstatSync(fd);
     if(!current.isFile()||current.nlink!==1||current.size<2||
        current.size>MAX_EXPORT_BYTES||
-       current.dev!==info.dev||current.ino!==info.ino)
+       current.dev!==info.dev||current.ino!==info.ino||
+       (process.platform!=='win32'&&(current.mode&0o077)!==0))
       throw Error('changed-file');
     const raw=fs.readFileSync(fd,'utf8');
     return parsePrivateEvidenceJson(raw);
@@ -68,9 +69,9 @@ function readPrivateFile(fileName){
     if(fd!==undefined)fs.closeSync(fd);
   }
 }
-// Optional privateEvidenceDirectory permits in-memory/test clients to supply
-// a disposable fixture root. The actual CLI always pins this to the repository
-// root's Git-ignored .floodguard-private-evidence directory.
+// File-based evidence requires an explicit private directory for EVERY caller.
+// The actual CLI pins it to the repository root's ignored evidence folder.
+// Pure assessOperatorRulesExport(object,...) remains suitable for synthetic data.
 export function inspectExportFromFile(fileName,{candidateFile,manifestFile,
   privateEvidenceDirectory}={}){
   try{
@@ -80,16 +81,16 @@ export function inspectExportFromFile(fileName,{candidateFile,manifestFile,
     const candidatePath=fs.realpathSync(candidateFile);
     const inputPath=fs.realpathSync(fileName);
     if(inputPath===candidatePath) return safeResult('REPO_CANDIDATE_IS_NOT_OPERATOR_EXPORT');
-    if(privateEvidenceDirectory!==undefined){
-      // Canonical paths reject ../ escapes and symlinked ancestors. Enforce
-      // an actual, non-symlinked private directory and a DIRECT child file;
-      // nested, tracked, temp, or arbitrarily symlinked external locations
-      // are not acceptable operator evidence for the CLI.
-      const privateInfo=fs.lstatSync(privateEvidenceDirectory);
-      if(!privateInfo.isDirectory()||privateInfo.isSymbolicLink()||
-         path.dirname(inputPath)!==fs.realpathSync(privateEvidenceDirectory))
-        return safeResult('OPERATOR_EXPORT_OUTSIDE_PRIVATE_DIRECTORY');
-    }
+    // Omission of the private root is never an implicit opt-out.
+    if(typeof privateEvidenceDirectory!=='string'||!privateEvidenceDirectory.trim())
+      return safeResult('OPERATOR_EXPORT_PRIVATE_DIRECTORY_REQUIRED');
+    // Canonical paths reject ../ escapes and symlinked ancestors. Require a
+    // direct child of an owner-private, non-symlinked directory.
+    const privateInfo=fs.lstatSync(privateEvidenceDirectory);
+    if(!privateInfo.isDirectory()||privateInfo.isSymbolicLink()||
+       (process.platform!=='win32'&&(privateInfo.mode&0o077)!==0)||
+       path.dirname(inputPath)!==fs.realpathSync(privateEvidenceDirectory))
+      return safeResult('OPERATOR_EXPORT_OUTSIDE_PRIVATE_DIRECTORY');
     const operatorExport=readPrivateFile(fileName);
     const candidate=JSON.parse(fs.readFileSync(candidateFile,'utf8'));
     const manifest=JSON.parse(fs.readFileSync(manifestFile,'utf8'));
