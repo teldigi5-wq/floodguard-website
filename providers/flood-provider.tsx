@@ -57,6 +57,8 @@ const deviceValue = z
   .nullable();
 const devicesSchema = z.object({
   arduino: deviceValue.optional(),
+  // H26: retain optional ESP inventory so it can veto mismatched child reports.
+  esp8266: deviceValue.optional(),
   gsm: deviceValue.optional(),
   microSD: deviceValue.optional(),
   rainGauge: deviceValue.optional(),
@@ -103,7 +105,11 @@ function normalizeDeviceState(value: unknown): unknown {
   if (typeof value === "boolean") return value ? "ONLINE" : "OFFLINE";
   if (value && typeof value === "object") {
     const source = value as Record<string, unknown>;
-    const raw = source.status ?? source.state ?? source.online ?? source.installed;
+    // An explicit physically uninstalled device cannot be promoted ONLINE
+    // by an old cached status/connection indicator or by a sibling record.
+    if (source.installed === false) return "NOT_INSTALLED";
+    // installed:true means only present, NOT connected; it cannot imply ONLINE.
+    const raw = source.status ?? source.state ?? source.online;
     return normalizeDeviceState(raw);
   }
   const state = upper(value);
