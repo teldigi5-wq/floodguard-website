@@ -158,34 +158,112 @@ test('review-ready is a narrow local check and never upgrades release status',()
   ]) assert.equal(isOfflineReviewReady(review(sourceRules,iam)),false);
 });
 
-test('CLI exit 0 is reserved for matching and nonempty offline review documents',()=>{
-  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'fg-h1b-cli-'));
-  try {
-    fs.chmodSync(dir,0o700);
-    const rulePath=path.join(dir,'rules.json');
-    const iamPath=path.join(dir,'iam.json');
-    const run=(rules,iam)=>{
-      fs.writeFileSync(rulePath,JSON.stringify(rules),{mode:0o600});
-      fs.writeFileSync(iamPath,JSON.stringify(iam),{mode:0o600});
-      fs.chmodSync(rulePath,0o600);fs.chmodSync(iamPath,0o600);
+// The production H1/B CLI uses the operator-owned home directory. In tests,
+// replace HOME with a disposable sandbox; never read a user's real evidence.
+const localCliFixture=(fn)=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'fg-h31-evidence-'));
+  const home=path.join(dir,'synthetic-owner-home');
+  const root=path.join(home,'.local','share','floodguard-private','r3-h1b');
+  fs.mkdirSync(root,{recursive:true,mode:0o700});
+  fs.chmodSync(root,0o700);
+  try{
+    const run=(rules,iam,{rawRules,rawIam,rulePath,iamPath}={})=>{
+      const rp=rulePath??path.join(root,'effective-rtdb-rules.json');
+      const ip=iamPath??path.join(root,'project-iam.json');
+      if(!rulePath)fs.writeFileSync(rp,rawRules??JSON.stringify(rules),{mode:0o600});
+      if(!iamPath)fs.writeFileSync(ip,rawIam??JSON.stringify(iam),{mode:0o600});
       const result=spawnSync(process.execPath,[
         'scripts/r3-h1b-authority-evidence-review.mjs',
-        '--effective-rules',rulePath,'--project-iam',iamPath],
-        {cwd:process.cwd(),encoding:'utf8',timeout:5000,maxBuffer:16384});
+        '--effective-rules',rp,'--project-iam',ip
+      ],{cwd:process.cwd(),env:{...process.env,HOME:home,USERPROFILE:home},
+        encoding:'utf8',timeout:5000,maxBuffer:16384});
       assert.equal(result.error,undefined);
       const report=JSON.parse(result.stdout);
-      neverRelease(report);
-      assert.doesNotMatch(result.stdout,/placeholder@example\.invalid/);
+      assert.equal(report.releaseDecision,'NO_GO');
+      assert.equal(report.mayDeploy,false);
+      assert.equal(report.mayOperateGate,false);
+      assert.doesNotMatch(result.stdout,/placeholder@example\.invalid|effective-rtdb-rules\.json|project-iam\.json|\.read/);
+      assert.equal(result.stderr,'');
       return {code:result.status,report};
     };
-    assert.equal(run(sourceRules,viewerIam).code,0);
-    assert.equal(run(sourceRules,{bindings:[]}).code,2);
-    assert.equal(run(sourceRules,{bindings:[{role:'roles/viewer',members:[]}]}).code,2);
-    const changed=copy(sourceRules);
-    changed.rules.floodguard.live.water['.indexOn']=['ts'];
-    assert.equal(run(changed,viewerIam).code,2);
-    const unsafe=copy(sourceRules);
-    unsafe.rules.floodguard.live['.read']=true;
-    assert.equal(run(unsafe,viewerIam).code,2);
+    return fn({dir,home,root,run});
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
-});
+};
+
+test('H31 CLI matching local Rules and IAM remain NO-GO, mismatched or empty IAM reject',()=>localCliFixture(({run})=>{
+  assert.equal(run(sourceRules,viewerIam).code,0);
+  assert.equal(run(sourceRules,{bindings:[]}).code,2);
+  assert.equal(run(sourceRules,{bindings:[{role:'roles/viewer',members:[]}]}).code,2);
+  const changed=copy(sourceRules);
+  changed.rules.floodguard.live.water['.indexOn']=['ts'];
+  assert.equal(run(changed,viewerIam).code,2);
+  const unsafe=copy(sourceRules);
+  unsafe.rules.floodguard.live['.read']=true;
+  assert.equal(run(unsafe,viewerIam).code,2);
+}));
+
+test('H31 rejects shadowed IAM bindings and duplicate nested role keys',()=>localCliFixture(({run})=>{
+  const view=JSON.stringify(viewerIam);
+  const shadow='{"bindings":[{"role":"roles/owner","members":["allUsers"]}],"bindings":'+
+    view.slice('{"bindings":'.length);
+  assert.deepEqual(JSON.parse(shadow),viewerIam);
+  assert.equal(run(sourceRules,viewerIam,{rawIam:shadow}).code,2);
+
+  const roleShadow=view.replace('"role":"roles/viewer"',
+    '"role":"roles/owner","role":"roles/viewer"');
+  assert.deepEqual(JSON.parse(roleShadow),viewerIam);
+  assert.equal(run(sourceRules,viewerIam,{rawIam:roleShadow}).code,2);
+
+  const escaped=view.replace('"role":"roles/viewer"',
+    String.raw`'`"role":"roles/owner","\u0072ole":"roles/viewer"`'`);
+  assert.deepEqual(JSON.parse(escaped),viewerIam);
+  assert.equal(run(sourceRules,viewerIam,{rawIam:escaped}).code,2);
+}));
+
+test('H31 rejects shadowed effective Rules, even with restrictive final key',()=>localCliFixture(({run})=>{
+  const raw='{"rules":{"floodguard":{"live":{".read":true}}},"rules":'+
+    JSON.stringify(sourceRules.rules)+'}';
+  assert.deepEqual(JSON.parse(raw),sourceRules);
+  assert.equal(run(sourceRules,viewerIam,{rawRules:raw}).code,2);
+}));
+
+test('H31 refuses outside, nested, symlink and hardlink paths under owner home',()=>localCliFixture(({dir,home,root,run})=>{
+  const extra=path.join(dir,'tracked-like-rules.json');
+  fs.writeFileSync(extra,JSON.stringify(sourceRules),{mode:0o600});
+  const outside=run(sourceRules,viewerIam,{rulePath:extra});
+  assert.equal(outside.code,2);
+
+  const nestedDir=path.join(root,'sub');
+  fs.mkdirSync(nestedDir,{mode:0o700});
+  const nested=path.join(nestedDir,'nested.json');
+  fs.writeFileSync(nested,JSON.stringify(sourceRules),{mode:0o600});
+  assert.equal(run(sourceRules,viewerIam,{rulePath:nested}).code,2);
+
+  const real=path.join(root,'real.json');
+  fs.writeFileSync(real,JSON.stringify(sourceRules),{mode:0o600});
+  const symlink=path.join(root,'alias.json');
+  fs.symlinkSync(real,symlink);
+  assert.equal(run(sourceRules,viewerIam,{rulePath:symlink}).code,2);
+
+  const hardlink=path.join(root,'hardlink.json');
+  fs.linkSync(real,hardlink);
+  assert.equal(run(sourceRules,viewerIam,{rulePath:hardlink}).code,2);
+
+  const moved=path.join(home,'renamed-private');
+  fs.renameSync(root,moved);
+  fs.symlinkSync(moved,root,'dir');
+  const throughRoot=path.join(root,'real.json');
+  assert.equal(run(sourceRules,viewerIam,{rulePath:throughRoot}).code,2);
+}));
+
+test('H31 private IAM reader rejects unprotected root and group-readable input',()=>localCliFixture(({root,run})=>{
+  const good=run(sourceRules,viewerIam);
+  assert.equal(good.code,0);
+  if(process.platform==='win32')return;
+  const pathIam=path.join(root,'project-iam.json');
+  fs.chmodSync(pathIam,0o644);
+  assert.equal(run(sourceRules,viewerIam,{iamPath:pathIam}).code,2);
+  fs.chmodSync(pathIam,0o600);
+  fs.chmodSync(root,0o755);
+  assert.equal(run(sourceRules,viewerIam).code,2);
+}));
