@@ -1,0 +1,44 @@
+name: FloodGuard H22 global shell trust (NO DEPLOY)
+
+on:
+  push:
+    branches: [safety/r3-h22-global-shell-provenance-20261104]
+  pull_request:
+    branches: [safety/r3-h21-public-cross-surface-reporting-20261104]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-shell:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    steps:
+      - name: Checkout source without persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up supported Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Install reviewed lockfile without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Node source checks and all inherited regressions
+        run: |
+          set -euo pipefail
+          node --check tests/r3-h22-global-shell-trust.test.mjs
+          npm test
+      - name: TypeScript
+        run: npm run typecheck
+      - name: ESLint
+        run: npm run lint
+      - name: Non-deploy Next build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build

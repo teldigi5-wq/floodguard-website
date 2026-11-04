@@ -366,3 +366,9 @@ body{overflow-x:hidden}
 @media(prefers-reduced-motion:reduce){
   .scene-static-assurance,.scene-static-assurance *{animation:none!important;transition:none!important}
 }
+
+/* H22: qualified observation text must remain readable in narrow sticky dock. */
+.status-dock .dock-grid span,.status-dock .dock-grid b{min-width:0;overflow-wrap:anywhere;word-break:normal}
+.status-dock .dock-grid b{font-size:clamp(.63rem,1.4vw,.75rem);line-height:1.5}
+#main-content:focus{outline:none}
+#main-content:focus-visible{outline:3px solid #fff;outline-offset:3px}
