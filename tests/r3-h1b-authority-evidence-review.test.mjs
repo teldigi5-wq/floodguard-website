@@ -94,12 +94,12 @@ test('private reader refuses symlinks and world-readable files',()=>{
     const alias=path.join(dir,'alias.json');
     fs.writeFileSync(original,JSON.stringify(viewerIam),{mode:0o600});
     fs.chmodSync(original,0o600);
-    assert.deepEqual(readPrivateJson(original),viewerIam);
+    assert.deepEqual(readPrivateJson(original,{privateEvidenceDirectory:dir}),viewerIam);
     fs.symlinkSync(original,alias);
-    assert.throws(()=>readPrivateJson(alias),/PRIVATE_EVIDENCE_INPUT_UNAVAILABLE/);
+    assert.throws(()=>readPrivateJson(alias,{privateEvidenceDirectory:dir}),/PRIVATE_EVIDENCE_INPUT_UNAVAILABLE/);
     fs.chmodSync(original,0o644);
     if(process.platform !== 'win32')
-      assert.throws(()=>readPrivateJson(original),/PRIVATE_EVIDENCE_INPUT_UNAVAILABLE/);
+      assert.throws(()=>readPrivateJson(original,{privateEvidenceDirectory:dir}),/PRIVATE_EVIDENCE_INPUT_UNAVAILABLE/);
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });
 test('private reader refuses oversized or invalid JSON',()=>{
@@ -108,9 +108,9 @@ test('private reader refuses oversized or invalid JSON',()=>{
     fs.chmodSync(dir,0o700);
     const f=path.join(dir,'evidence.json');
     fs.writeFileSync(f,'{not-json',{mode:0o600});fs.chmodSync(f,0o600);
-    assert.throws(()=>readPrivateJson(f),/PRIVATE_EVIDENCE_INPUT_UNAVAILABLE/);
+    assert.throws(()=>readPrivateJson(f,{privateEvidenceDirectory:dir}),/PRIVATE_EVIDENCE_INPUT_UNAVAILABLE/);
     fs.writeFileSync(f,'a'.repeat(1024*1024+1));fs.chmodSync(f,0o600);
-    assert.throws(()=>readPrivateJson(f),/PRIVATE_EVIDENCE_INPUT_UNAVAILABLE/);
+    assert.throws(()=>readPrivateJson(f,{privateEvidenceDirectory:dir}),/PRIVATE_EVIDENCE_INPUT_UNAVAILABLE/);
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });
 test('review has no network or write implementation',()=>{

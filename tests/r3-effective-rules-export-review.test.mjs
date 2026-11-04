@@ -27,6 +27,10 @@ const noGo=r=>{
     assert.equal(r[field],false,field);
   assert.equal(Object.isFrozen(r),true);
 };
+const privateWrite=(file,content)=>{
+  fs.writeFileSync(file,content,{mode:0o600});
+  fs.chmodSync(file,0o600);
+};
 const tmp=fn=>{
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),'fg-effective-rules-'));
   try{return fn(directory)}finally{fs.rmSync(directory,{recursive:true,force:true});}
@@ -115,8 +119,8 @@ test('CLI refuses the repository candidate itself as a false operator export',()
 test('CLI reads only a distinct, bounded, regular private file and redacts output',()=>tmp(dir=>{
   const {cwd,evidence}=cliFixture(dir);
   const location=path.join(evidence,'rules-export.json');
-  fs.writeFileSync(location,JSON.stringify(source));
-  const r=inspectExportFromFile(location,options);
+  privateWrite(location,JSON.stringify(source));
+  const r=inspectExportFromFile(location,{...options,privateEvidenceDirectory:path.dirname(location)});
   assert.equal(r.repoCandidateMatchesExport,true);
   noGo(r);
   const p=run(location,{cwd});
@@ -127,11 +131,11 @@ test('CLI reads only a distinct, bounded, regular private file and redacts outpu
   assert.equal(result.releaseDecision,'NO_GO');
   assert.doesNotMatch(p.stdout, /floodguard\/live|rules-export|private|access_token|\.read/);
 
-  fs.writeFileSync(location,'{invalid-json "auth=DO_NOT_LEAK"');
+  privateWrite(location,'{invalid-json "auth=DO_NOT_LEAK"');
   const invalid=run(location,{cwd});
   assert.equal(invalid.status,2);
   assert.doesNotMatch(invalid.stdout,/DO_NOT_LEAK/);
-  fs.writeFileSync(location,'X'.repeat(128*1024+1));
+  privateWrite(location,'X'.repeat(128*1024+1));
   const huge=run(location,{cwd});
   assert.equal(huge.status,2);
   assert.equal(JSON.parse(huge.stdout).repoCandidateMatchesExport,false);
@@ -152,7 +156,7 @@ test('a hard link to the repository candidate is not separate operator evidence'
   assert.notEqual(fs.realpathSync(candidate),fs.realpathSync(hardlink));
   assert.equal(fs.statSync(candidate).ino,fs.statSync(hardlink).ino);
   assert.equal(fs.statSync(hardlink).nlink,2);
-  const r=inspectExportFromFile(hardlink,{candidateFile:candidate,manifestFile});
+  const r=inspectExportFromFile(hardlink,{candidateFile:candidate,manifestFile,privateEvidenceDirectory:dir});
   assert.equal(r.reason,'OPERATOR_EXPORT_UNAVAILABLE_OR_MALFORMED');
   assert.equal(r.repoCandidateMatchesExport,false);
   noGo(r);
@@ -163,8 +167,8 @@ test('H29 rejects top-level duplicate rules even when JSON.parse would match can
   const raw='{"rules":{"floodguard":{"live":{".read":true}}},"rules":'+
     JSON.stringify(source.rules)+'}';
   assert.deepEqual(JSON.parse(raw),source,'last duplicate wins in JSON.parse');
-  fs.writeFileSync(location,raw);
-  const r=inspectExportFromFile(location,options);
+  privateWrite(location,raw);
+  const r=inspectExportFromFile(location,{...options,privateEvidenceDirectory:path.dirname(location)});
   assert.equal(r.reason,'OPERATOR_EXPORT_UNAVAILABLE_OR_MALFORMED');
   assert.equal(r.repoCandidateMatchesExport,false);
   noGo(r);
@@ -180,8 +184,8 @@ test('H29 rejects duplicate nested permission keys that would disappear on parsi
   const raw=normal.replace('".read":false','".read":true,".read":false');
   assert.notEqual(raw,normal);
   assert.deepEqual(JSON.parse(raw),source);
-  fs.writeFileSync(location,raw);
-  const r=inspectExportFromFile(location,options);
+  privateWrite(location,raw);
+  const r=inspectExportFromFile(location,{...options,privateEvidenceDirectory:path.dirname(location)});
   assert.equal(r.reason,'OPERATOR_EXPORT_UNAVAILABLE_OR_MALFORMED');
   noGo(r);
 }));
@@ -194,8 +198,8 @@ test('H29 decodes escaped property names when checking duplicates',()=>tmp(dir=>
   const raw=normal.replace('".read":false',String.raw`".read":true,"\u002eread":false`);
   assert.notEqual(raw,normal);
   assert.deepEqual(JSON.parse(raw),source);
-  fs.writeFileSync(location,raw);
-  const r=inspectExportFromFile(location,options);
+  privateWrite(location,raw);
+  const r=inspectExportFromFile(location,{...options,privateEvidenceDirectory:path.dirname(location)});
   assert.equal(r.repoCandidateMatchesExport,false);
   assert.equal(r.reason,'OPERATOR_EXPORT_UNAVAILABLE_OR_MALFORMED');
   noGo(r);
@@ -208,8 +212,8 @@ test('H29 rejects duplicate nested ESP node even when last value is restrictive'
     '"esp8266":{"ip":{".read":true}},"esp8266":');
   assert.notEqual(raw,normal);
   assert.deepEqual(JSON.parse(raw),source);
-  fs.writeFileSync(location,raw);
-  const r=inspectExportFromFile(location,options);
+  privateWrite(location,raw);
+  const r=inspectExportFromFile(location,{...options,privateEvidenceDirectory:path.dirname(location)});
   assert.equal(r.repoCandidateMatchesExport,false);
   assert.equal(r.reason,'OPERATOR_EXPORT_UNAVAILABLE_OR_MALFORMED');
   noGo(r);
@@ -217,8 +221,8 @@ test('H29 rejects duplicate nested ESP node even when last value is restrictive'
 
 test('H29 permits repeated property names in independent JSON object scopes',()=>tmp(dir=>{
   const location=path.join(dir,'distinct-sibling-permissions.json');
-  fs.writeFileSync(location,JSON.stringify(source));
-  const r=inspectExportFromFile(location,options);
+  privateWrite(location,JSON.stringify(source));
+  const r=inspectExportFromFile(location,{...options,privateEvidenceDirectory:path.dirname(location)});
   assert.equal(r.repoCandidateMatchesExport,true);
   assert.equal(r.reason,'MATCHES_REPO_CANDIDATE_BUT_CLOUD_PROVENANCE_UNVERIFIED');
   noGo(r);
@@ -256,7 +260,7 @@ test('H30 accepts only a directly contained private child, never a nested or ../
   assert.equal(JSON.parse(denied.stdout).reason,'OPERATOR_EXPORT_OUTSIDE_PRIVATE_DIRECTORY');
 
   const valid=path.join(evidence,'operator-snapshot.json');
-  fs.writeFileSync(valid,JSON.stringify(source));
+  privateWrite(valid,JSON.stringify(source));
   const ok=run(valid,{cwd});
   assert.equal(ok.status,0,ok.stderr);
   const outcome=JSON.parse(ok.stdout);
