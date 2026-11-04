@@ -47,17 +47,20 @@ test('dashboard and shared quick metrics use same freshness-aware alarm policy',
   assert.match(dashboard,/alarmDisplay=alarmState==="CLEAR"\?"REPORTED OFF · UNVERIFIED"/);
   assert.match(dashboard,/value=\{alarmGauge\}/);
   assert.match(dashboard,/display=\{alarmDisplay\}/);
-  assert.match(quick,/title="Alarm" value=\{alarmState\}/);
+  assert.match(quick,/title="Alarm report" value=\{alarmDisplay\}/);
   assert.match(dashboard,/title="Alarm report" value=\{alarmDisplay\}/);
   assert.doesNotMatch(dashboard,/alarmGauge=alarmState==="ACTIVE"\?1:alarmState==="CLEAR"\?0:null/);
 });
 
-test('copied and downloaded observation preserve raw alarm flag and explicit freshness interpretation',()=>{
+test('copied and downloaded observation preserves raw flag only inside qualified nonoperational record',()=>{
   const source=readFileSync('components/status-snapshot.tsx','utf8');
-  assert.match(source,/displayState:reconcileDisplayedAlarmState\(\{active:data\?\.alarm\?\.active,freshness\}\)/);
-  assert.match(source,/active:data\?\.alarm\?\.active\?\?null/);
-  assert.match(source,/Alarm: \$\{s\.alarm\.displayState\}/);
+  const formatter=readFileSync('lib/public-observation-export.mjs','utf8');
+  assert.match(source,/buildPublicObservationExport\(/);
+  assert.match(source,/formatPublicObservationSummary\(snapshot\(\)\)/);
   assert.match(source,/JSON\.stringify\(snapshot\(\),null,2\)/);
+  assert.match(formatter,/active:typeof data\?\.alarm\?\.active==='boolean'/);
+  assert.match(formatter,/alarm==='CLEAR'\?'REPORTED OFF · UNVERIFIED'/);
+  assert.match(formatter,/physicalFloodSafety:'UNKNOWN · UNVERIFIED'/);
   assert.doesNotMatch(source,/s\.alarm\.active===false\?"CLEAR"/);
 });
 
