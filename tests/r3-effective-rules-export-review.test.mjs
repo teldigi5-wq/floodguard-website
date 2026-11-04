@@ -224,6 +224,84 @@ test('H29 permits repeated property names in independent JSON object scopes',()=
   noGo(r);
 }));
 
+
+test('H30 refuses Rules snapshots copied to a tracked checkout path or unrelated /tmp',()=>tmp(dir=>{
+  const {cwd,evidence}=cliFixture(dir);
+  const tracked=path.join(cwd,'operator-rules-export.json');
+  fs.writeFileSync(tracked,JSON.stringify(source));
+  const report=run(tracked,{cwd});
+  assert.equal(report.status,2);
+  assert.equal(report.stderr,'');
+  assert.equal(JSON.parse(report.stdout).reason,'OPERATOR_EXPORT_OUTSIDE_PRIVATE_DIRECTORY');
+  const checked=inspectExportFromFile(tracked,{...options,privateEvidenceDirectory:evidence});
+  assert.equal(checked.reason,'OPERATOR_EXPORT_OUTSIDE_PRIVATE_DIRECTORY');
+  noGo(checked);
+
+  const another=path.join(dir,'outside-snapshot.json');
+  fs.writeFileSync(another,JSON.stringify(source));
+  const denied=run(another,{cwd});
+  assert.equal(denied.status,2);
+  assert.equal(JSON.parse(denied.stdout).operatorExportProvided,false);
+  assert.doesNotMatch(denied.stdout,/operator-rules-export|outside-snapshot|\.read|floodguard\/live/);
+}));
+
+test('H30 accepts only a directly contained private child, never a nested or ../ escaped file',()=>tmp(dir=>{
+  const {cwd,evidence}=cliFixture(dir);
+  const nested=path.join(evidence,'sub');
+  fs.mkdirSync(nested);
+  const nestedFile=path.join(nested,'snapshot.json');
+  fs.writeFileSync(nestedFile,JSON.stringify(source));
+  const denied=run(nestedFile,{cwd});
+  assert.equal(denied.status,2);
+  assert.equal(JSON.parse(denied.stdout).reason,'OPERATOR_EXPORT_OUTSIDE_PRIVATE_DIRECTORY');
+
+  const valid=path.join(evidence,'operator-snapshot.json');
+  fs.writeFileSync(valid,JSON.stringify(source));
+  const ok=run(valid,{cwd});
+  assert.equal(ok.status,0,ok.stderr);
+  const outcome=JSON.parse(ok.stdout);
+  assert.equal(outcome.repoCandidateMatchesExport,true);
+  assert.equal(outcome.effectiveFirebaseRulesVerified,false);
+  noGo(outcome);
+}));
+
+test('H30 rejects symlinked private evidence root and symlinked evidence files',()=>tmp(dir=>{
+  const {cwd,evidence}=cliFixture(dir);
+  const alternate=path.join(cwd,'untrusted-alias');
+  fs.renameSync(evidence,alternate);
+  fs.symlinkSync(alternate,evidence,'dir');
+  const fromAlias=path.join(evidence,'operator.json');
+  fs.writeFileSync(path.join(alternate,'operator.json'),JSON.stringify(source));
+  const denied=run(fromAlias,{cwd});
+  assert.equal(denied.status,2);
+  assert.equal(JSON.parse(denied.stdout).reason,'OPERATOR_EXPORT_OUTSIDE_PRIVATE_DIRECTORY');
+  fs.unlinkSync(evidence);
+  fs.renameSync(alternate,evidence);
+
+  const outside=path.join(cwd,'outside.json');
+  fs.writeFileSync(outside,JSON.stringify(source));
+  const alias=path.join(evidence,'external-symlink.json');
+  fs.symlinkSync(outside,alias);
+  const deniedLink=run(alias,{cwd});
+  assert.equal(deniedLink.status,2);
+  assert.equal(deniedLink.stderr,'');
+  assert.equal(JSON.parse(deniedLink.stdout).repoCandidateMatchesExport,false);
+}));
+
+test('H30 original source candidate and private hardlinks still fail with fixed redacted NO-GO',()=>tmp(dir=>{
+  const {cwd,evidence}=cliFixture(dir);
+  const candidate=path.join(cwd,'firebase.rules.json');
+  const same=run(candidate,{cwd});
+  assert.equal(same.status,2);
+  assert.equal(JSON.parse(same.stdout).reason,'REPO_CANDIDATE_IS_NOT_OPERATOR_EXPORT');
+  const hard=path.join(evidence,'hardlink-to-candidate.json');
+  fs.linkSync(candidate,hard);
+  const denied=run(hard,{cwd});
+  assert.equal(denied.status,2);
+  assert.equal(JSON.parse(denied.stdout).repoCandidateMatchesExport,false);
+  assert.doesNotMatch(denied.stdout,/hardlink-to-candidate|firebase.rules.json|\.read/);
+}));
+
 test('CLI without export fails closed without opening a cloud connection',()=>{
   const proc=spawnSync(process.execPath,[
     path.join(root,'scripts/r3-effective-rules-export-review.mjs')
