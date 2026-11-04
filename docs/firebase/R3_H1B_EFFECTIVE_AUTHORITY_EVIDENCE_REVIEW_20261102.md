@@ -83,3 +83,15 @@ current permissions, inherited IAM, runtime Admin credentials, or database data 
 An empty binding list can be a legitimate policy; it is deliberately **insufficient
 for this limited evidence review**, not automatically a vulnerability. No cloud permissions
 or effective rules were changed or checked in this revision.
+
+## 4 November 2026 — H31: close the second private-evidence parser and custody gap
+
+H29/H30 hardened the **Rules-only** file comparator but did not automatically protect the separate **Rules + project IAM** review CLI in this document. Before H31 that reader still used `JSON.parse` on both private documents and accepted evidence from arbitrary file paths. This meant a shadowed permissive IAM `bindings` or `role` property could be silently discarded when later duplicate keys resolved to an apparently benign document. A real operator could also accidentally supply a Rules or IAM export from a tracked checkout path or unrelated temporary directory.
+
+H31 moves duplicate-key decoding/validation into the shared **pure, no-I/O** `scripts/r3-private-json-evidence-core.mjs` parser. Both offline CLIs now reject duplicate property names at any depth, including Unicode-escaped aliases, without returning the offending bytes, names, roles, members, paths or secrets. IAM source evaluation remains **review-only** and does not infer effective project or inherited policy.
+
+The Rules + IAM **CLI** now accepts only directly contained regular, single-link, non-symlinked files in the documented operator-owned `$HOME/.local/share/floodguard-private/r3-h1b` directory. On POSIX, require the root to be private (`0700` recommended) and each file `0600`; the existing 1 MiB per-file bound remains. The source repository baseline and manifest are still checked-in review artifacts, **not** fetched from Firebase. This tool does not inspect Windows ACLs, cannot prove custody of user-supplied exports, and does not attest project/instance provenance or the effect of production IAM. The export reader as a library remains opt-in for a caller-provided evidence root to allow isolated synthetic fixtures; use the CLI for the documented operator workflow. Never copy live Rules or IAM member names into GitHub Actions, PRs, chat or public logs.
+
+The new targeted tests include shadowed IAM bindings, Unicode aliases, duplicate Rules root keys, outside/nested file paths, symlink and hardlink attempts, group-readable files and a non-private directory. All fixtures are synthetic and reside under a disposable HOME during CI. Both previous CLIs remain hard-coded to `NO_GO`, regardless of offline match.
+
+**This is an evidence-integrity safeguard, not a production security or release attestation.**
