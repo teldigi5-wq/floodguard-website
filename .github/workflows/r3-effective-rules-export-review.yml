@@ -1,0 +1,46 @@
+name: FloodGuard R3 effective Rules export offline review (NO CLOUD)
+
+on:
+  push:
+    branches:
+      - security/r3-effective-rules-export-review-20261104
+  pull_request:
+    branches:
+      - security/r3-h11-certified-consumer-boundary-20261103
+    paths:
+      - 'scripts/r3-effective-rules-export-review.mjs'
+      - 'tests/r3-effective-rules-export-review.test.mjs'
+      - 'scripts/r3-real-authority-preflight.mjs'
+      - 'docs/firebase/R3_EFFECTIVE_RULES_EXPORT_OFFLINE_REVIEW_20261104.md'
+      - '.gitignore'
+      - '.github/workflows/r3-effective-rules-export-review.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  private-evidence-schema-offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    steps:
+      - name: Checkout without retained GitHub credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Enforce no real Firebase secrets or exports in CI
+        run: |
+          set -euo pipefail
+          test ! -e .floodguard-private-evidence
+          node --check scripts/r3-effective-rules-export-review.mjs
+          node --check tests/r3-effective-rules-export-review.test.mjs
+          node --test \
+            tests/r3-effective-rules-export-review.test.mjs \
+            tests/r3-real-authority-preflight.test.mjs
