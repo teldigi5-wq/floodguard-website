@@ -6,10 +6,14 @@ import fs from 'node:fs';
 import {constants} from 'node:fs';
 import path from 'node:path';
 import {isDeepStrictEqual} from 'node:util';
-import {pathToFileURL} from 'node:url';
+import {pathToFileURL,fileURLToPath} from 'node:url';
 import {assessAuthorityPreflight} from './r3-real-authority-preflight.mjs';
 import {parsePrivateEvidenceJson} from './r3-private-json-evidence-core.mjs';
 
+// Bind CLI candidate, manifest, and ignored evidence folder to the script's
+// actual checkout, never the invoking shell's arbitrary working directory.
+// This is path provenance only, NOT a signed Git commit or Firebase origin.
+const REVIEW_CHECKOUT_ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const MAX_EXPORT_BYTES=128*1024;
 
 
@@ -101,9 +105,10 @@ const calledFrom=process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(p
 if(calledFrom){
   const result=process.argv.length===3?
     inspectExportFromFile(process.argv[2],{
-      candidateFile:'firebase.rules.json',
-      manifestFile:'docs/firebase/R3_REAL_AUTHORITY_PREFLIGHT_20261102.json',
-      privateEvidenceDirectory:'.floodguard-private-evidence'
+      candidateFile:path.join(REVIEW_CHECKOUT_ROOT,'firebase.rules.json'),
+      manifestFile:path.join(REVIEW_CHECKOUT_ROOT,
+        'docs/firebase/R3_REAL_AUTHORITY_PREFLIGHT_20261102.json'),
+      privateEvidenceDirectory:path.join(REVIEW_CHECKOUT_ROOT,'.floodguard-private-evidence')
     }):safeResult('OPERATOR_EXPORT_INPUT_MISSING');
   // Only finite, fixed codes and booleans: never echo input data, paths,
   // tokens, Rules expressions, private network fields or parse errors.

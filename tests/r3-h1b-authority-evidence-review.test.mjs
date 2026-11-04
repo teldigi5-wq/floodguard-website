@@ -167,15 +167,15 @@ const localCliFixture=(fn)=>{
   fs.mkdirSync(root,{recursive:true,mode:0o700});
   fs.chmodSync(root,0o700);
   try{
-    const run=(rules,iam,{rawRules,rawIam,rulePath,iamPath}={})=>{
+    const run=(rules,iam,{rawRules,rawIam,rulePath,iamPath,workingDirectory}={})=>{
       const rp=rulePath??path.join(root,'effective-rtdb-rules.json');
       const ip=iamPath??path.join(root,'project-iam.json');
       if(!rulePath)fs.writeFileSync(rp,rawRules??JSON.stringify(rules),{mode:0o600});
       if(!iamPath)fs.writeFileSync(ip,rawIam??JSON.stringify(iam),{mode:0o600});
       const result=spawnSync(process.execPath,[
-        'scripts/r3-h1b-authority-evidence-review.mjs',
+        path.resolve('scripts/r3-h1b-authority-evidence-review.mjs'),
         '--effective-rules',rp,'--project-iam',ip
-      ],{cwd:process.cwd(),env:{...process.env,HOME:home,USERPROFILE:home},
+      ],{cwd:workingDirectory??process.cwd(),env:{...process.env,HOME:home,USERPROFILE:home},
         encoding:'utf8',timeout:5000,maxBuffer:16384});
       assert.equal(result.error,undefined);
       const report=JSON.parse(result.stdout);
@@ -266,4 +266,33 @@ test('H31 private IAM reader rejects unprotected root and group-readable input',
   fs.chmodSync(pathIam,0o600);
   fs.chmodSync(root,0o755);
   assert.equal(run(sourceRules,viewerIam).code,2);
+}));
+
+
+test('H33 Rules+IAM CLI uses its own reviewed baseline despite adversarial working directory',()=>localCliFixture(({dir,run})=>{
+  const foreign=path.join(dir,'untrusted-working-directory');
+  fs.mkdirSync(path.join(foreign,'docs/firebase'),{recursive:true});
+  const baseline=copy(sourceRules);
+  baseline.rules.floodguard.live.water['.read']=false;
+  fs.writeFileSync(path.join(foreign,'firebase.rules.json'),JSON.stringify(baseline));
+  fs.writeFileSync(path.join(foreign,'docs/firebase/R3_REAL_AUTHORITY_PREFLIGHT_20261102.json'),
+    JSON.stringify(manifest));
+
+  // With authentic reviewed input, a hostile CWD cannot substitute a
+  // restrictive-candidate path or change the narrow offline exit status.
+  const correct=run(sourceRules,viewerIam,{workingDirectory:foreign});
+  assert.equal(correct.code,0);
+  assert.equal(correct.report.rulesDocumentsStructurallyMatch,true);
+  assert.equal(correct.report.exportProvenanceVerified,false);
+  assert.equal(correct.report.releaseDecision,'NO_GO');
+
+  const compatibleChanged=copy(sourceRules);
+  compatibleChanged.rules.floodguard.live.water['.indexOn']=['ts'];
+  fs.writeFileSync(path.join(foreign,'firebase.rules.json'),
+    JSON.stringify(compatibleChanged));
+  const mismatch=run(compatibleChanged,viewerIam,{workingDirectory:foreign});
+  assert.equal(mismatch.code,2);
+  assert.equal(mismatch.report.rulesDocumentsStructurallyMatch,false);
+  assert.equal(mismatch.report.releaseDecision,'NO_GO');
+  assert.equal(mismatch.report.mayDeploy,false);
 }));

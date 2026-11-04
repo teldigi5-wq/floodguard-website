@@ -53,3 +53,10 @@ A user-supplied copy could be forged, stale, copied from a different project or 
 This is one measurable step toward the real Rules/IAM inventory, not a new trusted publisher, signer or witness. Do not merge/deploy the branch, publish Rules, send WhatsApp messages, use live credentials, operate a gate/alarm or flash firmware on the authority of a passing offline check.
 
 **Production release: NO-GO.**
+
+
+## H33: pin the reviewed baseline to the invoking script's checkout
+
+Both offline operator CLIs now resolve the checked-in Rules candidate and review manifest **relative to their own script file**, rather than the shell's current working directory. In the Rules-only CLI, the Git-ignored operator evidence folder is likewise resolved relative to the script's checkout. This prevents running `node /some/checkout/scripts/r3-effective-rules-export-review.mjs` from an unrelated directory and accidentally accepting the unrelated directory's candidate as the reviewed baseline.
+
+The H33 regression tests use synthetic duplicate disposable checkouts: one contains the script and the intended reviewed baseline; another has a misleading Rules candidate and manifest. The CLI must compare only with the former, and a snapshot that agrees exclusively with the foreign checkout must be rejected. The **exported in-memory / file API** may still be supplied explicit synthetic baseline paths by the caller; this does not attest those paths, nor does a path pinned to a script prove the script came from a trusted commit. Operator must independently inspect the actual Git checkout/commit and approved review source; the result remains `NO_GO` under all outcomes. No Firebase access occurs.

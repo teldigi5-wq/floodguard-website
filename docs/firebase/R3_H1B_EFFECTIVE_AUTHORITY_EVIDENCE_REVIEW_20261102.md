@@ -95,3 +95,9 @@ The Rules + IAM **CLI** now accepts only directly contained regular, single-link
 The new targeted tests include shadowed IAM bindings, Unicode aliases, duplicate Rules root keys, outside/nested file paths, symlink and hardlink attempts, group-readable files and a non-private directory. All fixtures are synthetic and reside under a disposable HOME during CI. Both previous CLIs remain hard-coded to `NO_GO`, regardless of offline match.
 
 **This is an evidence-integrity safeguard, not a production security or release attestation.**
+
+## 4 November 2026 — H33: forbid CWD-selected source Rules/manifest in both CLIs
+
+The Rules-plus-IAM CLI now reads the repository's `firebase.rules.json` and `docs/firebase/R3_REAL_AUTHORITY_PREFLIGHT_20261102.json` **relative to its own script checkout**, not the current shell directory. The operator's two private Rules/IAM export paths remain within `$HOME/.local/share/floodguard-private/r3-h1b` and all H31/H32 private-read safeguards stay enforced. Invoking the program from another working directory cannot silently select arbitrary substitute local baseline files. H33's synthetic tests prove a wrong-CWD file cannot falsely produce a matching candidate conclusion, while correct privately scoped inputs still permit only narrow offline review, never release.
+
+This checks *local path selection*, not digital signature or commit authenticity. A maliciously modified script/checkout, forged console export or incomplete Cloud IAM cannot be recognized by the tool as authentic production evidence. An authorized operator must verify checkout origin, exact reviewed commit, Firebase instance and capture custody separately. Every output continues to carry `releaseDecision:NO_GO`, and no cloud credentials or live data are required.
