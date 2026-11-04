@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL,fileURLToPath } from 'node:url';
 import {parsePrivateEvidenceJson} from './r3-private-json-evidence-core.mjs';
 import { assessAuthorityPreflight } from './r3-real-authority-preflight.mjs';
 
@@ -23,6 +23,9 @@ const DOCUMENTED_VIEWER_ROLES = new Set([
 ]);
 const PUBLIC_MEMBERS = new Set(['allUsers', 'allAuthenticatedUsers']);
 const NO_GO = 'NO_GO';
+// The operator CLI reads its reviewed source baseline from its own checkout.
+// An unrelated invocation CWD must not select a substitute Rules/manifest.
+const REVIEW_CHECKOUT_ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 
 // This compares *documents*, not effective production permissions or source
 // provenance. Firestore and RTDB rules, resource-level IAM, inherited policies,
@@ -162,9 +165,10 @@ if (invoked) {
       '.local','share','floodguard-private','r3-h1b');
     const effectiveRules=readPrivateJson(process.argv[3],{privateEvidenceDirectory});
     const projectIam=readPrivateJson(process.argv[5],{privateEvidenceDirectory});
-    const manifest = JSON.parse(fs.readFileSync(
-      'docs/firebase/R3_REAL_AUTHORITY_PREFLIGHT_20261102.json','utf8'));
-    const sourceRules = JSON.parse(fs.readFileSync('firebase.rules.json','utf8'));
+    const manifest = JSON.parse(fs.readFileSync(path.join(
+      REVIEW_CHECKOUT_ROOT,'docs/firebase/R3_REAL_AUTHORITY_PREFLIGHT_20261102.json'),'utf8'));
+    const sourceRules = JSON.parse(fs.readFileSync(path.join(
+      REVIEW_CHECKOUT_ROOT,'firebase.rules.json'),'utf8'));
     const finding = assessPrivateAuthorityEvidence({manifest, sourceRules,
       effectiveRules, projectIam});
     console.log(JSON.stringify(finding));
