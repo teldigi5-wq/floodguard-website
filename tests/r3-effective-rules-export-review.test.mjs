@@ -262,7 +262,9 @@ test('H30 accepts only a directly contained private child, never a nested or ../
   const outcome=JSON.parse(ok.stdout);
   assert.equal(outcome.repoCandidateMatchesExport,true);
   assert.equal(outcome.effectiveFirebaseRulesVerified,false);
-  noGo(outcome);
+  assert.equal(outcome.releaseDecision,'NO_GO');
+  assert.equal(outcome.mayDeploy,false);
+  assert.equal(outcome.maySendAlert,false);
 }));
 
 test('H30 rejects symlinked private evidence root and symlinked evidence files',()=>tmp(dir=>{
