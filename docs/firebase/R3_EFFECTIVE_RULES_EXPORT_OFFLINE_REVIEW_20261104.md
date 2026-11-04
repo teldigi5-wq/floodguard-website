@@ -30,6 +30,14 @@ The Firebase documentation also describes authenticated read-only retrieval via 
 - Output contains only fixed status codes and booleans: never prints input paths, Rules contents, Firebase origin, access tokens, node IDs, hostnames or parse errors.
 - No network or local writes in the checker; native synthetic tests use disposable fake Rules exports only.
 
+## H29: fail-closed on duplicate Rules JSON keys
+
+The operator-supplied Rules file is now scanned for duplicate object keys **at every nested level** before any candidate comparison is allowed. Plain `JSON.parse` keeps the last occurrence of a duplicate key, which could make an ambiguous file look exactly like the reviewed candidate despite an earlier conflicting permission. The H29 scanner first requires valid JSON, then decodes property-name escapes (including `\\u002e`) and checks uniqueness *within each individual object scope*. Repeated `.read` keys in separate independent nodes are still valid.
+
+A duplicate top-level `rules`, nested `.read`, escaped-key alias or shadowed `esp8266` object causes the existing **fixed, redacted** `OPERATOR_EXPORT_UNAVAILABLE_OR_MALFORMED` result and CLI exit code **2**. The error does not reveal the conflicting key, Rules content, file path, OAuth token or input bytes. No new cloud access, credentials, Firebase SDK connection or production write is introduced.
+
+Only the file-based checker can examine duplicate raw JSON keys. The existing in-memory `assessOperatorRulesExport(object,...)` API receives an already parsed object; it cannot recover duplicate keys removed by another JSON parser and is **not** an operator evidence-ingestion substitute. Use the CLI with the original privately preserved Rules bytes. A matching result remains `NO_GO`: the checker cannot attest which Firebase project or instance served the JSON or verify effective IAM, stored descendants, device identity or field safety.
+
 ## Scope and limitations
 
 A user-supplied copy could be forged, stale, copied from a different project or an unsaved editor. The checker cannot confirm Google authentication, project or instance provenance, effective IAM, rule expression behavior on the live database, public descendants, or legacy full-Admin bypass. A matching candidate is not proof of operational security. **All 11 R3 real-world production acceptance gates remain open** until separately reviewed real evidence exists.
