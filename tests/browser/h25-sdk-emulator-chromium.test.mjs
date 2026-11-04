@@ -235,3 +235,78 @@ test('H26: real SDK rain gauge installed=false vetoes NORMAL and numeric zero, t
     assert.doesNotMatch(await metric.innerText(),/0\.0 mm/i);
   }finally{await finish(c);}
 });
+
+
+test('H27: real SDK diagnostics withholds ESP ONLINE and rainfall when inventory says not installed',async()=>{
+  const sample=fixture();
+  sample.devices.esp8266={installed:false,status:'ONLINE'};
+  sample.devices.rainGauge={installed:false,status:'ONLINE'};
+  await adminPut('floodguard/live',sample);
+  const c=await visit('/diagnostics/');
+  try{
+    await settled(c.page,'.status-dock','Recent DB record');
+    const esp=c.page.locator('.diag-stream').filter({hasText:'ESP8266 telemetry'}).first();
+    const rain=c.page.locator('.diag-stream').filter({hasText:'Collector rainfall'}).first();
+    await c.page.waitForFunction(()=>
+      [...document.querySelectorAll('.diag-stream')].some(e=>
+        e.textContent?.includes('ESP8266 telemetry') &&
+        e.textContent?.includes('UNKNOWN · SOURCE UNVERIFIED')) &&
+      [...document.querySelectorAll('.diag-stream')].some(e=>
+        e.textContent?.includes('Collector rainfall') &&
+        e.textContent?.includes('SENSOR UNAVAILABLE · MEASUREMENTS WITHHELD')),
+      {timeout:15000});
+    assert.doesNotMatch(await esp.innerText(),/REPORTED ONLINE|-62 dBm/);
+    assert.doesNotMatch(await rain.innerText(),/REPORTED 0\.0 mm/i);
+    const report=await c.page.locator('#main-content').innerText();
+    assert.match(report,/Faulted or uninstalled rain gauges suppress measurements/);
+    assert.doesNotMatch(report,/SYNTHETIC_PRIVATE_WIFI_NEVER_PUBLIC|192\.0\.2\.99/);
+  }finally{await finish(c);}
+});
+
+test('H27: diagnostics follows installed-only, reconciled ONLINE, contradictory, and stale SDK updates',async()=>{
+  const sample=fixture();
+  sample.devices.esp8266={installed:false,status:'ONLINE'};
+  sample.devices.rainGauge={installed:false,status:'ONLINE'};
+  await adminPut('floodguard/live',sample);
+  const c=await visit('/diagnostics/');
+  try{
+    await settled(c.page,'.status-dock','Recent DB record');
+    const esp=c.page.locator('.diag-stream').filter({hasText:'ESP8266 telemetry'}).first();
+    const rain=c.page.locator('.diag-stream').filter({hasText:'Collector rainfall'}).first();
+
+    await adminPut('floodguard/live/devices/esp8266',{installed:true});
+    await adminPut('floodguard/live/devices/rainGauge',{installed:true});
+    await c.page.waitForTimeout(150);
+    assert.match(await esp.innerText(),/UNKNOWN · SOURCE UNVERIFIED/);
+    assert.doesNotMatch(await rain.innerText(),/REPORTED 0\.0 mm/i);
+
+    await adminPut('floodguard/live/devices/esp8266',{installed:true,status:'ONLINE'});
+    await adminPut('floodguard/live/devices/rainGauge',{installed:true,status:'ONLINE'});
+    await c.page.waitForFunction(()=>
+      [...document.querySelectorAll('.diag-stream')].some(e=>
+        e.textContent?.includes('ESP8266 telemetry') &&
+        e.textContent?.includes('REPORTED ONLINE · UNVERIFIED')) &&
+      [...document.querySelectorAll('.diag-stream')].some(e=>
+        e.textContent?.includes('Collector rainfall') &&
+        e.textContent?.includes('REPORTED 0.0 mm · UNVERIFIED')),
+      {timeout:15000});
+
+    await adminPut('floodguard/live/esp8266/connection','DISCONNECTED');
+    await adminPut('floodguard/live/rain/sensorStatus','OFFLINE');
+    await c.page.waitForFunction(()=>
+      [...document.querySelectorAll('.diag-stream')].some(e=>
+        e.textContent?.includes('ESP8266 telemetry') &&
+        e.textContent?.includes('UNKNOWN · SOURCE UNVERIFIED')) &&
+      [...document.querySelectorAll('.diag-stream')].some(e=>
+        e.textContent?.includes('Collector rainfall') &&
+        e.textContent?.includes('SENSOR UNAVAILABLE · MEASUREMENTS WITHHELD')),
+      {timeout:15000});
+    assert.doesNotMatch(await esp.innerText(),/REPORTED ONLINE|-62 dBm/);
+    assert.doesNotMatch(await rain.innerText(),/REPORTED 0\.0 mm/i);
+
+    await adminPut('floodguard/live/system/lastUpdate',0);
+    await settled(c.page,'.diagnostics-page','Last recorded');
+    assert.doesNotMatch(await esp.innerText(),/REPORTED ONLINE · UNVERIFIED/);
+    assert.doesNotMatch(await rain.innerText(),/REPORTED 0\.0 mm/i);
+  }finally{await finish(c);}
+});
