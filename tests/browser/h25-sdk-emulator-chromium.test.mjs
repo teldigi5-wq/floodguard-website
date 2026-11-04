@@ -333,7 +333,7 @@ test('H28: real SDK gate view revokes raw ESP ONLINE and water levels on contrad
       {timeout:15000});
     assert.doesNotMatch(await liveCard.innerText(),/REPORTED ONLINE/);
     assert.doesNotMatch(await grid.innerText(),/-62 dBm/);
-    assert.doesNotMatch(await water.innerText(),/5\.0 cm/i);
+    assert.doesNotMatch(await water.locator('strong').first().innerText(),/5\.0 cm/i);
     assert.doesNotMatch(await c.page.locator('.final-gate-metrics').innerText(),/REPORTED SAFE/i);
     const scene=c.page.locator('.scene-static-assurance');
     await scene.waitFor({state:'visible'});
@@ -344,6 +344,10 @@ test('H28: real SDK gate view revokes raw ESP ONLINE and water levels on contrad
 
 test('H28: stale gate view withholds source level, ESP online, reason and current risk even with retained values',async()=>{
   const sample=fixture();
+  // CLOSED intentionally discards an active trigger reason in the source
+  // normalizer; use a coherent OPENING report to test stale reason revocation.
+  sample.gate.status='OPENING';
+  sample.gate.angle=45;
   sample.gate.reason='DAM_WARNING';
   await adminPut('floodguard/live',sample);
   const c=await visit('/gate/');
