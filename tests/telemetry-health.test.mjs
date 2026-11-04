@@ -120,9 +120,12 @@ test("ESP child rejection clears cached ONLINE and siblings cannot resurrect it"
   assert.equal(esp.complete,false);
   assert.equal(esp.record("connection","ONLINE",true),null);
   assert.equal(esp.record("rssi",-62,true),null);
-  const recovered=esp.record("status","OFFLINE",true);
+  // A conflicting OFFLINE/ONLINE pair must NOT restore a positive report.
+  assert.equal(esp.record("status","OFFLINE",true),null);
+  assert.equal(esp.complete,false);
+  const recovered=esp.record("connection","OFFLINE",true);
   assert.equal(recovered.status,"OFFLINE");
-  assert.equal(recovered.connection,"ONLINE");
+  assert.equal(recovered.connection,"OFFLINE");
   assert.equal(esp.complete,true);
 });
 
@@ -136,6 +139,45 @@ test("ESP permission/cancellation failure clears and requires fresh independent 
   assert.equal(esp.record("status","UNKNOWN",true),null);
   assert.deepEqual(esp.record("connection","OFFLINE",true),
     {connection:"OFFLINE",status:"UNKNOWN",rssi:-85});
+});
+
+test("contradictory ONLINE/OFFLINE/UNKNOWN children cannot appear as an online field connection",()=>{
+  for(const [status,connection] of [
+    ["ONLINE","OFFLINE"],["OFFLINE","ONLINE"],
+    ["ONLINE","UNKNOWN"],["UNKNOWN","ONLINE"],
+    ["ONLINE","ERROR"],["NOT_INSTALLED","ONLINE"]
+  ]){
+    const esp=createEspChildObservationTracker();
+    esp.record("status",status,true);
+    esp.record("connection",connection,true);
+    assert.equal(esp.record("rssi",-67,true),null,
+      "contradiction "+status+"/"+connection);
+    assert.equal(esp.complete,false,
+      "conflict must not become an apparently complete report");
+    // RSSI updates may still arrive while the two statuses disagree.
+    assert.equal(esp.record("rssi",-60,true),null);
+    const repaired = status==="ONLINE"
+      ? esp.record("connection","ONLINE",true)
+      : esp.record("status","ONLINE",true);
+    assert.deepEqual(repaired,{
+      connection:"ONLINE",status:"ONLINE",rssi:-60
+    });
+    assert.equal(esp.complete,true);
+  }
+});
+
+test("consistently negative and unknown connection states remain reportable, never marked ONLINE",()=>{
+  for(const [status,connection] of [
+    ["OFFLINE","OFFLINE"],["ERROR","OFFLINE"],
+    ["UNKNOWN","OFFLINE"],["NOT_INSTALLED","UNKNOWN"]
+  ]){
+    const esp=createEspChildObservationTracker();
+    esp.record("connection",connection,true);
+    esp.record("rssi",null,true);
+    assert.deepEqual(esp.record("status",status,true),
+      {connection,status,rssi:null});
+    assert.equal(esp.complete,true);
+  }
 });
 
 test("ESP invalid fields and injected child keys cannot report ONLINE",()=>{

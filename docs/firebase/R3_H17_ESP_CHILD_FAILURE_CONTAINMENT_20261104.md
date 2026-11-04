@@ -34,3 +34,24 @@ and alarm CLEAR labels. The same review branch now:
 A green offline job does **not** count skipped emulator cases as tested. The
 emulator integration suite needs a separately controlled, actually running
 fixed localhost:19001 instance; no live Firebase project is permitted.
+
+## Additional reconciliation fix — contradictory ONLINE indicators
+
+A review found that H17's first version accepted `status=ONLINE` alongside
+`connection=OFFLINE` (or `UNKNOWN`) once three children had arrived.
+Because the Devices page preferred `status`, the UI could show an apparent
+online device in the presence of direct conflicting Firebase evidence.
+
+The tracker now considers its snapshot complete only when all three public
+children are present **and** the `status` and `connection` indicators agree
+on whether the report says ONLINE. A contradiction withholds the entire
+ESP report until a subsequent callback resolves it; a sibling RSSI update
+alone cannot resolve the conflict. Negative, error, and unknown reports
+may remain visible as **unverified** when neither asserts ONLINE. The
+Devices page explicitly qualifies even coherent statuses as
+`REPORTED ... · UNVERIFIED` and never presents them as authenticated
+device state.
+
+New synthetic negative cases cover ONLINE/OFFLINE in both directions,
+ONLINE/UNKNOWN, ONLINE/ERROR and recovery. The observation still lacks
+per-child device-signed timestamps or independent source authentication.
