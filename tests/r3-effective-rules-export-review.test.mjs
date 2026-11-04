@@ -329,3 +329,40 @@ test('CLI without export fails closed without opening a cloud connection',()=>{
   assert.equal(response.effectiveFirebaseRulesVerified,false);
   assert.equal(response.mayDeploy,false);
 });
+
+
+test('H33 Rules CLI ignores a different CWD candidate and uses its own checkout',()=>tmp(dir=>{
+  const {cwd,evidence,script}=cliFixture(dir);
+  const foreign=path.join(dir,'untrusted-cwd');
+  fs.mkdirSync(path.join(foreign,'docs/firebase'),{recursive:true});
+  const incompatible=copy(source);
+  incompatible.rules.floodguard.live.water['.read']=false;
+  fs.writeFileSync(path.join(foreign,'firebase.rules.json'),JSON.stringify(incompatible));
+  fs.writeFileSync(path.join(foreign,'docs/firebase/R3_REAL_AUTHORITY_PREFLIGHT_20261102.json'),
+    JSON.stringify(manifest));
+
+  const operator=path.join(evidence,'original.json');
+  privateWrite(operator,JSON.stringify(source));
+  const original=run(operator,{cwd:foreign,script});
+  assert.equal(original.status,0,original.stderr);
+  const report=JSON.parse(original.stdout);
+  assert.equal(report.reason,'MATCHES_REPO_CANDIDATE_BUT_CLOUD_PROVENANCE_UNVERIFIED');
+  assert.equal(report.repoCandidateMatchesExport,true);
+  assert.equal(report.releaseDecision,'NO_GO');
+  assert.equal(report.mayDeploy,false);
+
+  // The foreign checkout includes the exact value an attacker would wish
+  // matched. It must not become this script's reviewed baseline.
+  const compatibleChanged=copy(source);
+  compatibleChanged.rules.floodguard.live.water['.indexOn']=['ts'];
+  fs.writeFileSync(path.join(foreign,'firebase.rules.json'),
+    JSON.stringify(compatibleChanged));
+  privateWrite(operator,JSON.stringify(compatibleChanged));
+  const rejected=run(operator,{cwd:foreign,script});
+  assert.equal(rejected.status,2);
+  const denied=JSON.parse(rejected.stdout);
+  assert.equal(denied.reason,'OPERATOR_EXPORT_DIFFERS_FROM_REPO_CANDIDATE');
+  assert.equal(denied.repoCandidateMatchesExport,false);
+  assert.equal(denied.releaseDecision,'NO_GO');
+  assert.doesNotMatch(rejected.stdout,/untrusted-cwd|original.json|\.read|\.indexOn/);
+}));
