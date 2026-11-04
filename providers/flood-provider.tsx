@@ -10,7 +10,7 @@ import {
 import { onValue, ref, type Unsubscribe } from "firebase/database";
 import { z } from "zod";
 import { database, LIVE_PATH } from "@/lib/firebase";
-import { ageSeconds, classifyTelemetryFreshness, parseFieldTimestamp, createCriticalStreamHealthTracker } from "@/lib/telemetry-health.mjs";
+import { ageSeconds, classifyTelemetryFreshness, parseFieldTimestamp, createCriticalStreamHealthTracker, createEspChildObservationTracker } from "@/lib/telemetry-health.mjs";
 import { reconcileCalibratedWaterMeasurement, reconcileReportedGateStatus, reconcileReportedRainStatus, reconcileDisplayedFloodRisk } from "@/lib/telemetry-safety.mjs";
 
 const shortText = z.string().max(80);
@@ -191,6 +191,22 @@ export function FloodProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribers: Unsubscribe[] = [];
     const criticalStreams = createCriticalStreamHealthTracker();
+    const espTracker = createEspChildObservationTracker();
+    const setEspObservation = (reported: {
+      connection: string | null; status: string | null; rssi: number | null
+    } | null) => {
+      setData(previous => {
+        // Do not retain an old ONLINE value (or private ESP data) after any
+        // child permission, network or validation failure.
+        if (reported === null) {
+          if (previous === null || !Object.hasOwn(previous, "esp8266")) return previous;
+          const next: LiveData = { ...previous };
+          delete next.esp8266;
+          return Object.keys(next).length ? next : null;
+        }
+        return { ...previous, esp8266: reported };
+      });
+    };
     const updateCriticalStatus = (key: string, healthy: boolean) => {
       // Independent child listeners may succeed in an arbitrary order.
       // Neither a healthy unrelated stream nor a partial recovery may
@@ -300,15 +316,24 @@ export function FloodProvider({ children }: { children: ReactNode }) {
               const parsed = espSchemas[key].safeParse(normalized);
               if (!parsed.success) {
                 if (raw !== null) console.warn(`FloodGuard ignored invalid ESP ${key} payload`);
+                // An unrelated ESP child cannot reintroduce a cached ONLINE
+                // value after this one has become invalid.
+                espTracker.fail();
+                setEspObservation(null);
+                release();
                 return;
               }
-              setData((previous) => ({
-                ...previous,
-                esp8266: { ...previous?.esp8266, [key]: parsed.data },
-              }));
+              const qualified = espTracker.record(key, parsed.data, true);
+              setEspObservation(qualified);
               release();
             },
-            () => release(),
+            () => {
+              // Firebase can cancel ONE descendant subscription even when
+              // /system and the other ESP listeners are still responding.
+              espTracker.fail();
+              setEspObservation(null);
+              release();
+            },
           ),
         );
       }

@@ -50,12 +50,19 @@ async function status(method, path, payload, privileged = false) {
   return response.status;
 }
 const refused = code => code === 401 || code === 403;
+// This file performs real loopback HTTP I/O and requires a separately started,
+// fixed local Firebase emulator. Generic npm test / PR CI is OFFLINE.
+// Skip only when neither emulator variable is supplied; partial or incorrect
+// configuration must still execute and FAIL CLOSED through requireLocalEmulator.
+const emulatorConfigured = process.env.FIREBASE_DATABASE_EMULATOR_HOST !== undefined ||
+  process.env.GCLOUD_PROJECT !== undefined;
+const emulatorTest = emulatorConfigured ? test : test.skip;
 
-test('no production host or project can be supplied', () => {
+emulatorTest('no production host or project can be supplied', () => {
   requireLocalEmulator();
   assert.equal(emulatorURL('floodguard/live/system').origin, BASE);
 });
-test('privileged emulator-only seed uses deliberately stale synthetic values', async () => {
+emulatorTest('privileged emulator-only seed uses deliberately stale synthetic values', async () => {
   const sample = {
     water: {distanceCm: 15.35, levelCm: 9.65, status: 'WARNING'},
     rain: {currentMm: 35, dailyMm: 35},
@@ -68,19 +75,19 @@ test('privileged emulator-only seed uses deliberately stale synthetic values', a
   };
   assert.equal(await status('PUT', 'floodguard/live', sample, true), 200);
 });
-test('nine public telemetry reads allowed by the real emulator Rules engine', async () => {
+emulatorTest('nine public telemetry reads allowed by the real emulator Rules engine', async () => {
   for (const p of approved) {
     const code = await status('GET', 'floodguard/live/' + p);
     assert.equal(code, 200, p);
   }
 });
-test('private ESP data and parent/test/bot nodes remain unreadable', async () => {
+emulatorTest('private ESP data and parent/test/bot nodes remain unreadable', async () => {
   for (const p of denied) {
     const code = await status('GET', p);
     assert.ok(refused(code), (p || '/') + ' unexpectedly returned ' + code);
   }
 });
-test('anonymous client cannot PUT any public branch or private control path', async () => {
+emulatorTest('anonymous client cannot PUT any public branch or private control path', async () => {
   for (const p of [
     ...approved.map(x => 'floodguard/live/' + x),
     'floodguard/live', 'floodguard/live/esp8266/ip', 'floodguard/bot',
@@ -89,13 +96,13 @@ test('anonymous client cannot PUT any public branch or private control path', as
     assert.ok(refused(code), p + ' returned ' + code);
   }
 });
-test('anonymous PATCH and DELETE remain denied', async () => {
+emulatorTest('anonymous PATCH and DELETE remain denied', async () => {
   const patch = await status('PATCH', 'floodguard/live', {system: {lastUpdate: 1}});
   const deletion = await status('DELETE', 'floodguard/live/system');
   assert.ok(refused(patch), 'PATCH returned ' + patch);
   assert.ok(refused(deletion), 'DELETE returned ' + deletion);
 });
-test('privileged synthetic seed persists after unauthorized modifications', async () => {
+emulatorTest('privileged synthetic seed persists after unauthorized modifications', async () => {
   assert.equal(await status('GET', 'floodguard/live/system/lastUpdate', undefined, true), 200);
   assert.equal(await status('GET', 'floodguard/live/esp8266/ip', undefined, true), 200);
 });

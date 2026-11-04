@@ -70,7 +70,14 @@ test("historical hardware states must not appear live", async () => {
   assert.ok(devices.includes("LAST REPORTED:"), "Historic device state label is required");
   assert.ok(rain.includes("current state unverified"), "Rain sensor online claims require fresh telemetry");
   assert.ok(gate.includes("activeCountdown"), "Historical countdowns must never animate as active timers");
-  assert.ok(gate.includes('freshness === "live" && gateState'), "Discharge visualization must require fresh telemetry");
+  // H15 disabled operational-style release animations entirely; recency
+  // alone must NOT authorize a visual that resembles physical discharge.
+  assert.ok(gate.includes("const releaseActive = false;"),
+    "Unsigned gate telemetry must not imply active physical discharge");
+  assert.ok(gate.includes("describeGateObservation({ gate, freshness })"),
+    "Gate state must pass the fail-closed reported-position contract");
+  assert.ok(gate.includes("Physical gate closure and countdown are not independently verified."),
+    "A reported countdown cannot prove an actual closed gate");
 });
 
 test("template RTDB rules cannot grant private ESP access through readable ancestors", async () => {
