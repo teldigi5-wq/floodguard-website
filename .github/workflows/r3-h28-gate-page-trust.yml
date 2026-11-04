@@ -1,0 +1,191 @@
+name: FloodGuard H28 gate page trust + real SDK RTDB and Chromium (NO DEPLOY)
+
+on:
+  push:
+    branches:
+      - safety/r3-h28-gate-page-trust-20261104
+  pull_request:
+    branches:
+      - safety/r3-h27-diagnostics-source-consistency-20261104
+
+permissions:
+  contents: read
+
+jobs:
+  offline-source-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    steps:
+      - name: Checkout with no persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up supported Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Install locked dependencies without scripts
+        run: npm ci --ignore-scripts
+      - name: All inherited offline safety checks
+        run: npm test
+      - name: TypeScript
+        run: npm run typecheck
+      - name: ESLint
+        run: npm run lint
+      - name: Non-deploy static export
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build
+
+  chromium-unavailable-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout with no persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked production build dependencies without scripts
+        run: npm ci --ignore-scripts
+      - name: Export preview-free static website without Firebase credentials
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+          NEXT_PUBLIC_FIREBASE_DATABASE_URL: ''
+        run: npm run build
+      - name: Install disposable exact-version Playwright library
+        run: npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.64.1
+      - name: Install disposable Chromium and Linux dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Start loopback-only static server and check readiness
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory out > /tmp/fg-h24-http.log 2>&1 &
+          echo "$!" > /tmp/fg-h24-http.pid
+          for i in {1..30}; do
+            if curl --silent --show-error --fail http://127.0.0.1:4173/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/fg-h24-http.log
+          exit 1
+      - name: Execute actual browser navigation, safety and reduced-motion checks
+        run: node --test tests/browser/h23-readonly-chromium.test.mjs
+      - name: Stop loopback server
+        if: always()
+        run: |
+          if test -f /tmp/fg-h24-http.pid; then
+            kill "$(cat /tmp/fg-h24-http.pid)" || true
+          fi
+
+  restrictive-r3-emulator:
+    name: Restrictive R3 rules — actual local Firebase emulator, NO CLOUD
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      CI: 'true'
+      GCLOUD_PROJECT: demo-floodguard-r3
+      FIREBASE_TOKEN: ''
+      GOOGLE_APPLICATION_CREDENTIALS: ''
+    steps:
+      - name: Checkout reviewed source without persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Java 21 for local RTDB emulator
+        uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Fixed demo namespace and restrictive Rules preflight
+        run: |
+          set -euo pipefail
+          test "$GCLOUD_PROJECT" = "demo-floodguard-r3"
+          test -z "${FIREBASE_TOKEN}"
+          test -z "${GOOGLE_APPLICATION_CREDENTIALS}"
+          test ! -e .floodguard-private-evidence
+          node --test tests/r3-h24-emulator-configuration.test.mjs
+          node --test tests/r3-merged-rules-review.test.mjs
+          node --test tests/r3-private-firmware-ingress-preflight.test.mjs
+      - name: Execute seven real restrictive-Rules emulator tests
+        run: |
+          set -euo pipefail
+          npx --yes firebase-tools@15.34.2 emulators:exec \
+            --only database \
+            --project demo-floodguard-r3 \
+            --config r3-firebase-emulator.json \
+            "node --test tests/r3-firebase-emulator.test.mjs"
+
+  sdk-rtdb-browser-lab:
+    name: Real SDK gate and diagnostics trust vs restrictive RTDB, NO CLOUD
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      CI: 'true'
+      GCLOUD_PROJECT: demo-floodguard-r3
+      FIREBASE_TOKEN: ''
+      GOOGLE_APPLICATION_CREDENTIALS: ''
+      NEXT_PUBLIC_FG_R3_EMULATOR_LAB: '1'
+      NEXT_PUBLIC_FIREBASE_DATABASE_URL: https://demo-floodguard-r3-default-rtdb.firebasedatabase.app
+      NEXT_PUBLIC_FIREBASE_LIVE_PATH: floodguard/live
+    steps:
+      - name: Checkout exact draft without persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Node 24 for browser and SDK
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Java 21 for restricted local database
+        uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Validate demo-only compile contract and JSON rules
+        run: |
+          set -euo pipefail
+          test "$GCLOUD_PROJECT" = "demo-floodguard-r3"
+          test -z "$FIREBASE_TOKEN"
+          test -z "$GOOGLE_APPLICATION_CREDENTIALS"
+          test ! -e .floodguard-private-evidence
+          node --check tests/browser/h25-sdk-emulator-chromium.test.mjs
+          node --test tests/r3-h25-sdk-emulator-guard.test.mjs
+          node --test tests/r3-h24-emulator-configuration.test.mjs
+      - name: Install locked website dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Build demo-only browser with no deploy
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build
+      - name: Add ephemeral pinned Playwright library
+        run: npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.64.1
+      - name: Install ephemeral Chromium for local-only browser
+        run: npx playwright install --with-deps chromium
+      - name: Run genuine restricted RTDB + live SDK browser transitions
+        run: |
+          set -euo pipefail
+          npx --yes firebase-tools@15.34.2 emulators:exec \
+            --only database \
+            --project demo-floodguard-r3 \
+            --config r3-firebase-emulator.json \
+            "FG_H25_BROWSER_LAB=1 bash scripts/r3-h25-browser-emulator-lab.sh"
