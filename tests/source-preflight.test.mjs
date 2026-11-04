@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
+import { describePublicRainObservation } from "../lib/public-health-observation.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const read = async (f) => readFile(resolve(root, f), "utf8");
@@ -68,7 +69,21 @@ test("historical hardware states must not appear live", async () => {
   const rain = await read("app/rainfall/page.tsx");
   const gate = await read("app/gate/page.tsx");
   assert.ok(devices.includes("LAST REPORTED:"), "Historic device state label is required");
-  assert.ok(rain.includes("current state unverified"), "Rain sensor online claims require fresh telemetry");
+  assert.ok(rain.includes("describePublicRainObservation"), "Rain surface must use qualified shared reporting");
+  assert.ok(rain.includes("view.gaugeLabel"), "Rain gauge status must not be derived directly from a single raw child");
+  // Retain and strengthen this inherited freshness contract: absent/stale
+  // and contradictory sensor health cannot declare physical sensor ONLINE.
+  for (const input of [
+    {rain:{status:"NORMAL",currentMm:0,dailyMm:0,sensorStatus:"ONLINE"},device:"OFFLINE",freshness:"live"},
+    {rain:{status:"NORMAL",currentMm:0,dailyMm:0,sensorStatus:"ONLINE"},device:"ONLINE",freshness:"stale"},
+    {rain:null,device:"ONLINE",freshness:"live"}
+  ]) {
+    const view=describePublicRainObservation(input);
+    assert.notEqual(view.gaugeLabel,"REPORTED ONLINE · UNVERIFIED");
+    assert.equal(view.currentMm,null);
+    assert.equal(view.dailyMm,null);
+    assert.equal(view.canDeclareNormal,false);
+  }
   assert.ok(gate.includes("activeCountdown"), "Historical countdowns must never animate as active timers");
   // H15 disabled operational-style release animations entirely; recency
   // alone must NOT authorize a visual that resembles physical discharge.
