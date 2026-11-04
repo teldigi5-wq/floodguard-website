@@ -19,6 +19,8 @@ import { useLive } from "@/hooks/use-live";
 import { ageLabel, fmt, label } from "@/components/ui";
 import { Metric, StatePanel } from "@/components/page-kit";
 import { describeGateObservation } from "@/lib/gate-observation-view.mjs";
+import { describePublicMonitorView } from "@/lib/public-monitor-view.mjs";
+import { describeWaterObservation,describeRiskObservation } from "@/lib/dashboard-water-observation.mjs";
 
 const DamScene = dynamic(() => import("@/components/dam-scene"), {
   ssr: false,
@@ -44,6 +46,11 @@ export default function GatePage() {
   const { data, freshness, age } = useLive();
   const gate = data?.gate;
   const water = data?.water;
+  const monitor=describePublicMonitorView({data,freshness});
+  const waterObservation=describeWaterObservation({water,freshness});
+  const riskObservation=describeRiskObservation({
+    reportedRisk:data?.system?.overallRisk,freshness
+  });
 
   // A valid controller status and matching angle are required even to
   // show a *reported* position. No unsigned reading verifies actual motion.
@@ -53,9 +60,16 @@ export default function GatePage() {
   // Firebase has no witnessed physical discharge sensor. Disable the
   // operational-style discharge treatment; 3D is illustrative only.
   const releaseActive = false;
-  const waterState = (water?.status ?? "UNKNOWN").toUpperCase();
-  const danger = waterState === "DANGER";
+  // A stale or sensor-faulted water reading never supplies a current
+  // level or an active-looking water hazard style on the gate scene.
+  const danger = waterObservation.dangerBandActive;
   const stateCopy = observedGate.displayLabel;
+  const reportedReason=freshness==="live" && gateState!=="UNKNOWN"
+    && typeof gate?.reason==="string"
+    ? gate.reason.trim().toUpperCase():null;
+  const reasonDescription=reportedReason && Object.hasOwn(reasons,reportedReason)
+    ? reasons[reportedReason]
+    : "No coherent current controller reason is available; physical cause unverified.";
 
   return (
     <main className="page final-gate-page">
@@ -74,7 +88,7 @@ export default function GatePage() {
               <i /> {observedGate.displayLabel}
             </span>
             <span><Gauge /> {angle === null ? "Angle unavailable" : `${Math.round(angle)}° reported servo angle`}</span>
-            <span><Droplets /> {fmt(water?.levelCm, "cm", 1)} water level</span>
+            <span><Droplets /> {fmt(waterObservation.currentLevel, "cm", 1)} unsigned water level</span>
           </div>
         </div>
 
@@ -85,7 +99,7 @@ export default function GatePage() {
           </div>
           <div>
             <small>ESP8266</small>
-            <strong>{label(data?.esp8266?.status ?? data?.esp8266?.connection)}</strong>
+            <strong>{monitor.espLabel}</strong>
           </div>
           <div>
             <small>Updated</small>
@@ -93,7 +107,7 @@ export default function GatePage() {
           </div>
           <div>
             <small>Reported risk · source unverified</small>
-            <strong>{label(data?.system?.overallRisk)}</strong>
+            <strong>{riskObservation.reportedRiskLabel}</strong>
           </div>
         </div>
       </section>
@@ -116,7 +130,7 @@ export default function GatePage() {
         <div className="final-stage-heading">
           <div>
             <p className="eyebrow"><Sparkles /> 3D spillway & reservoir</p>
-            <h2>{freshness==="live"?stateCopy:"Last recorded: "+stateCopy}</h2>
+            <h2>{stateCopy}</h2>
           </div>
           <div className="final-stage-key">
             <span><i className="key-center" /> Center bay = illustrative SG90 gate model</span>
@@ -128,8 +142,8 @@ export default function GatePage() {
           <div className="final-scene-wrap">
             <DamScene
               angle={angle}
-              rain={freshness === "live" ? data?.rain?.currentMm : null}
-              waterDistance={freshness === "live" ? water?.distanceCm : null}
+              rain={monitor.rainCurrentMm}
+              waterDistance={monitor.waterDistanceCm}
             />
             <div className="final-gate-lift" aria-label="Illustrative reported gate lift, physical position unverified">
               <span>90°</span>
@@ -154,7 +168,7 @@ export default function GatePage() {
                 <div className="final-mini-track"><i style={{ width: `${lift ?? 0}%` }} /></div>
               </article>
               <article>
-                <Droplets /><small>Water level</small><strong>{fmt(water?.levelCm, "cm", 1)}</strong>
+                <Droplets /><small>Water level</small><strong>{fmt(waterObservation.currentLevel, "cm", 1)}</strong>
                 <p>Prototype reservoir level estimate from unsigned HC-SR04 reports and a proposed 25.0 cm calibration; not verified.</p>
               </article>
               <article>
@@ -166,8 +180,8 @@ export default function GatePage() {
                 <p>Database countdown is not proof of physical timer operation.</p>
               </article>
               <article>
-                <Wifi /><small>Network</small><strong>{label(data?.esp8266?.status ?? data?.esp8266?.connection)}</strong>
-                <p>{fmt(data?.esp8266?.rssi, "dBm", 0)}</p>
+                <Wifi /><small>Network</small><strong>{monitor.espLabel}</strong>
+                <p>{fmt(monitor.espSignalDbm, "dBm", 0)} · reported only</p>
               </article>
             </div>
 
@@ -175,8 +189,8 @@ export default function GatePage() {
               <ShieldCheck />
               <div>
                 <small>Controller-reported reason (unverified)</small>
-                <strong>{label(gate?.reason ?? "NONE")}</strong>
-                <p>{reasons[(gate?.reason ?? "NONE").toUpperCase()] ?? "The field controller published the current gate condition."}</p>
+                <strong>{reportedReason && Object.hasOwn(reasons,reportedReason) ? "REPORTED "+reportedReason+" · UNVERIFIED" : "REASON UNKNOWN · UNVERIFIED"}</strong>
+                <p>{reasonDescription}</p>
               </div>
             </div>
           </aside>
@@ -197,7 +211,7 @@ export default function GatePage() {
 
       <section className="metric-grid final-gate-metrics">
         <Metric icon={<Gauge />} title="Gate report" value={observedGate.displayLabel} note={angle === null ? "Angle unavailable or stale" : `${Math.round(angle)}° controller report only`} />
-        <Metric icon={<Droplets />} title="Water report" value={`REPORTED ${label(waterState)}`} note={fmt(water?.levelCm, "cm", 1)} />
+        <Metric icon={<Droplets />} title="Water report" value={waterObservation.reportStatusLabel} note={fmt(waterObservation.currentLevel, "cm", 1)+" · unsigned database report"} />
         <Metric icon={<BellRing />} title="Gate warning" value={activeCountdown?"REPORTED · UNVERIFIED":"UNVERIFIED"} note={activeCountdown?`${countdown}s controller report only`:"No verified physical countdown evidence"} />
         <Metric icon={<ShieldCheck />} title="Control authority" value="LOCAL ARDUINO" note="Actual firmware and physical behavior not verified" />
       </section>

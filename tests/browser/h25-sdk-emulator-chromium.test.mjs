@@ -310,3 +310,67 @@ test('H27: diagnostics follows installed-only, reconciled ONLINE, contradictory,
     assert.doesNotMatch(await rain.innerText(),/REPORTED 0\.0 mm/i);
   }finally{await finish(c);}
 });
+
+
+test('H28: real SDK gate view revokes raw ESP ONLINE and water levels on contradictory inventory and water faults',async()=>{
+  const sample=fixture();
+  sample.gate.reason='DAM_WARNING';
+  await adminPut('floodguard/live',sample);
+  const c=await visit('/gate/');
+  try{
+    const liveCard=c.page.locator('.final-gate-live-card');
+    const grid=c.page.locator('.final-telemetry-grid');
+    const water=grid.locator('article').filter({hasText:'Water level'}).first();
+    await settled(c.page,'.final-gate-live-card','REPORTED ONLINE · UNVERIFIED');
+    assert.match(await water.innerText(),/5\.0 cm/i);
+    await adminPut('floodguard/live/devices/esp8266',{installed:false,status:'ONLINE'});
+    await adminPut('floodguard/live/rain/sensorStatus','OFFLINE');
+    await adminPut('floodguard/live/water/status','SENSOR_ERROR');
+    await c.page.waitForFunction(()=>
+      document.querySelector('.final-gate-live-card')?.textContent?.includes('UNKNOWN · SOURCE UNVERIFIED') &&
+      [...document.querySelectorAll('.final-telemetry-grid article')].some(a=>
+        a.textContent?.includes('Water level') && a.textContent?.includes('Unavailable')),
+      {timeout:15000});
+    assert.doesNotMatch(await liveCard.innerText(),/REPORTED ONLINE/);
+    assert.doesNotMatch(await grid.innerText(),/-62 dBm/);
+    assert.doesNotMatch(await water.locator('strong').first().innerText(),/5\.0 cm/i);
+    assert.doesNotMatch(await c.page.locator('.final-gate-metrics').innerText(),/REPORTED SAFE/i);
+    const scene=c.page.locator('.scene-static-assurance');
+    await scene.waitFor({state:'visible'});
+    assert.match(await scene.innerText(),/WATER READING UNKNOWN · SOURCE UNVERIFIED/);
+    assert.equal(await c.page.locator('.final-gate-stage.danger').count(),0);
+  }finally{await finish(c);}
+});
+
+test('H28: stale gate view withholds source level, ESP online, reason and current risk even with retained values',async()=>{
+  const sample=fixture();
+  // CLOSED intentionally discards an active trigger reason in the source
+  // normalizer; use a coherent OPENING report to test stale reason revocation.
+  sample.gate.status='OPENING';
+  sample.gate.angle=45;
+  sample.gate.reason='DAM_WARNING';
+  await adminPut('floodguard/live',sample);
+  const c=await visit('/gate/');
+  try{
+    const reason=c.page.locator('.final-gate-reason');
+    await settled(c.page,'.final-gate-reason','REPORTED DAM_WARNING · UNVERIFIED');
+    await settled(c.page,'.final-gate-live-card','REPORTED ONLINE · UNVERIFIED');
+    await adminPut('floodguard/live/system/lastUpdate',0);
+    await settled(c.page,'.final-gate-reason','REASON UNKNOWN · UNVERIFIED');
+    await settled(c.page,'.final-gate-live-card','UNKNOWN · SOURCE UNVERIFIED');
+    const body=await c.page.locator('.final-gate-page').innerText();
+    const grid=await c.page.locator('.final-telemetry-grid').innerText();
+    assert.match(body,/CURRENT POSITION UNKNOWN/);
+    assert.match(body,/LAST RECORDED LOW · NOT CURRENT|NO VERIFIED RISK READING/);
+    // Check the actual measurement value; the adjacent calibration note
+    // intentionally retains the fixed 25.0 cm prototype assumption.
+    const waterValue=await c.page.locator('.final-telemetry-grid article')
+      .filter({hasText:'Water level'}).first().locator('strong').innerText();
+    assert.match(waterValue,/Unavailable/i);
+    assert.doesNotMatch(waterValue,/5\.0 cm/i);
+    assert.doesNotMatch(grid,/-62 dBm|REPORTED ONLINE/i);
+    assert.doesNotMatch(await reason.innerText(),/REPORTED DAM_WARNING/);
+    assert.doesNotMatch(await c.page.locator('.final-gate-metrics').innerText(),/REPORTED SAFE/i);
+    assert.equal(await c.page.locator('.final-gate-stage.danger').count(),0);
+  }finally{await finish(c);}
+});
