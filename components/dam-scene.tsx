@@ -3,7 +3,7 @@ import {Canvas,useFrame,useThree} from "@react-three/fiber";
 import {Environment,OrbitControls,Sparkles,Stars} from "@react-three/drei";
 import {useEffect,useMemo,useRef,useState} from "react";
 import {AdditiveBlending,DoubleSide,Group,MathUtils,Mesh,MeshBasicMaterial,MeshPhysicalMaterial,Vector3} from "three";
-import {useLive} from "@/hooks/use-live";
+import {describeSceneAvailability} from "@/lib/scene-availability.mjs";
 
 const clamp=(value:number)=>Math.min(1,Math.max(0,value));
 const lanes=[-2,0,2];
@@ -100,32 +100,69 @@ function CameraRig({view}:{view:ViewMode}){const{camera}=useThree(),goal=useRef(
 
 function Scene({angle,rain,level,view,waterState}:{angle:number;rain:number;level:number;view:ViewMode;waterState:"safe"|"warning"|"danger"|"unavailable"}){const root=useRef<Group>(null),openness=clamp(angle/90),flow=openness*(.22+level*.78);useFrame(({pointer,clock})=>{if(root.current){const target=pointer.x*.07+Math.sin(clock.elapsedTime*.18)*.018;root.current.rotation.y+=(target-root.current.rotation.y)*.018;root.current.rotation.x+=(-pointer.y*.018-root.current.rotation.x)*.02}});return <><fog attach="fog" args={["#061724",12,31]}/><ambientLight intensity={.9}/><hemisphereLight args={["#b9efff","#172e29",1.05]}/><directionalLight position={[6,9,5]} intensity={2.9} color="#e1fbff"/><pointLight position={[0,-.2,3]} intensity={5+flow*10} distance={12} color="#19dff1"/><Stars radius={34} depth={24} count={450} factor={2}/><StormAtmosphere rain={rain} state={waterState}/><group ref={root}><ReservoirBasin level={level}/><UltrasonicGauge level={level} state={waterState}/><DownstreamChannel flow={flow}/><Dam openness={openness}/><GateLiftGuides openness={openness}/><Discharge flow={flow}/><FlowTracers flow={flow}/><RainField rain={rain}/></group><CameraRig view={view}/><OrbitControls makeDefault enablePan={false} enableZoom minDistance={8} maxDistance={15} target={[0,-.25,.6]} minPolarAngle={.7} maxPolarAngle={1.72} minAzimuthAngle={-Math.PI} maxAzimuthAngle={Math.PI} dampingFactor={.06} enableDamping/><Environment preset="night"/></>}
 
-export default function DamScene({angle=0,rain=0,waterDistance}:{angle?:number|null;rain?:number|null;waterDistance?:number|null}){
- const{data}=useLive();
- const liveDistance=waterDistance===undefined?data?.water?.distanceCm:waterDistance;
+export default function DamScene({angle=null,rain=0,waterDistance=null}:{angle?:number|null;rain?:number|null;waterDistance?:number|null}){
+ const[reducedMotion,setReducedMotion]=useState(()=>typeof window!=="undefined" &&
+   typeof window.matchMedia==="function" &&
+   window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+ const availability=describeSceneAvailability({angle,waterDistance,reducedMotion});
+ const liveDistance=availability.waterDistanceCm;
  const host=useRef<HTMLDivElement>(null);
  const[animate,setAnimate]=useState(false);
  const[view,setView]=useState<ViewMode>("overview");
  const[tour,setTour]=useState(false);
  const[section,setSection]=useState(false);
  const[fullscreen,setFullscreen]=useState(false);
- const safeAngle=Math.max(0,Math.min(90,angle??0));
+ const safeAngle=availability.gateAngleDeg??0;
  const levelReading=waterFillFromGap(liveDistance);
  const level=levelReading??.08;
  const gateOpen=clamp(safeAngle/90);
  const flow=Math.round(gateOpen*(.22+level*.78)*100);
  const levelPercent=levelReading===null?null:Math.round(levelReading*100);
  const waterState:"safe"|"warning"|"danger"|"unavailable"=typeof liveDistance!=="number"?"unavailable":liveDistance<=12?"danger":liveDistance<=15?"warning":"safe";
- const gateLabel=angle==null?"UNKNOWN":gateOpen>=.89?"REPORTED OPEN":gateOpen<=.02?"REPORTED CLOSED":"REPORTED MOVING";
+ const gateLabel=availability.gateAngleDeg===null?"UNKNOWN":gateOpen>=.89?"REPORTED OPEN":gateOpen<=.02?"REPORTED CLOSED":"REPORTED MOVING";
 
- useEffect(()=>{const reduced=matchMedia("(prefers-reduced-motion: reduce)").matches;const node=host.current;if(!node||reduced){setAnimate(true);return;}const observer=new IntersectionObserver(([entry])=>setAnimate(entry.isIntersecting),{rootMargin:"140px"});observer.observe(node);return()=>observer.disconnect()},[]);
- useEffect(()=>{if(!tour||matchMedia("(prefers-reduced-motion: reduce)").matches)return;const order:ViewMode[]=["overview","reservoir","spillway"];const timer=window.setInterval(()=>setView(current=>order[(order.indexOf(current)+1)%order.length]),6200);return()=>window.clearInterval(timer)},[tour]);
+ useEffect(()=>{
+   if(typeof window.matchMedia!=="function")return;
+   const query=window.matchMedia("(prefers-reduced-motion: reduce)");
+   const onChange=(event:MediaQueryListEvent)=>setReducedMotion(event.matches);
+   setReducedMotion(query.matches);
+   query.addEventListener("change",onChange);
+   return()=>query.removeEventListener("change",onChange);
+ },[]);
+ useEffect(()=>{
+   if(!availability.render3D){setAnimate(false);return;}
+   const node=host.current;
+   if(!node)return;
+   if(typeof IntersectionObserver==="undefined"){setAnimate(true);return;}
+   const observer=new IntersectionObserver(([entry])=>setAnimate(entry.isIntersecting),{rootMargin:"140px"});
+   observer.observe(node);
+   return()=>observer.disconnect();
+ },[availability.render3D]);
+ useEffect(()=>{if(!tour||reducedMotion||!availability.render3D)return;const order:ViewMode[]=["overview","reservoir","spillway"];const timer=window.setInterval(()=>setView(current=>order[(order.indexOf(current)+1)%order.length]),6200);return()=>window.clearInterval(timer)},[tour,reducedMotion,availability.render3D]);
  useEffect(()=>{const update=()=>setFullscreen(document.fullscreenElement===host.current);document.addEventListener("fullscreenchange",update);return()=>document.removeEventListener("fullscreenchange",update)},[]);
  const chooseView=(item:ViewMode)=>{setTour(false);setView(item)};
  const toggleFullscreen=async()=>{if(!host.current)return;if(document.fullscreenElement)await document.exitFullscreen();else await host.current.requestFullscreen()};
 
+ if(!availability.render3D) return <section ref={host}
+    className="scene scene-static-assurance"
+    role="group"
+    aria-label="FloodGuard unsigned source observation, no simulated physical gate position">
+    <div className="scene-static-body">
+      <p className="scene-static-eyebrow">FLOODGUARD / SOURCE UNVERIFIED</p>
+      <h2>{availability.mode==="reduced-motion"?"Motion-free observation":"3D visualization withheld"}</h2>
+      <p>{availability.mode==="reduced-motion"
+        ?"Animation disabled for your reduced-motion preference. These database reports are not physical verification."
+        :"An internally consistent, timestamp-recent gate report and water observation are both needed to display an illustrative model. Unknown is not closed."}</p>
+      <dl className="scene-static-readings">
+        <div><dt>Reported gate</dt><dd>{availability.gateLabel}</dd></div>
+        <div><dt>Reported water</dt><dd>{availability.waterLabel}</dd></div>
+        <div><dt>Physical flood safety</dt><dd>{availability.physicalFloodSafety}</dd></div>
+      </dl>
+      <small>Not an all-clear · No gate commands · No verified physical position</small>
+    </div>
+  </section>;
  return <div ref={host} className="scene dam-scene dam-scene-v2 dam-scene-v37" data-flowing={flow>2} data-risk={waterState==="safe"?"unavailable":waterState} aria-label={`Illustrative model only. Unsigned Firebase report: water gap ${liveDistance??"unavailable"} centimetres; controller gate angle ${angle??"unavailable"} degrees; modeled flow ${flow} percent. Physical gate position is not verified.`}>
-   <Canvas frameloop={animate?"always":"demand"} dpr={[1,1.35]} camera={{position:[0,3.8,11.4],fov:43,near:.1,far:55}} gl={{antialias:true,powerPreference:"high-performance"}}>
+   <Canvas fallback={<div className="scene-webgl-unavailable" role="status">WebGL unavailable · source unverified. Read the qualified observation panels instead.</div>} frameloop={animate?"always":"demand"} dpr={[1,1.35]} camera={{position:[0,3.8,11.4],fov:43,near:.1,far:55}} gl={{antialias:true,powerPreference:"high-performance"}}>
      <Scene angle={safeAngle} rain={rain??0} level={level} view={view} waterState={waterState==="safe"?"unavailable":waterState}/>
    </Canvas>
 
@@ -148,7 +185,7 @@ export default function DamScene({angle=0,rain=0,waterDistance}:{angle?:number|n
 
    <div className="scene-side-hud">
      <div className="scene-gate-telemetry"><small>Illustrative gate lift</small><strong>{angle===null?"UNKNOWN":Math.round(gateOpen*100)+"%"}</strong><i><span style={{width:`${Math.round(gateOpen*100)}%`}}/></i></div>
-     <div className={`scene-water-level ${waterState}`}>
+     <div className={`scene-water-level ${waterState==="safe"?"unavailable":waterState}`}>
        <i className="scene-level-meter"><span style={{height:`${levelPercent??0}%`}}/></i>
        <div><small>Unsigned water model · unverified</small><b>{levelPercent===null?"Reading unavailable":`${levelPercent}% visual fill`}</b><em>{typeof liveDistance==="number"?`${liveDistance.toFixed(1)} cm air gap`:"Waiting for HC-SR04"}</em></div>
      </div>
@@ -156,7 +193,7 @@ export default function DamScene({angle=0,rain=0,waterDistance}:{angle?:number|n
      <div className={`scene-operation ${flow>2?"releasing":"holding"}`}><small>Simulated hydraulics</small><b>Physical discharge not independently verified</b></div>
    </div>
 
-   {section&&<aside className="hydraulic-section" aria-label="Illustrative hydraulic cross section"><header><span>Illustrative section</span><b>{waterState.toUpperCase()}</b></header><div className="section-diagram"><i className="section-water" style={{height:`${levelPercent??4}%`}}/><i className="section-dam"/><i className="section-gate" style={{transform:`translateY(${-gateOpen*36}px)`}}/><i className="section-release" style={{opacity:gateOpen}}/></div><dl><div><dt>Surface</dt><dd>{levelPercent===null?"—":`${levelPercent}%`}</dd></div><div><dt>Gate lift</dt><dd>{Math.round(gateOpen*100)}%</dd></div><div><dt>Visual flow</dt><dd>{flow}%</dd></div></dl><p>Illustrative model only. Unsigned reports are not verified field measurements; modeled flow does not prove actual discharge or gate motion.</p></aside>}
+   {section&&<aside className="hydraulic-section" aria-label="Illustrative hydraulic cross section"><header><span>Illustrative section</span><b>{waterState==="safe"?"LOW · UNVERIFIED":waterState==="unavailable"?"UNKNOWN · UNVERIFIED":"POSSIBLE "+waterState.toUpperCase()+" · UNVERIFIED"}</b></header><div className="section-diagram"><i className="section-water" style={{height:`${levelPercent??4}%`}}/><i className="section-dam"/><i className="section-gate" style={{transform:`translateY(${-gateOpen*36}px)`}}/><i className="section-release" style={{opacity:gateOpen}}/></div><dl><div><dt>Surface</dt><dd>{levelPercent===null?"—":`${levelPercent}%`}</dd></div><div><dt>Gate lift</dt><dd>{Math.round(gateOpen*100)}%</dd></div><div><dt>Visual flow</dt><dd>{flow}%</dd></div></dl><p>Illustrative model only. Unsigned reports are not verified field measurements; modeled flow does not prove actual discharge or gate motion.</p></aside>}
 
    <div className="scene-sensor-badge"><i/><span><small>HC-SR04 model</small><b>Beam illustrates unsigned report</b></span></div>
    <div className="scene-orientation" aria-hidden><span>Upstream</span><i/><span>Dam</span><i/><span>Downstream</span></div>
