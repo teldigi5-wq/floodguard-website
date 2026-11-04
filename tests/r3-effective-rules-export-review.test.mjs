@@ -115,7 +115,7 @@ test('CLI reads only a distinct, bounded, regular private file and redacts outpu
   fs.writeFileSync(location,'{invalid-json "auth=DO_NOT_LEAK"');
   const invalid=run(location);
   assert.equal(invalid.status,2);
-  assert.doesNotMatch(invalid.stdout,'DO_NOT_LEAK');
+  assert.doesNotMatch(invalid.stdout,/DO_NOT_LEAK/);
   fs.writeFileSync(location,'X'.repeat(128*1024+1));
   const huge=run(location);
   assert.equal(huge.status,2);
@@ -132,5 +132,10 @@ test('CLI without export fails closed without opening a cloud connection',()=>{
     path.join(root,'scripts/r3-effective-rules-export-review.mjs')
   ],{cwd:root,encoding:'utf8',timeout:3000});
   assert.equal(proc.status,2);
-  noGo(JSON.parse(proc.stdout));
+  const response=JSON.parse(proc.stdout);
+  assert.equal(response.releaseDecision,'NO_GO');
+  assert.equal(response.operatorExportProvided,false);
+  assert.equal(response.repoCandidateMatchesExport,false);
+  assert.equal(response.effectiveFirebaseRulesVerified,false);
+  assert.equal(response.mayDeploy,false);
 });
