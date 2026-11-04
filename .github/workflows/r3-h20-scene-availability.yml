@@ -1,0 +1,47 @@
+name: FloodGuard H20 scene availability and reduced motion (NO DEPLOY)
+
+on:
+  push:
+    branches:
+      - safety/r3-h20-scene-fallback-reduced-motion-20261104
+  pull_request:
+    branches:
+      - safety/r3-h19-public-home-provenance-20261104
+
+permissions:
+  contents: read
+
+jobs:
+  offline-scene-assurance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    steps:
+      - name: Checkout without retained credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Setup supported Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Install locked packages without scripts
+        run: npm ci --ignore-scripts
+      - name: Full offline regression suite and new H20 tests
+        run: |
+          set -euo pipefail
+          node --check lib/scene-availability.mjs
+          node --check tests/r3-h20-scene-fallback-accessibility.test.mjs
+          npm test
+      - name: Strict TypeScript check
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Next build without deploying
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build
