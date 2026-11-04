@@ -9,6 +9,7 @@ export interface PublicMonitorView {
   readonly gateLabel: string;
   readonly alarmLabel: string;
   readonly espLabel: string;
+  readonly espState: string;
   readonly espSignalDbm: number | null;
   readonly rainCurrentMm: number | null;
   readonly rainLabel: string;
