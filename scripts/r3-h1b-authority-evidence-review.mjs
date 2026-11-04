@@ -165,9 +165,11 @@ if (invoked) {
       '.local','share','floodguard-private','r3-h1b');
     const effectiveRules=readPrivateJson(process.argv[3],{privateEvidenceDirectory});
     const projectIam=readPrivateJson(process.argv[5],{privateEvidenceDirectory});
-    const manifest = JSON.parse(fs.readFileSync(path.join(
+    // Apply the same escaped-key/duplicate-key integrity check to the local
+    // reviewed baseline, not just privately supplied operator evidence.
+    const manifest = parsePrivateEvidenceJson(fs.readFileSync(path.join(
       REVIEW_CHECKOUT_ROOT,'docs/firebase/R3_REAL_AUTHORITY_PREFLIGHT_20261102.json'),'utf8'));
-    const sourceRules = JSON.parse(fs.readFileSync(path.join(
+    const sourceRules = parsePrivateEvidenceJson(fs.readFileSync(path.join(
       REVIEW_CHECKOUT_ROOT,'firebase.rules.json'),'utf8'));
     const finding = assessPrivateAuthorityEvidence({manifest, sourceRules,
       effectiveRules, projectIam});

@@ -96,8 +96,10 @@ export function inspectExportFromFile(fileName,{candidateFile,manifestFile,
        path.dirname(inputPath)!==fs.realpathSync(privateEvidenceDirectory))
       return safeResult('OPERATOR_EXPORT_OUTSIDE_PRIVATE_DIRECTORY');
     const operatorExport=readPrivateFile(fileName);
-    const candidate=JSON.parse(fs.readFileSync(candidateFile,'utf8'));
-    const manifest=JSON.parse(fs.readFileSync(manifestFile,'utf8'));
+    // The reviewed candidate and manifest must be as unambiguous as the
+    // operator export. Duplicate keys in any source are a fixed NO-GO.
+    const candidate=parsePrivateEvidenceJson(fs.readFileSync(candidateFile,'utf8'));
+    const manifest=parsePrivateEvidenceJson(fs.readFileSync(manifestFile,'utf8'));
     return assessOperatorRulesExport(operatorExport,candidate,manifest);
   }catch{return safeResult('OPERATOR_EXPORT_UNAVAILABLE_OR_MALFORMED');}
 }
