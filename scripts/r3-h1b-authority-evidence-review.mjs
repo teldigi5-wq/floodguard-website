@@ -120,17 +120,20 @@ export function readPrivateJson(fileName,{privateEvidenceDirectory}={}) {
   const flags=fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW??0);
   let fd;
   try {
+    // The library and CLI share the same mandatory private-evidence boundary.
+    // No caller can silently bypass it by omitting the directory option.
+    if(typeof privateEvidenceDirectory!=='string'||
+       !privateEvidenceDirectory.trim())
+      throw Error('missing-private-root');
     const original=fs.lstatSync(fileName);
     if (!original.isFile()||original.isSymbolicLink()||original.nlink!==1)
       throw Error('invalid-original');
-    if (privateEvidenceDirectory!==undefined) {
-      const parent=fs.lstatSync(privateEvidenceDirectory);
-      if (!parent.isDirectory()||parent.isSymbolicLink()||
-          (process.platform!=='win32'&&(parent.mode&0o077)!==0)||
-          path.dirname(fs.realpathSync(fileName))!==
-            fs.realpathSync(privateEvidenceDirectory))
-        throw Error('outside-private-root');
-    }
+    const parent=fs.lstatSync(privateEvidenceDirectory);
+    if (!parent.isDirectory()||parent.isSymbolicLink()||
+        (process.platform!=='win32'&&(parent.mode&0o077)!==0)||
+        path.dirname(fs.realpathSync(fileName))!==
+          fs.realpathSync(privateEvidenceDirectory))
+      throw Error('outside-private-root');
     fd=fs.openSync(fileName,flags);
     const st=fs.fstatSync(fd);
     if (!st.isFile()||st.nlink!==1||st.dev!==original.dev||
