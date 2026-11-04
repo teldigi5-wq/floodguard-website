@@ -116,7 +116,7 @@ export default function DamScene({angle=0,rain=0,waterDistance}:{angle?:number|n
  const flow=Math.round(gateOpen*(.22+level*.78)*100);
  const levelPercent=levelReading===null?null:Math.round(levelReading*100);
  const waterState:"safe"|"warning"|"danger"|"unavailable"=typeof liveDistance!=="number"?"unavailable":liveDistance<=12?"danger":liveDistance<=15?"warning":"safe";
- const gateLabel=gateOpen>=.89?"OPEN":gateOpen<=.02?"CLOSED":"MOVING";
+ const gateLabel=angle==null?"UNKNOWN":gateOpen>=.89?"REPORTED OPEN":gateOpen<=.02?"REPORTED CLOSED":"REPORTED MOVING";
 
  useEffect(()=>{const reduced=matchMedia("(prefers-reduced-motion: reduce)").matches;const node=host.current;if(!node||reduced){setAnimate(true);return;}const observer=new IntersectionObserver(([entry])=>setAnimate(entry.isIntersecting),{rootMargin:"140px"});observer.observe(node);return()=>observer.disconnect()},[]);
  useEffect(()=>{if(!tour||matchMedia("(prefers-reduced-motion: reduce)").matches)return;const order:ViewMode[]=["overview","reservoir","spillway"];const timer=window.setInterval(()=>setView(current=>order[(order.indexOf(current)+1)%order.length]),6200);return()=>window.clearInterval(timer)},[tour]);
@@ -124,14 +124,14 @@ export default function DamScene({angle=0,rain=0,waterDistance}:{angle?:number|n
  const chooseView=(item:ViewMode)=>{setTour(false);setView(item)};
  const toggleFullscreen=async()=>{if(!host.current)return;if(document.fullscreenElement)await document.exitFullscreen();else await host.current.requestFullscreen()};
 
- return <div ref={host} className="scene dam-scene dam-scene-v2 dam-scene-v37" data-flowing={flow>2} data-risk={waterState} aria-label={`Interactive reservoir and dam model. Water sensor gap ${liveDistance??"unavailable"} centimetres. Gate angle ${safeAngle} degrees. Procedural flow intensity ${flow} percent.`}>
+ return <div ref={host} className="scene dam-scene dam-scene-v2 dam-scene-v37" data-flowing={flow>2} data-risk={waterState} aria-label={`Illustrative model only. Unsigned Firebase report: water gap ${liveDistance??"unavailable"} centimetres; controller gate angle ${angle??"unavailable"} degrees; modeled flow ${flow} percent. Physical gate position is not verified.`}>
    <Canvas frameloop={animate?"always":"demand"} dpr={[1,1.35]} camera={{position:[0,3.8,11.4],fov:43,near:.1,far:55}} gl={{antialias:true,powerPreference:"high-performance"}}>
      <Scene angle={safeAngle} rain={rain??0} level={level} view={view} waterState={waterState}/>
    </Canvas>
 
-   <div className="scene-topbar" aria-label="Live dam telemetry">
-     <div className={`scene-status-chip ${waterState}`}><i/><span><small>Reservoir</small><b>{waterState.toUpperCase()}</b></span></div>
-     <div className="scene-status-chip gate"><span><small>Gate position</small><b>{gateLabel} · {Math.round(safeAngle)}°</b></span></div>
+   <div className="scene-topbar" aria-label="Unsigned model inputs, not verified physical telemetry">
+     <div className={`scene-status-chip ${waterState}`}><i/><span><small>Reported reservoir · unverified</small><b>{waterState.toUpperCase()}</b></span></div>
+     <div className="scene-status-chip gate"><span><small>Unverified gate report</small><b>{gateLabel}{angle===null?"":` · ${Math.round(safeAngle)}°`}</b></span></div>
      <div className="scene-status-chip water"><span><small>HC-SR04 air gap</small><b>{typeof liveDistance==="number"?`${liveDistance.toFixed(1)} cm`:"Unavailable"}</b></span></div>
    </div>
 
@@ -147,18 +147,18 @@ export default function DamScene({angle=0,rain=0,waterDistance}:{angle?:number|n
    </div>
 
    <div className="scene-side-hud">
-     <div className="scene-gate-telemetry"><small>Gate lift</small><strong>{Math.round(gateOpen*100)}%</strong><i><span style={{width:`${Math.round(gateOpen*100)}%`}}/></i></div>
+     <div className="scene-gate-telemetry"><small>Illustrative gate lift</small><strong>{angle===null?"UNKNOWN":Math.round(gateOpen*100)+"%"}</strong><i><span style={{width:`${Math.round(gateOpen*100)}%`}}/></i></div>
      <div className={`scene-water-level ${waterState}`}>
        <i className="scene-level-meter"><span style={{height:`${levelPercent??0}%`}}/></i>
-       <div><small>Live water digital twin</small><b>{levelPercent===null?"Reading unavailable":`${levelPercent}% visual fill`}</b><em>{typeof liveDistance==="number"?`${liveDistance.toFixed(1)} cm air gap`:"Waiting for HC-SR04"}</em></div>
+       <div><small>Unsigned water model · unverified</small><b>{levelPercent===null?"Reading unavailable":`${levelPercent}% visual fill`}</b><em>{typeof liveDistance==="number"?`${liveDistance.toFixed(1)} cm air gap`:"Waiting for HC-SR04"}</em></div>
      </div>
-     <div className={`scene-telemetry ${flow>2?"active":""}`}><i/><span><small>{flow>2?"Controlled release":"Reservoir retained"}</small><b>{flow>2?`${flow}% relative flow`:"Gates sealed"}</b></span></div>
-     <div className={`scene-operation ${flow>2?"releasing":"holding"}`}><small>Hydraulic response</small><b>{flow>2?"Release follows gate lift and water head":"Water retained behind closed gates"}</b></div>
+     <div className={`scene-telemetry ${flow>2?"active":""}`}><i/><span><small>Illustrative model</small><b>{angle===null?"No verified gate angle":`${flow}% modeled flow · unverified`}</b></span></div>
+     <div className={`scene-operation ${flow>2?"releasing":"holding"}`}><small>Simulated hydraulics</small><b>Physical discharge not independently verified</b></div>
    </div>
 
-   {section&&<aside className="hydraulic-section" aria-label="Live hydraulic cross section"><header><span>Live hydraulic section</span><b>{waterState.toUpperCase()}</b></header><div className="section-diagram"><i className="section-water" style={{height:`${levelPercent??4}%`}}/><i className="section-dam"/><i className="section-gate" style={{transform:`translateY(${-gateOpen*36}px)`}}/><i className="section-release" style={{opacity:gateOpen}}/></div><dl><div><dt>Surface</dt><dd>{levelPercent===null?"—":`${levelPercent}%`}</dd></div><div><dt>Gate lift</dt><dd>{Math.round(gateOpen*100)}%</dd></div><div><dt>Visual flow</dt><dd>{flow}%</dd></div></dl><p>Visualization follows live sensor distance and gate angle. Flow is a relative visual indicator, not a measured discharge rate.</p></aside>}
+   {section&&<aside className="hydraulic-section" aria-label="Illustrative hydraulic cross section"><header><span>Illustrative section</span><b>{waterState.toUpperCase()}</b></header><div className="section-diagram"><i className="section-water" style={{height:`${levelPercent??4}%`}}/><i className="section-dam"/><i className="section-gate" style={{transform:`translateY(${-gateOpen*36}px)`}}/><i className="section-release" style={{opacity:gateOpen}}/></div><dl><div><dt>Surface</dt><dd>{levelPercent===null?"—":`${levelPercent}%`}</dd></div><div><dt>Gate lift</dt><dd>{Math.round(gateOpen*100)}%</dd></div><div><dt>Visual flow</dt><dd>{flow}%</dd></div></dl><p>Illustrative model only. Unsigned reports are not verified field measurements; modeled flow does not prove actual discharge or gate motion.</p></aside>}
 
-   <div className="scene-sensor-badge"><i/><span><small>HC-SR04</small><b>Beam follows live surface</b></span></div>
+   <div className="scene-sensor-badge"><i/><span><small>HC-SR04 model</small><b>Beam illustrates unsigned report</b></span></div>
    <div className="scene-orientation" aria-hidden><span>Upstream</span><i/><span>Dam</span><i/><span>Downstream</span></div>
    <span className="scene-hint">Drag to orbit · scroll to zoom</span>
  </div>
