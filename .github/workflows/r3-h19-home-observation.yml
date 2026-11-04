@@ -1,0 +1,47 @@
+name: FloodGuard H19 homepage visual source provenance (NO DEPLOY)
+
+on:
+  push:
+    branches:
+      - safety/r3-h19-public-home-provenance-20261104
+  pull_request:
+    branches:
+      - safety/r3-h18-report-exports-provenance-20261104
+
+permissions:
+  contents: read
+
+jobs:
+  offline-homepage-assurance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    steps:
+      - name: Checkout without retained GitHub credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Setup supported Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Install lockfile dependencies without scripts
+        run: npm ci --ignore-scripts
+      - name: Run entire offline test suite
+        run: |
+          set -euo pipefail
+          node --check lib/public-monitor-view.mjs
+          node --check tests/r3-h19-home-surface-trust.test.mjs
+          npm test
+      - name: Strict TypeScript check
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Next build without deployment
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build

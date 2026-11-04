@@ -124,13 +124,13 @@ export default function DamScene({angle=0,rain=0,waterDistance}:{angle?:number|n
  const chooseView=(item:ViewMode)=>{setTour(false);setView(item)};
  const toggleFullscreen=async()=>{if(!host.current)return;if(document.fullscreenElement)await document.exitFullscreen();else await host.current.requestFullscreen()};
 
- return <div ref={host} className="scene dam-scene dam-scene-v2 dam-scene-v37" data-flowing={flow>2} data-risk={waterState} aria-label={`Illustrative model only. Unsigned Firebase report: water gap ${liveDistance??"unavailable"} centimetres; controller gate angle ${angle??"unavailable"} degrees; modeled flow ${flow} percent. Physical gate position is not verified.`}>
+ return <div ref={host} className="scene dam-scene dam-scene-v2 dam-scene-v37" data-flowing={flow>2} data-risk={waterState==="safe"?"unavailable":waterState} aria-label={`Illustrative model only. Unsigned Firebase report: water gap ${liveDistance??"unavailable"} centimetres; controller gate angle ${angle??"unavailable"} degrees; modeled flow ${flow} percent. Physical gate position is not verified.`}>
    <Canvas frameloop={animate?"always":"demand"} dpr={[1,1.35]} camera={{position:[0,3.8,11.4],fov:43,near:.1,far:55}} gl={{antialias:true,powerPreference:"high-performance"}}>
-     <Scene angle={safeAngle} rain={rain??0} level={level} view={view} waterState={waterState}/>
+     <Scene angle={safeAngle} rain={rain??0} level={level} view={view} waterState={waterState==="safe"?"unavailable":waterState}/>
    </Canvas>
 
    <div className="scene-topbar" aria-label="Unsigned model inputs, not verified physical telemetry">
-     <div className={`scene-status-chip ${waterState}`}><i/><span><small>Reported reservoir · unverified</small><b>{waterState.toUpperCase()}</b></span></div>
+     <div className={`scene-status-chip ${waterState==="safe"?"unavailable":waterState}`}><i/><span><small>Prototype water band · unsigned</small><b>{waterState==="safe"?"LOW · UNVERIFIED":waterState==="unavailable"?"UNKNOWN · UNVERIFIED":"POSSIBLE "+waterState.toUpperCase()+" · UNVERIFIED"}</b></span></div>
      <div className="scene-status-chip gate"><span><small>Unverified gate report</small><b>{gateLabel}{angle===null?"":` · ${Math.round(safeAngle)}°`}</b></span></div>
      <div className="scene-status-chip water"><span><small>HC-SR04 air gap</small><b>{typeof liveDistance==="number"?`${liveDistance.toFixed(1)} cm`:"Unavailable"}</b></span></div>
    </div>

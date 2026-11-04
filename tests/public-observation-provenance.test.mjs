@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {describePublicObservation} from '../lib/public-observation-trust.mjs';
 import {reconcileDisplayedAlarmState} from '../lib/telemetry-safety.mjs';
+import {describePublicMonitorView} from '../lib/public-monitor-view.mjs';
 
 const files = {
   badge:readFileSync('components/ui.tsx','utf8'),
@@ -53,7 +54,17 @@ test('command dashboard never calls timestamp-only RTDB connection synchronized 
   assert.match(files.css,/\.live-badge\.live\{color:var\(--amber\)\}/);
 });
 test('animated network panel does not report CLEAR from missing alarm',()=>{
-  assert.match(files.motion,/reconcileDisplayedAlarmState\(\{active:data\?\.alarm\?\.active,freshness\}\)/);
+  // H19 centralizes alarm reconciliation. Assert the real UI delegation
+  // and the same fail-closed behavior, rather than silently dropping coverage.
+  assert.match(files.motion,/describePublicMonitorView\(\{data,freshness\}\)/);
+  assert.match(files.motion,/monitor\.alarmLabel/);
+  const helper=readFileSync('lib/public-monitor-view.mjs','utf8');
+  assert.match(helper,/reconcileDisplayedAlarmState\(\{/);
+  const off=describePublicMonitorView({data:{alarm:{active:false}},freshness:'live'});
+  assert.equal(off.alarmLabel,'REPORTED OFF · UNVERIFIED');
+  assert.equal(off.canDeclareSafe,false);
+  const stale=describePublicMonitorView({data:{alarm:{active:false}},freshness:'stale'});
+  assert.equal(stale.alarmLabel,'UNAVAILABLE · SOURCE UNVERIFIED');
   assert.match(files.motion,/RECENT · UNVERIFIED/);
   assert.doesNotMatch(files.motion,/data\?\.alarm\?\.active\?"ACTIVE":"CLEAR"/);
   for(const state of ['live','stale','loading','unavailable']) {
