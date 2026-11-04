@@ -173,7 +173,7 @@ const localCliFixture=(fn)=>{
       if(!rulePath)fs.writeFileSync(rp,rawRules??JSON.stringify(rules),{mode:0o600});
       if(!iamPath)fs.writeFileSync(ip,rawIam??JSON.stringify(iam),{mode:0o600});
       const result=spawnSync(process.execPath,[
-        'scripts/r3-h1b-authority-evidence-review.mjs',
+        path.resolve('scripts/r3-h1b-authority-evidence-review.mjs'),
         '--effective-rules',rp,'--project-iam',ip
       ],{cwd:workingDirectory??process.cwd(),env:{...process.env,HOME:home,USERPROFILE:home},
         encoding:'utf8',timeout:5000,maxBuffer:16384});
