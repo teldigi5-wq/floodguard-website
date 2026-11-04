@@ -42,11 +42,14 @@ test('dashboard and shared quick metrics use same freshness-aware alarm policy',
     assert.doesNotMatch(source,/data\?\.alarm\?\.active\?"ACTIVE":"CLEAR"/);
     assert.doesNotMatch(source,/data\?\.alarm\?\.active===false\?"CLEAR"/);
   }
-  assert.match(dashboard,/alarmGauge=alarmState==="ACTIVE"\?1:alarmState==="CLEAR"\?0:null/);
+  // H16 intentionally removed the apparent physical CLEAR gauge.
+  assert.match(dashboard,/alarmGauge=alarmState==="ACTIVE"\?1:null/);
+  assert.match(dashboard,/alarmDisplay=alarmState==="CLEAR"\?"REPORTED OFF · UNVERIFIED"/);
   assert.match(dashboard,/value=\{alarmGauge\}/);
-  assert.match(dashboard,/display=\{alarmState\}/);
+  assert.match(dashboard,/display=\{alarmDisplay\}/);
   assert.match(quick,/title="Alarm" value=\{alarmState\}/);
-  assert.match(dashboard,/title="Alarm" value=\{alarmState\}/);
+  assert.match(dashboard,/title="Alarm report" value=\{alarmDisplay\}/);
+  assert.doesNotMatch(dashboard,/alarmGauge=alarmState==="ACTIVE"\?1:alarmState==="CLEAR"\?0:null/);
 });
 
 test('copied and downloaded observation preserve raw alarm flag and explicit freshness interpretation',()=>{

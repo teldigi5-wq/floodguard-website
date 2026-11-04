@@ -19,3 +19,18 @@ The public website individually subscribes to `esp8266/connection`, `esp8266/sta
 This is **client display state containment only**. Even all three fresh public Firebase snapshots cannot authenticate the ESP8266 identity or prove physical connectivity: they may be forged, cached, stale, or delayed. Source timestamps are still unsigned. No live Firebase subscription, real-phone, physical sensor, actual gate, alarm, recipient delivery, independently signed H11 witness or owner release acceptance has been tested here.
 
 **Never treat this CI as production approval or a reason to interrupt a working warning channel. Do not merge, deploy, publish Rules, send messages, change hardware, or expose credentials based on this draft. Production remains NO-GO.**
+
+
+## Full-suite CI isolation and inherited test contracts
+
+The first H17 \`npm test\` run exposed nine failures unrelated to the new
+ESP tracker: seven \`r3-firebase-emulator.test.mjs\` cases require a locally
+running Firebase Rules emulator with the exact demo-only project, and two
+source assertions still expected H15/H16's retired physical-style discharge
+and alarm CLEAR labels. The same review branch now:
+- checks the stronger H15/H16 policy directly in those two inherited source tests, without changing the safe runtime behavior;
+- automatically **skips, never fakes**, emulator HTTP integration cases only when BOTH emulator environment variables are absent. Supplying either a wrong or incomplete emulator setting still executes and fails the existing hard-coded host/project checks.
+- runs all other offline tests, typecheck, ESLint and Next build in the GitHub matrix.
+A green offline job does **not** count skipped emulator cases as tested. The
+emulator integration suite needs a separately controlled, actually running
+fixed localhost:19001 instance; no live Firebase project is permitted.
