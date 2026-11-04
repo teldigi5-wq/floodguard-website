@@ -362,7 +362,13 @@ test('H28: stale gate view withholds source level, ESP online, reason and curren
     const grid=await c.page.locator('.final-telemetry-grid').innerText();
     assert.match(body,/CURRENT POSITION UNKNOWN/);
     assert.match(body,/LAST RECORDED LOW · NOT CURRENT|NO VERIFIED RISK READING/);
-    assert.doesNotMatch(grid,/5\.0 cm|-62 dBm|REPORTED ONLINE/i);
+    // Check the actual measurement value; the adjacent calibration note
+    // intentionally retains the fixed 25.0 cm prototype assumption.
+    const waterValue=await c.page.locator('.final-telemetry-grid article')
+      .filter({hasText:'Water level'}).first().locator('strong').innerText();
+    assert.match(waterValue,/Unavailable/i);
+    assert.doesNotMatch(waterValue,/5\.0 cm/i);
+    assert.doesNotMatch(grid,/-62 dBm|REPORTED ONLINE/i);
     assert.doesNotMatch(await reason.innerText(),/REPORTED DAM_WARNING/);
     assert.doesNotMatch(await c.page.locator('.final-gate-metrics').innerText(),/REPORTED SAFE/i);
     assert.equal(await c.page.locator('.final-gate-stage.danger').count(),0);
