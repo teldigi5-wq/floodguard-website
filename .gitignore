@@ -43,3 +43,6 @@ next-env.d.ts
 
 # Track the safe environment template
 !.env.example
+
+# Operator-provided live Rules/IAM evidence must stay private.
+/.floodguard-private-evidence/
