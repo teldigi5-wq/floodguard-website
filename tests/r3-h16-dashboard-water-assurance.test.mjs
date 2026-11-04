@@ -44,16 +44,33 @@ test('stale CRITICAL is historical, while no known risk can claim safety',()=>{
     noSafetyAuthority(x);
   }
 });
-test('recent SAFE water and zero air gap never highlight physical SAFE band',()=>{
-  for(const water of [
-    {levelCm:2,distanceCm:23,status:'SAFE'},
-    {levelCm:25,distanceCm:0,status:'SAFE'}
-  ]) {
-    const x=describeWaterObservation({water,freshness:'live'});
-    assert.equal(x.safeBandActive,false);
-    assert.match(x.reportStatusLabel,/REPORTED SAFE · UNVERIFIED/);
-    noSafetyAuthority(x);
-  }
+test('recent SAFE water can be reported but never highlighted as physical SAFE',()=>{
+  const x=describeWaterObservation({
+    water:{levelCm:2,distanceCm:23,status:'SAFE'},freshness:'live'
+  });
+  assert.equal(x.safeBandActive,false);
+  assert.match(x.reportStatusLabel,/REPORTED SAFE · UNVERIFIED/);
+  noSafetyAuthority(x);
+});
+test('contradictory SAFE flag cannot override a 25 cm danger-range level',()=>{
+  const x=describeWaterObservation({
+    water:{levelCm:25,distanceCm:0,status:'SAFE'},freshness:'live'
+  });
+  assert.equal(x.dangerBandActive,true);
+  assert.equal(x.safeBandActive,false);
+  assert.equal(x.reportStatusLabel,'POSSIBLE DANGER · UNVERIFIED');
+  noSafetyAuthority(x);
+});
+test('explicit sensor error rejects numeric placeholder instead of making danger or SAFE',()=>{
+  const x=describeWaterObservation({
+    water:{levelCm:12,distanceCm:13,status:'SENSOR_ERROR'},freshness:'live'
+  });
+  assert.equal(x.currentLevel,null);
+  assert.equal(x.currentAirGap,null);
+  assert.equal(x.dangerBandActive,false);
+  assert.equal(x.warningBandActive,false);
+  assert.match(x.reportStatusLabel,/REPORTED SENSOR_ERROR · UNVERIFIED/);
+  noSafetyAuthority(x);
 });
 test('warning/danger observations remain visible and can escalate',()=>{
   for(const [water,warning,danger] of [
