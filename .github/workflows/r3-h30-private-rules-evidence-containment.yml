@@ -1,0 +1,61 @@
+name: FloodGuard H30 private Rules evidence containment (NO CLOUD / NO DEPLOY)
+
+on:
+  push:
+    branches:
+      - security/r3-h30-private-rules-evidence-containment-20261104
+  pull_request:
+    branches:
+      - security/r3-h29-duplicate-keys-private-rules-20261104
+
+permissions:
+  contents: read
+
+jobs:
+  offline-private-evidence-integrity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    env:
+      CI: 'true'
+      FIREBASE_TOKEN: ''
+      GOOGLE_APPLICATION_CREDENTIALS: ''
+    steps:
+      - name: Checkout without retained credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Fail if operator evidence or cloud credentials entered CI
+        run: |
+          set -euo pipefail
+          test ! -e .floodguard-private-evidence
+          test -z "$FIREBASE_TOKEN"
+          test -z "$GOOGLE_APPLICATION_CREDENTIALS"
+          node --check scripts/r3-effective-rules-export-review.mjs
+          node --check tests/r3-effective-rules-export-review.test.mjs
+      - name: Exercise private-path, duplicate-key and inherited authority preflight with synthetic fixtures
+        run: |
+          set -euo pipefail
+          node --test \
+            tests/r3-effective-rules-export-review.test.mjs \
+            tests/r3-real-authority-preflight.test.mjs
+      - name: Locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Full inherited source regression suite
+        run: npm test
+      - name: TypeScript
+        run: npm run typecheck
+      - name: ESLint
+        run: npm run lint
+      - name: Next static build without deployment
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build
