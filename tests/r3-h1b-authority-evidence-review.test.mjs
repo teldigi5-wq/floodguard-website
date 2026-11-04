@@ -215,7 +215,7 @@ test('H31 rejects shadowed IAM bindings and duplicate nested role keys',()=>loca
   assert.equal(run(sourceRules,viewerIam,{rawIam:roleShadow}).code,2);
 
   const escaped=view.replace('"role":"roles/viewer"',
-    String.raw`'`"role":"roles/owner","\u0072ole":"roles/viewer"`'`);
+    String.raw`"role":"roles/owner","\u0072ole":"roles/viewer"`);
   assert.deepEqual(JSON.parse(escaped),viewerIam);
   assert.equal(run(sourceRules,viewerIam,{rawIam:escaped}).code,2);
 }));
