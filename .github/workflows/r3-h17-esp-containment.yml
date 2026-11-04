@@ -1,0 +1,51 @@
+name: FloodGuard H17 ESP child fail-closed observation (NO DEPLOY)
+
+on:
+  push:
+    branches:
+      - safety/r3-h17-esp-child-failure-containment-20261104
+  pull_request:
+    branches:
+      - safety/r3-h16-dashboard-water-trust-20261104
+    paths:
+      - 'providers/flood-provider.tsx'
+      - 'lib/telemetry-health.mjs'
+      - 'tests/telemetry-health.test.mjs'
+      - '.github/workflows/r3-h17-esp-containment.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  esp-client-isolation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22','24']
+    steps:
+      - name: Checkout without retained credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Locked dependency installation
+        run: npm ci
+      - name: Full offline regression suite
+        run: |
+          set -euo pipefail
+          node --check lib/telemetry-health.mjs
+          npm test
+      - name: TypeScript
+        run: npm run typecheck
+      - name: ESLint
+        run: npm run lint
+      - name: Production build (never deployed)
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build
