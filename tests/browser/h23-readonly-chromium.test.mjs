@@ -50,7 +50,7 @@ test('desktop renders unavailable-data static scene, not an invented closed gate
     assert.equal(await ctx.page.locator('.dam-scene canvas').count(),0);
     assert.equal(await ctx.page.locator('.scene-static-assurance canvas').count(),0);
     const hero=ctx.page.locator('.home-hero');
-    assert.match(await hero.innerText(),/Unsigned IoT engineering prototype/);
+    assert.match(await hero.innerText(),/unsigned IoT engineering prototype/i);
     assert.doesNotMatch(await hero.innerText(),/PHYSICAL SAFETY VERIFIED|ACTUAL GATE CLOSED/);
   }finally{await close(ctx);}
 });
@@ -82,7 +82,7 @@ test('mobile navigation reaches rainfall and source fields remain unverified',as
     await toggle.waitFor({state:'visible'});
     await toggle.click();
     assert.equal(await toggle.getAttribute('aria-expanded'),'true');
-    await p.locator('.mobile-nav a[href="/rainfall"]').click();
+    await p.locator('.mobile-nav').getByRole('link',{name:/^Rainfall/}).click();
     await p.waitForURL(/\/rainfall\/?$/);
     await p.getByRole('heading',{name:'Rainfall monitoring'}).waitFor({state:'visible'});
     const text=await p.locator('#main-content').innerText();
