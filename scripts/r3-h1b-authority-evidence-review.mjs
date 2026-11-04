@@ -2,7 +2,10 @@
 // Firebase RTDB Rules and Google Cloud PROJECT IAM allow policy exports.
 // Never interprets inspected artifacts as a production GO decision.
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import {parsePrivateEvidenceJson} from './r3-private-json-evidence-core.mjs';
 import { assessAuthorityPreflight } from './r3-real-authority-preflight.mjs';
 
 const plain = (x) => x !== null && typeof x === 'object' && !Array.isArray(x) &&
@@ -111,22 +114,34 @@ export function isOfflineReviewReady(finding) {
 
 // Refuse symlinks, oversized exports, and local files readable by other users.
 // Never print file paths, rule bodies, IAM members, identifiers, or input errors.
-export function readPrivateJson(path) {
-  if (typeof path !== 'string' || !path || path.startsWith('-'))
+export function readPrivateJson(fileName,{privateEvidenceDirectory}={}) {
+  if (typeof fileName !== 'string' || !fileName || fileName.startsWith('-'))
     throw Error('PRIVATE_EVIDENCE_INPUT_UNAVAILABLE');
-  const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0);
+  const flags=fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW??0);
   let fd;
   try {
-    fd = fs.openSync(path, flags);
-    const st = fs.fstatSync(fd);
-    if (!st.isFile() || st.size <= 0 || st.size > 1024 * 1024 ||
-        (process.platform !== 'win32' && (st.mode & 0o077) !== 0))
-      throw Error('PRIVATE_EVIDENCE_INPUT_UNAVAILABLE');
-    return JSON.parse(fs.readFileSync(fd, 'utf8'));
+    const original=fs.lstatSync(fileName);
+    if (!original.isFile()||original.isSymbolicLink()||original.nlink!==1)
+      throw Error('invalid-original');
+    if (privateEvidenceDirectory!==undefined) {
+      const parent=fs.lstatSync(privateEvidenceDirectory);
+      if (!parent.isDirectory()||parent.isSymbolicLink()||
+          (process.platform!=='win32'&&(parent.mode&0o077)!==0)||
+          path.dirname(fs.realpathSync(fileName))!==
+            fs.realpathSync(privateEvidenceDirectory))
+        throw Error('outside-private-root');
+    }
+    fd=fs.openSync(fileName,flags);
+    const st=fs.fstatSync(fd);
+    if (!st.isFile()||st.nlink!==1||st.dev!==original.dev||
+        st.ino!==original.ino||st.size<=0||st.size>1024*1024||
+        (process.platform!=='win32'&&(st.mode&0o077)!==0))
+      throw Error('invalid-input-file');
+    return parsePrivateEvidenceJson(fs.readFileSync(fd,'utf8'));
   } catch {
     throw Error('PRIVATE_EVIDENCE_INPUT_UNAVAILABLE');
   } finally {
-    if (fd !== undefined) fs.closeSync(fd);
+    if (fd!==undefined)fs.closeSync(fd);
   }
 }
 
@@ -138,8 +153,12 @@ if (invoked) {
     if (process.argv.length !== 6 || process.argv[2] !== '--effective-rules' ||
         process.argv[4] !== '--project-iam')
       throw Error('PRIVATE_EVIDENCE_INPUT_UNAVAILABLE');
-    const effectiveRules = readPrivateJson(process.argv[3]);
-    const projectIam = readPrivateJson(process.argv[5]);
+    // The operator CLI accepts two directly contained private files only.
+    // No arbitrary /tmp or repository-tracked paths. No cloud interactions.
+    const privateEvidenceDirectory=path.join(os.homedir(),
+      '.local','share','floodguard-private','r3-h1b');
+    const effectiveRules=readPrivateJson(process.argv[3],{privateEvidenceDirectory});
+    const projectIam=readPrivateJson(process.argv[5],{privateEvidenceDirectory});
     const manifest = JSON.parse(fs.readFileSync(
       'docs/firebase/R3_REAL_AUTHORITY_PREFLIGHT_20261102.json','utf8'));
     const sourceRules = JSON.parse(fs.readFileSync('firebase.rules.json','utf8'));
