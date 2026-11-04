@@ -176,7 +176,7 @@ test('H29 decodes escaped property names when checking duplicates',()=>tmp(dir=>
   const normal=JSON.stringify(source);
   // The JSON property name "\u002eread" is decoded as ".read"; treating
   // raw spellings as different keys would incorrectly accept this snapshot.
-  const raw=normal.replace('".read":false',String.raw.`'`".read":true,"\u002eread":false`'`);
+  const raw=normal.replace('".read":false',String.raw`".read":true,"\u002eread":false`);
   assert.notEqual(raw,normal);
   assert.deepEqual(JSON.parse(raw),source);
   fs.writeFileSync(location,raw);
