@@ -124,7 +124,7 @@ test('real SDK rain sensor fault withholds existing zero readings and cannot cla
       [...document.querySelectorAll('.metric')].some(m=>
         m.textContent?.includes('Current rainfall report') && m.textContent?.includes('0.0 mm')),
       {timeout:15000});
-    assert.match(await metric.innerText(),/0\.0 mm/);
+    assert.match(await metric.innerText(),/0\.0 mm/i);
     await adminPut('floodguard/live/rain/sensorStatus','OFFLINE');
     await c.page.waitForFunction(()=>
       [...document.querySelectorAll('.metric')].some(m=>
@@ -132,7 +132,7 @@ test('real SDK rain sensor fault withholds existing zero readings and cannot cla
       {timeout:15000});
     const body=await c.page.locator('#main-content').innerText();
     assert.match(body,/SENSOR UNAVAILABLE|UNKNOWN/);
-    assert.doesNotMatch(await metric.innerText(),/0\.0 mm/);
+    assert.doesNotMatch(await metric.innerText(),/0\.0 mm/i);
   }finally{await finish(c);}
 });
 
