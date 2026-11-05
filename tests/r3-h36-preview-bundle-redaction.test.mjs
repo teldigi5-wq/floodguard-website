@@ -20,7 +20,9 @@ test('H36 original production and fixed demo-emulator paths remain guarded and f
   assert.match(firebase,/NEXT_PUBLIC_FG_R3_EMULATOR_LAB === "1"/);
   assert.match(firebase,/databaseURL !== DEMO_R3_URL/);
   assert.match(firebase,/connectDatabaseEmulator\(db, "127\.0\.0\.1", 19001\)/);
-  assert.match(firebase,/return getDatabase\(getApps\(\)\[0\] \?\? initializeApp\(\{databaseURL\}\)\)/);
+  assert.match(firebase,/getScopedPublicMonitorApp\(\{databaseURL,getApps,initializeApp\}\)/);
+  assert.match(firebase,/return getDatabase\(app\)/);
+  assert.doesNotMatch(firebase,/getApps\(\)\[0\]/);
 });
 test('H36 scan examines actually exported client JS, HTML, CSS without logging secrets',()=>{
   assert.match(scan,/path\.resolve\('out'\)/);
