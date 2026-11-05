@@ -15,7 +15,7 @@ test('H35 preview denial runs before any test/emulator or normal Firebase initia
   const guard=firebase.indexOf('if (VERCEL_PREVIEW_BLOCKED)');
   const lab=firebase.indexOf('if (testLab)');
   const cloud=firebase.indexOf('getDatabase(getApps()[0]');
-  const url=firebase.indexOf('const databaseURL = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;');
+  const url=firebase.indexOf('const databaseURL = process.env.FLOODGUARD_COMPILED_DATABASE_URL;');
   assert.ok(guard>0 && guard<url && guard<lab && guard<cloud);
   assert.match(firebase,/throw new Error\("FloodGuard Firebase subscriptions disabled in review preview\."\)/);
 });

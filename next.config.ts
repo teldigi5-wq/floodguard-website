@@ -12,6 +12,12 @@ const nextConfig: NextConfig = {
   // Non-Vercel builds and production keep their pre-existing behavior.
   env: {
     FLOODGUARD_VERCEL_PREVIEW_BLOCK: process.env.VERCEL_ENV === "preview" ? "1" : "0",
+    // H36: NEXT_PUBLIC_* values can be embedded into shipped client JS.
+    // Scrub the URL itself in previews, not just the SDK initialization.
+    // Non-preview (including the fixed localhost SDK lab) preserves the URL.
+    FLOODGUARD_COMPILED_DATABASE_URL: process.env.VERCEL_ENV === "preview"
+      ? ""
+      : (process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL ?? ""),
   },
 };
 
