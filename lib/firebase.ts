@@ -21,7 +21,10 @@ export function database() {
   if (VERCEL_PREVIEW_BLOCKED) {
     throw new Error("FloodGuard Firebase subscriptions disabled in review preview.");
   }
-  const databaseURL = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
+  // This build-time value is deliberately empty in Vercel previews, even
+  // when Vercel has assigned the same public DB URL to preview/production.
+  // Never reference NEXT_PUBLIC_FIREBASE_DATABASE_URL directly in client code.
+  const databaseURL = process.env.FLOODGUARD_COMPILED_DATABASE_URL;
   const testLab = process.env.NEXT_PUBLIC_FG_R3_EMULATOR_LAB === "1";
 
   if (testLab) {
