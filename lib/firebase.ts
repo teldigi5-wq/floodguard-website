@@ -3,6 +3,8 @@ import { connectDatabaseEmulator, getDatabase, type Database } from "firebase/da
 
 // Explicit per-deployment public parent path. Never infer a private RTDB tree.
 export const LIVE_PATH = process.env.NEXT_PUBLIC_FIREBASE_LIVE_PATH ?? "floodguard/live";
+// Set by next.config.ts at static build time, not a browser-selectable flag.
+export const VERCEL_PREVIEW_BLOCKED = process.env.FLOODGUARD_VERCEL_PREVIEW_BLOCK === "1";
 
 // H25: a production build can test Firebase SDK *against the localhost emulator*
 // without giving a public deployment any emulator or arbitrary-host authority.
@@ -13,6 +15,12 @@ const LAB_APP_NAME = "floodguard-r3-h25-browser-lab";
 let labDatabase: Database | null = null;
 
 export function database() {
+  // This is deliberately BEFORE both normal SDK and local-emulator branches.
+  // A preview build cannot initialize Firebase or accidentally fall back to
+  // a production URL, even if an emulator-lab flag is also present.
+  if (VERCEL_PREVIEW_BLOCKED) {
+    throw new Error("FloodGuard Firebase subscriptions disabled in review preview.");
+  }
   const databaseURL = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
   const testLab = process.env.NEXT_PUBLIC_FG_R3_EMULATOR_LAB === "1";
 
