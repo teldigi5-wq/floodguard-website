@@ -1,5 +1,6 @@
 import { getApps, initializeApp } from "firebase/app";
 import { connectDatabaseEmulator, getDatabase, type Database } from "firebase/database";
+import { getScopedPublicMonitorApp } from "./firebase-app-policy.mjs";
 
 // Explicit per-deployment public parent path. Never infer a private RTDB tree.
 export const LIVE_PATH = process.env.NEXT_PUBLIC_FIREBASE_LIVE_PATH ?? "floodguard/live";
@@ -48,5 +49,8 @@ export function database() {
   if (!databaseURL || !/^https:\/\/[^/]+\.firebasedatabase\.app\/?$/.test(databaseURL)) {
     throw new Error("A valid Firebase Realtime Database URL is not configured.");
   }
-  return getDatabase(getApps()[0] ?? initializeApp({databaseURL}));
+  // Do not reuse whichever Firebase app happened to initialize first.
+  // Verify our fixed named app points at this exact deployment database URL.
+  const app = getScopedPublicMonitorApp({databaseURL,getApps,initializeApp});
+  return getDatabase(app);
 }
