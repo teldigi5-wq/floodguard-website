@@ -1,0 +1,57 @@
+name: FloodGuard H38 main CI provenance review (NO CLOUD / NO DEPLOY)
+
+on:
+  push:
+    branches:
+      - security/r3-h38-restore-main-ci-hardening-20261105
+  pull_request:
+    branches:
+      - security/r3-h37-firebase-named-app-isolation-20261105
+
+permissions:
+  contents: read
+
+jobs:
+  no-deploy-ci-provenance:
+    name: CI source/review policy (Node ${{ matrix.node }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    env:
+      CI: 'true'
+      FIREBASE_TOKEN: ''
+      GOOGLE_APPLICATION_CREDENTIALS: ''
+    steps:
+      - name: Checkout without persisted workflow credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Deny cloud secrets and validate policy test syntax
+        run: |
+          set -euo pipefail
+          test -z "$FIREBASE_TOKEN"
+          test -z "$GOOGLE_APPLICATION_CREDENTIALS"
+          test ! -e .floodguard-private-evidence
+          node --check tests/r3-h38-ci-provenance.test.mjs
+      - name: Install pinned lockfile dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Verify exact main security workflow policies
+        run: node --test tests/r3-h38-ci-provenance.test.mjs
+      - name: Full inherited offline source regression tests
+        run: npm test
+      - name: TypeScript
+        run: npm run typecheck
+      - name: ESLint
+        run: npm run lint
+      - name: Non-deploy Next.js static build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build
