@@ -14,7 +14,7 @@ test('H35 Vercel preview signal is a server-side build-derived constant',()=>{
 test('H35 preview denial runs before any test/emulator or normal Firebase initialization',()=>{
   const guard=firebase.indexOf('if (VERCEL_PREVIEW_BLOCKED)');
   const lab=firebase.indexOf('if (testLab)');
-  const cloud=firebase.indexOf('getDatabase(getApps()[0]');
+  const cloud=firebase.indexOf('getScopedPublicMonitorApp({databaseURL,getApps,initializeApp})');
   const url=firebase.indexOf('const databaseURL = process.env.FLOODGUARD_COMPILED_DATABASE_URL;');
   assert.ok(guard>0 && guard<url && guard<lab && guard<cloud);
   assert.match(firebase,/throw new Error\("FloodGuard Firebase subscriptions disabled in review preview\."\)/);
@@ -23,7 +23,9 @@ test('H35 both public-source and local emulator connection paths remain intact o
   assert.match(firebase,/NEXT_PUBLIC_FG_R3_EMULATOR_LAB === "1"/);
   assert.match(firebase,/connectDatabaseEmulator\(db, "127\.0\.0\.1", 19001\)/);
   assert.match(firebase,/window\.location\.hostname === "127\.0\.0\.1"/);
-  assert.match(firebase,/return getDatabase\(getApps\(\)\[0\] \?\? initializeApp\(\{databaseURL\}\)\)/);
+  assert.match(firebase,/getScopedPublicMonitorApp\(\{databaseURL,getApps,initializeApp\}\)/);
+  assert.match(firebase,/return getDatabase\(app\)/);
+  assert.doesNotMatch(firebase,/getApps\(\)\[0\]/);
   assert.match(firebase,/LIVE_PATH = process\.env\.NEXT_PUBLIC_FIREBASE_LIVE_PATH \?\? "floodguard\/live"/);
 });
 test('H35 preview page reports unavailable rather than claiming live flood safety',()=>{
