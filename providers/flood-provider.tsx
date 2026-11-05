@@ -9,7 +9,7 @@ import {
 } from "react";
 import { onValue, ref, type Unsubscribe } from "firebase/database";
 import { z } from "zod";
-import { database, LIVE_PATH } from "@/lib/firebase";
+import { database, LIVE_PATH, VERCEL_PREVIEW_BLOCKED } from "@/lib/firebase";
 import { ageSeconds, classifyTelemetryFreshness, parseFieldTimestamp, createCriticalStreamHealthTracker, createEspChildObservationTracker } from "@/lib/telemetry-health.mjs";
 import { reconcileCalibratedWaterMeasurement, reconcileReportedGateStatus, reconcileReportedRainStatus, reconcileDisplayedFloodRisk } from "@/lib/telemetry-safety.mjs";
 
@@ -347,7 +347,9 @@ export function FloodProvider({ children }: { children: ReactNode }) {
       // Defer the initial error update: effects should not synchronously
       // trigger a React render while they are still being initialized.
       queueMicrotask(() => {
-        setError("Live monitoring data is currently unavailable.");
+        setError(VERCEL_PREVIEW_BLOCKED
+          ? "Review preview only: Firebase subscriptions are disabled; no live flood status is available."
+          : "Live monitoring data is currently unavailable.");
         release();
       });
     }
