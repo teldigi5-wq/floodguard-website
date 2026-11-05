@@ -14,7 +14,9 @@ test('opt-in emulator path is locked to exact demo URL and loopback browser orig
   assert.match(source,/LIVE_PATH !== "floodguard\/live"/);
   assert.match(source,/connectDatabaseEmulator\(db, "127\.0\.0\.1", 19001\)/);
   assert.match(source,/throw new Error\("Blocked: R3 emulator lab requires/);
-  assert.match(source,/return getDatabase\(getApps\(\)\[0\] \?\? initializeApp\(\{databaseURL\}\)\)/);
+  assert.match(source,/getScopedPublicMonitorApp\(\{databaseURL,getApps,initializeApp\}\)/);
+  assert.match(source,/return getDatabase\(app\)/);
+  assert.doesNotMatch(source,/getApps\(\)\[0\]/);
 });
 test('emulator does not require production Firebase service account or credentials',()=>{
   const runner=read('scripts/r3-h25-browser-emulator-lab.sh');
