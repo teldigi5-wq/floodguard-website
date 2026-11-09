@@ -49,3 +49,13 @@ This is an engineering plan, not a list of already delivered product claims.
 FloodGuard remains an **educational prototype**: no claim of certified prediction, automatic emergency dispatch, public-safety reliability, or real-world dam operating authority.
 
 We prioritize correctness and transparency over visual effects that imply unsupported sensor precision or live activity.
+
+## 9 November 2026 — AI continuation reference
+
+Existing educational/field-source truth boundaries remain unchanged. The live RTDB rule exposure and signed sensor authority must be operator-verified before any safety claim.
+
+- [Dated recovery handoff](AI_CONTINUATION_2026-11-09.md)
+- [Next distinct milestones and recovery phases](AI_ROADMAP_2026-11-09.md)
+- [Exact-SHA milestone evidence tracker](AI_MILESTONES_2026-11-09.md)
+
+These links exist on documentation-only draft PR #132, not necessarily on protected `main`. Preserve all previously verified stages, unmerged feature branches and existing security/release acceptance criteria.

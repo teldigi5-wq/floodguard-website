@@ -270,3 +270,14 @@ This repository is **publicly readable**, but it does **not** include an open-so
   <strong>FloodGuard</strong><br />
   <sub>Designed to make sensor observations understandable—without confusing old information with live certainty.</sub>
 </p>
+
+## AI/developer continuation checkpoint — 9 November 2026
+
+See [the current handoff and next-milestone roadmap](docs/AI_CONTINUATION_2026-11-09.md) for the latest checked draft PR, evidence limits, recovery steps and remaining blockers. This proposed documentation does not grant release or merge approval.
+
+## AI continuity plan and milestones — 9 November 2026
+- [Original dated handoff](docs/AI_CONTINUATION_2026-11-09.md)
+- [Continuation roadmap and next distinct phases](docs/AI_ROADMAP_2026-11-09.md)
+- [Milestone/evidence ledger](docs/AI_MILESTONES_2026-11-09.md)
+
+Links are review-only on draft [PR #132](https://github.com/teldigi5-wq/floodguard-website/pull/132); no release, production approval or mass branch update is implied.
