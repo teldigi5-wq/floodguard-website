@@ -270,3 +270,10 @@ This repository is **publicly readable**, but it does **not** include an open-so
   <strong>FloodGuard</strong><br />
   <sub>Designed to make sensor observations understandable—without confusing old information with live certainty.</sub>
 </p>
+
+
+---
+
+## AI continuity handoff — 9 November 2026
+
+**For any developer or AI resuming this project:** read [the verified-scope recovery checkpoint](docs/AI_HANDOFF_2026-11-09.md), then recheck source [draft PR #131](https://github.com/teldigi5-wq/floodguard-website/pull/131) and exact live branch SHA. Draft and physical/device tests do **not** establish a production release; no production branch is changed by this documentation-only PR.
