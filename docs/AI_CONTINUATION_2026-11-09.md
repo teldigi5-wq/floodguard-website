@@ -38,3 +38,9 @@ FloodGuard educational safety-conscious prototype; R3 NO_GO. Website H38, H37, H
 ## Remaining risks
 - Snapshot not equal to exhaustive branch-by-branch audit; re-fetch the full branch/PR inventory before changes.
 - No release/production assurance inferred from a draft PR, doc write or previous assistant assertion.
+
+## Roadmap and milestones handoff links
+- [Detailed non-repeating roadmap](AI_ROADMAP_2026-11-09.md)
+- [Status, tests and release evidence tracker](AI_MILESTONES_2026-11-09.md)
+
+Dated docs draft #132; original engineering plan and branches are retained.
