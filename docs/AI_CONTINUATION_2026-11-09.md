@@ -33,7 +33,7 @@ FloodGuard educational safety-conscious prototype; R3 NO_GO. Website H38, H37, H
 ## Related evidence/documentation
 - `docs/ENGINEERING_ROADMAP.md`
 - `FIREBASE_SECURITY.md`
-- https://github.com/teldigi5-wq/floodguard-mobile/pull/22
+- Cross-client mobile QA evidence is in a separately access-controlled repository; do not publish private PR metadata in public docs.
 
 ## Remaining risks
 - Snapshot not equal to exhaustive branch-by-branch audit; re-fetch the full branch/PR inventory before changes.
